@@ -108,8 +108,8 @@ public:
 		return out;
 	}
 
-	//Derivate of ReLU, not standard sign function
-	VectorType Sign() const
+	//Derivate of ReLU
+	VectorType Heaviside() const
 	{
 		VectorType out = *this;
 		for (size_t i = 0; i < m_Length; i++)

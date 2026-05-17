@@ -152,7 +152,7 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
         left->grad += (1.0f - value*value) * grad;//tanh' = 1 - tanh^2
         break;
     case Operator::ReLU:
-		left->grad += value.Sign() * grad;//ReLU' = 1 if x > 0 else 0
+		left->grad += value.Heaviside() * grad;//ReLU' = 1 if x > 0 else 0
         break;
     default:
         throw std::runtime_error("Unsupported Operation");

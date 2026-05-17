@@ -52,8 +52,8 @@ public:
 		return std::fmax(0.0f, value);
 	}
 
-	//Derivate of ReLU, not standard sign function
-	float Sign() const
+	//Derivate of ReLU
+	float Heaviside() const
 	{
 		return (value > 0.0f ? 1.0f : 0.0f);
 	}
