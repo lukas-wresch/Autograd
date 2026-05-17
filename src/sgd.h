@@ -23,9 +23,7 @@ public:
 
 
         for (auto& p : params)
-        {
             p->GetValue() -= lr * p->GetGradient();
-        }
     }
 
 private:

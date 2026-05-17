@@ -385,6 +385,37 @@ TEST(Autograd, ReLU_Vector_Gradient)
 
 
 
+TEST(Autograd, ReLU_FiniteDifference)
+{
+	auto x = Node<VectorType>::Create({ -1.3f, 0.7f, 2.2f });
+
+	auto y = x->ReLU();
+
+	y->Backwards();
+
+	auto grad = x->GetGradient().GetValue();
+
+	for (size_t i = 0; i < x->GetValue().GetLength(); i++)
+	{
+		float eps = 1e-4f;
+
+		auto x_pos = Node<VectorType>::Create(x->GetValue());
+		auto x_neg = Node<VectorType>::Create(x->GetValue());
+
+		x_pos->GetValue().SetValue()[i] += eps;
+		x_neg->GetValue().SetValue()[i] -= eps;
+
+		auto y_pos = x_pos->ReLU();
+		auto y_neg = x_neg->ReLU();
+
+		float diff = (y_pos->GetValue()[i] - y_neg->GetValue()[i]) / (2 * eps);
+
+		EXPECT_NEAR(grad[i], diff, 1e-2f);
+	}
+}
+
+
+
 TEST(Training, GradientChangesAfterUpdate)
 {
 	auto x = Node<VectorType>::Create({ 1.0f, 2.0f });
