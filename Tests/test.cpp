@@ -1,9 +1,9 @@
 #include "gtest/gtest.h"
 #include <random>
-#include "../node.h"
-#include "../neuron.h"
-#include "../layer.h"
-#include "../sgd.h"
+#include "../src/node.h"
+#include "../src/neuron.h"
+#include "../src/layer.h"
+#include "../src/sgd.h"
 
 
 

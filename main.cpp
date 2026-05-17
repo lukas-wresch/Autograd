@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <iostream>
 #include <random>
-#include "scalar.h"
-#include "vector.h"
-#include "node.h"
-#include "neuron.h"
-#include "layer.h"
-#include "sgd.h"
+#include "src/scalar.h"
+#include "src/vector.h"
+#include "src/node.h"
+#include "src/neuron.h"
+#include "src/layer.h"
+#include "src/sgd.h"
 
 
 

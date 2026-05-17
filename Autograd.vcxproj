@@ -127,17 +127,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="layer.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="neuron.cpp" />
+    <ClCompile Include="src\neuron.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="layer.h" />
-    <ClInclude Include="neuron.h" />
-    <ClInclude Include="node.h" />
-    <ClInclude Include="scalar.h" />
-    <ClInclude Include="sgd.h" />
-    <ClInclude Include="vector.h" />
+    <ClInclude Include="src\layer.h" />
+    <ClInclude Include="src\neuron.h" />
+    <ClInclude Include="src\node.h" />
+    <ClInclude Include="src\scalar.h" />
+    <ClInclude Include="src\sgd.h" />
+    <ClInclude Include="src\vector.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
