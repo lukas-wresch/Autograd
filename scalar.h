@@ -46,6 +46,17 @@ public:
 	{
 		return std::tanh(value);
 	}
+
+	float ReLU() const
+	{
+		return std::fmax(0.0f, value);
+	}
+
+	//Derivate of ReLU, not standard sign function
+	float Sign() const
+	{
+		return (value > 0.0f ? 1.0f : 0.0f);
+	}
 	
 	void operator+=(const ScalarType& rhs)
 	{

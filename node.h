@@ -20,6 +20,7 @@ enum class Operator
 	Pack, // List of nodes -> vector. [x0, x1, x2] -> [(x0, x1, x2)]
 
     Tanh,
+    ReLU,
 };
 
 
@@ -64,6 +65,7 @@ public:
 	NodePtr<T> ElementwiseAdd(const NodePtr<T>& other);
     void Pack(const std::vector<NodePtr<T>>& List);
     NodePtr<T> Tanh();
+    NodePtr<T> ReLU();
 
     void Backwards();
 
@@ -148,6 +150,9 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
         break;
     case Operator::Tanh:
         left->grad += (1.0f - value*value) * grad;//tanh' = 1 - tanh^2
+        break;
+    case Operator::ReLU:
+		left->grad += value.Sign() * grad;//ReLU' = 1 if x > 0 else 0
         break;
     default:
         throw std::runtime_error("Unsupported Operation");
@@ -316,6 +321,19 @@ NodePtr<T> Node<T>::Tanh()
 
     out->op    = Operator::Tanh;
     out->left  = this->shared_from_this();
+    out->right = nullptr;
+    return out;
+}
+
+
+
+template<typename T>
+NodePtr<T> Node<T>::ReLU()
+{
+    auto out = std::make_shared<Node<T>>(this->value.ReLU());
+
+    out->op = Operator::ReLU;
+    out->left = this->shared_from_this();
     out->right = nullptr;
     return out;
 }

@@ -92,11 +92,28 @@ public:
 		return *this;
 	}
 
-	VectorType Tanh()
+	VectorType Tanh() const
 	{
 		VectorType out = *this;
 		for (size_t i = 0; i < m_Length; i++)
 			out.m_pValues[i] = std::tanh(m_pValues[i]);
+		return out;
+	}
+
+	VectorType ReLU() const
+	{
+		VectorType out = *this;
+		for (size_t i = 0; i < m_Length; i++)
+			out.m_pValues[i] = std::fmax(0.0f, m_pValues[i]);
+		return out;
+	}
+
+	//Derivate of ReLU, not standard sign function
+	VectorType Sign() const
+	{
+		VectorType out = *this;
+		for (size_t i = 0; i < m_Length; i++)
+			out.m_pValues[i] = (m_pValues[i] > 0.0f ? 1.0f : 0.0f);
 		return out;
 	}
 

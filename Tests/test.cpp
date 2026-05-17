@@ -354,6 +354,37 @@ TEST(Autograd, TanhGradient)
 
 
 
+TEST(Autograd, ReLU_Vector_Gradient)
+{
+	// -------------------------
+	// Input: mixed values
+	// -------------------------
+	auto x = Node<VectorType>::Create({ -2.0f, -0.5f, 0.0f, 1.5f, 3.0f });
+
+	// forward
+	auto y = x->ReLU();
+
+	// expected forward result
+	std::vector<float> expected_forward = { 0.0f, 0.0f, 0.0f, 1.5f, 3.0f };
+
+	for (size_t i = 0; i < y->GetValue().GetLength(); i++)
+		EXPECT_NEAR(y->GetValue()[i], expected_forward[i], 1e-5f);
+
+	// -------------------------
+	// Backward pass
+	// -------------------------
+	y->Backwards();
+
+	// expected gradient:
+	// ReLU'(x) = 0 if x <= 0 else 1
+	std::vector<float> expected_grad = { 0.0f, 0.0f, 0.0f, 1.0f, 1.0f };
+
+	for (size_t i = 0; i < x->GetGradient().GetLength(); i++)
+		EXPECT_NEAR(x->GetGradient()[i], expected_grad[i], 1e-5f);
+}
+
+
+
 TEST(Training, GradientChangesAfterUpdate)
 {
 	auto x = Node<VectorType>::Create({ 1.0f, 2.0f });
