@@ -20,6 +20,13 @@ public:
 		std::copy(init.begin(), init.end(), m_pValues);
 	}
 
+	VectorType(const std::vector<float>& Vec)
+		: m_Length(Vec.size())
+	{
+		m_pValues = new float[m_Length];
+		std::copy(Vec.begin(), Vec.end(), m_pValues);
+	}
+
 	VectorType(size_t Length) : m_Length(Length)
 	{
 		m_pValues = new float[m_Length];
@@ -178,6 +185,18 @@ public:
 	{
 		for (size_t i = 0; i < m_Length; i++)
 			m_pValues[i] -= rhs;
+	}
+
+	void operator*=(float rhs)
+	{
+		for (size_t i = 0; i < m_Length; i++)
+			m_pValues[i] *= rhs;
+	}
+
+	void operator/=(float rhs)
+	{
+		for (size_t i = 0; i < m_Length; i++)
+			m_pValues[i] /= rhs;
 	}
 
 	VectorType operator*(const VectorType& other) const

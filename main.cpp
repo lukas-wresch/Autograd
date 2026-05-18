@@ -7,6 +7,7 @@
 #include "src/neuron.h"
 #include "src/layer.h"
 #include "src/sgd.h"
+#include "mnist.h"
 
 
 
@@ -23,6 +24,121 @@ void ShuffleDataset(std::vector<NodePtr<VectorType>>& xs, std::vector<NodePtr<Ve
 		std::swap(xs[i], xs[j]);
 		std::swap(labels[i], labels[j]);
 	}
+}
+
+
+
+
+void MNist_Test()
+{
+	MNist mnist = MNist();
+
+	mnist.PrintTrainImage(0);
+	mnist.PrintTrainImage(1);
+	mnist.PrintTrainImage(2);
+
+	std::vector<NodePtr<VectorType>> xs;
+	std::vector<NodePtr<VectorType>> labels;
+
+	for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
+	{
+		xs.push_back(Node<VectorType>::Create(mnist.GetTrainingImageData(i)));
+
+		int label = mnist.GetTrainingLabelData(i);
+		//Convert to one hot encoding
+		std::vector<float> one_hot(10, 0.0f);
+		one_hot[label] = 1.0f;
+
+		labels.push_back(Node<VectorType>::Create(one_hot));
+	}
+
+	Layer2D<VectorType> L1(784, 128, Activation::Tanh);
+	Layer2D<VectorType> L2(128, 10, Activation::Tanh);
+
+	SGD<VectorType> sgd(0.02f);
+	const int batch_size = 8;
+
+	// IMPORTANT: collect params ONCE
+	{
+		auto x = xs[0];
+		auto h1 = L1.Forward(x);
+		auto pred = L2.Forward(h1);
+
+		auto loss = (pred - labels[0]) * (pred - labels[0]);
+		sgd.SetTrainableParams(loss->CollectParams());
+	}
+
+
+	//Training loop
+
+	float epoch_loss = 0.0f;
+
+	for (size_t epoch = 0; epoch < 10; epoch++)
+	{
+		ShuffleDataset(xs, labels);
+
+
+		epoch_loss = 0.0f;
+
+		for (size_t i = 0; i < xs.size(); i += batch_size)
+		{
+			//if (i / batch_size % 100 == 0)
+				//std::cout << "Batch " << i / batch_size << " of " << xs.size() / batch_size << std::endl;
+
+			size_t end = std::min(i + batch_size, xs.size());
+
+			NodePtr<VectorType> batch_loss = nullptr;
+
+			for (size_t j = i; j < end; j++)
+			{
+				auto pred = L2.Forward(L1.Forward(xs[j]));
+				auto loss = ( (pred - labels[j]) * (pred - labels[j]) )->Sum();
+
+				epoch_loss += loss->GetValue()[0];
+
+				batch_loss = batch_loss ? (batch_loss + loss) : loss;
+			}
+
+			//batch_loss /= float(end - i);
+
+			batch_loss->Backwards();
+			sgd.Step();
+		}
+
+		epoch_loss /= xs.size();
+
+		//if (epoch % 2 == 0)
+		std::cout << "Epoch " << epoch << " Loss: " << epoch_loss << std::endl;
+	}
+
+	int correct = 0;
+
+	for (size_t i = 0; i < xs.size(); i++)
+	{
+		auto pred = L2.Forward(L1.Forward(xs[i]));
+
+		//Convert one hot to class index
+		int pred_class = 0;
+		float max_val = pred->GetValue()[0];
+		int target_class = -1;
+		for (int c = 1; c < 10; c++)
+		{
+			float val = pred->GetValue()[c];
+			if (val > max_val)
+			{
+				max_val = val;
+				pred_class = c;
+			}
+			if (labels[i]->GetValue()[c] == 1.0f)
+				target_class = c;
+		}
+
+		float target = labels[i]->GetValue()[0];
+
+		if (pred_class == target_class) correct++;
+	}
+
+	std::cout << "Final Accuracy: " << (float)correct / xs.size() << std::endl;
 }
 
 
@@ -125,6 +241,93 @@ void SpiralClassification_MSE()
 	}
 
 	std::cout << "Final Accuracy: " << (float)correct / xs.size() << std::endl;
+}
+
+
+
+void XOR()
+{
+		std::vector<NodePtr<VectorType>> xs = {
+			Node<VectorType>::Create({ 0.0f, 0.0f }),
+			Node<VectorType>::Create({ 0.0f, 1.0f }),
+			Node<VectorType>::Create({ 1.0f, 0.0f }),
+			Node<VectorType>::Create({ 1.0f, 1.0f })
+		};
+
+		std::vector<NodePtr<VectorType>> label = {
+			Node<VectorType>::Create({ 0.0f }),
+			Node<VectorType>::Create({ 1.0f }),
+			Node<VectorType>::Create({ 1.0f }),
+			Node<VectorType>::Create({ 0.0f })
+		};
+
+		Layer2D<VectorType> L1(2, 3, Activation::Tanh);
+		Layer2D<VectorType> L2(3, 1, Activation::Tanh);
+
+		float lr = 0.1f;
+
+		for (size_t epoch = 0; epoch < 200; epoch++)
+		{
+			float epoch_loss = 0.0f;
+
+			for (size_t i = 0; i < xs.size(); i++)
+			{
+				auto x = xs[i];
+
+				auto l1_out = L1.Forward(x);
+				auto out = L2.Forward(l1_out);
+
+				auto diff = out - label[i];
+				auto loss = diff * diff;
+
+				auto params = loss->CollectParams();
+
+				loss->Backwards();
+
+				//printf("L1 W grad: ");
+				//L1.GetWeight(0)->Print();
+
+				//printf("L2 W grad: ");
+				//L2.GetWeight(0)->Print();
+
+				loss->SetLabel("loss");
+				//loss->Print();
+
+				//printf("W0 before: %f\n", L1.GetWeight(0)->GetValue()[0]);
+
+				for (size_t i = 0; i < L1.GetOutputLength(); i++)
+				{
+					L1.GetWeight(i)->GetValue() -= lr * L1.GetWeight(i)->GetGradient();
+					L1.GetBias(i)->GetValue() -= lr * L1.GetBias(i)->GetGradient();
+				}
+				for (size_t i = 0; i < L2.GetOutputLength(); i++)
+				{
+					L2.GetWeight(i)->GetValue() -= lr * L2.GetWeight(i)->GetGradient();
+					L2.GetBias(i)->GetValue() -= lr * L2.GetBias(i)->GetGradient();
+				}
+
+				//printf("W0 after: %f\n", L1.GetWeight(0)->GetValue()[0]);
+
+				// Loss sammeln (nur Value!)
+				epoch_loss += loss->GetValue()[0];
+			}
+
+			printf("Epoch %zu - Loss: %f\n", epoch, epoch_loss / xs.size());
+		}
+
+		for (size_t i = 0; i < xs.size(); i++)
+		{
+			auto x = xs[i];
+
+			auto l1_out = L1.Forward(x);
+			auto out = L2.Forward(l1_out);
+
+			x->SetLabel("x");
+			out->SetLabel("out");
+
+			x->Print();
+			out->Print();
+		}
 }
 
 
@@ -303,96 +506,13 @@ int main()
 	}
 
 	//XOR
-	{
-		std::vector<NodePtr<VectorType>> xs = {
-			Node<VectorType>::Create({ 0.0f, 0.0f }),
-			Node<VectorType>::Create({ 0.0f, 1.0f }),
-			Node<VectorType>::Create({ 1.0f, 0.0f }),
-			Node<VectorType>::Create({ 1.0f, 1.0f })
-		};
-
-		std::vector<NodePtr<VectorType>> label = {
-			Node<VectorType>::Create({ 0.0f }),
-			Node<VectorType>::Create({ 1.0f }),
-			Node<VectorType>::Create({ 1.0f }),
-			Node<VectorType>::Create({ 0.0f })
-		};
-
-		Layer2D<VectorType> L1(2, 3, Activation::Tanh);
-		Layer2D<VectorType> L2(3, 1, Activation::Tanh);
-
-		float lr = 0.1f;
-
-		for (size_t epoch = 0; epoch < 200; epoch++)
-		{
-			float epoch_loss = 0.0f;
-
-			for (size_t i = 0; i < xs.size(); i++)
-			{
-				auto x = xs[i];
-
-				auto l1_out = L1.Forward(x);
-				auto out = L2.Forward(l1_out);
-
-				auto diff = out - label[i];
-				auto loss = diff * diff;
-
-				auto params = loss->CollectParams();
-
-				loss->Backwards();
-
-				//printf("L1 W grad: ");
-				//L1.GetWeight(0)->Print();
-
-				//printf("L2 W grad: ");
-				//L2.GetWeight(0)->Print();
-
-				loss->SetLabel("loss");
-				//loss->Print();
-
-				//printf("W0 before: %f\n", L1.GetWeight(0)->GetValue()[0]);
-
-				for (size_t i = 0; i < L1.GetOutputLength(); i++)
-				{
-					L1.GetWeight(i)->GetValue() -= lr * L1.GetWeight(i)->GetGradient();
-					L1.GetBias(i)->GetValue()   -= lr * L1.GetBias(i)->GetGradient();
-				}
-				for (size_t i = 0; i < L2.GetOutputLength(); i++)
-				{
-					L2.GetWeight(i)->GetValue() -= lr * L2.GetWeight(i)->GetGradient();
-					L2.GetBias(i)->GetValue()   -= lr * L2.GetBias(i)->GetGradient();
-				}
-
-				//printf("W0 after: %f\n", L1.GetWeight(0)->GetValue()[0]);
-
-				// Loss sammeln (nur Value!)
-				epoch_loss += loss->GetValue()[0];
-			}
-
-			printf("Epoch %zu - Loss: %f\n", epoch, epoch_loss / xs.size());
-		}
-
-		for (size_t i = 0; i < xs.size(); i++)
-		{
-			auto x = xs[i];
-
-			auto l1_out = L1.Forward(x);
-			auto out = L2.Forward(l1_out);
-
-			x->SetLabel("x");
-			out->SetLabel("out");
-
-			x->Print();
-			out->Print();
-		}
-	}
-
+	//XOR();
 
 	//Sine();
-	
 
-	SpiralClassification_MSE();
+	//SpiralClassification_MSE();
 
+	MNist_Test();
 
 	return 0;
 }
