@@ -10,8 +10,19 @@ public:
 	ScalarType() : value(0.0f) {}
 	ScalarType(float Value) : value(Value) {}
 
+	void operator=(const ScalarType& rhs)
+	{
+		value = rhs.value;
+	}
+
+	void operator=(float rhs)
+	{
+		value = rhs;
+	}
+
 	const float* GetValue() const { return &value; }
-	void  SetValue(float Value) { value = Value; }
+	void   SetValue(float Value) { value = Value; }
+	float* SetValue() { return &value; }
 
 	void SetZero()
 	{

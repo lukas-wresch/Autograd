@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include "node.h"
+#include "tape_recorder.h"
 
 
 
@@ -16,18 +17,42 @@ public:
 		this->params = params;
     }
 
+    template<typename T>
+    void SetTrainableParams(TapeRecorder<T>& Tape)
+    {
+        for (size_t i = 0; i < Tape.GetNumberOfValues(); i++)
+        {
+            if (Tape.IsTrainable(i))
+            {
+                values.push_back(Tape.SetValue(i));
+                grads.push_back(Tape.SetGradient(i));
+            }
+        }
+    }
+
     void Step()
     {
         if (params.empty())
-            throw std::runtime_error("No parameters to train");
+        {
+            //throw std::runtime_error("No parameters to train");
+
+            for (size_t i = 0; i < values.size(); i++)
+                *values[i] -= lr * (*grads[i]);
+        }
 
 
-        for (auto& p : params)
-            p->GetValue() -= lr * p->GetGradient();
+        else
+        {
+            for (auto& p : params)
+                p->GetValue() -= lr * p->GetGradient();
+        }
     }
 
 private:
     float lr;
 
     std::vector<NodePtr<T>> params;
+
+    std::vector<T*> values;
+    std::vector<T*> grads;
 };

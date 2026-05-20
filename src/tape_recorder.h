@@ -1,0 +1,304 @@
+#pragma once
+#include <unordered_map>
+#include <string>
+#include <stdio.h>
+#include "node.h"
+
+
+
+struct TapeEntry
+{
+    Operator op;
+
+    int a;   // input tensor index
+    int b;   // optional
+    std::vector<int> inputs;
+
+    int out; // output tensor index
+};
+
+
+
+template<typename T>
+class TapeRecorder
+{
+public:
+    void Compile(const NodePtr<T>& root);
+
+    void Forward();
+
+    void Backward();
+
+    const T* GetValue(const std::string& Label) const
+    {
+        auto it = label_to_id.find(Label);
+        if (it != label_to_id.end())
+            return &values[it->second];
+        return nullptr;
+    }
+
+    T* SetValue(const std::string& Label)
+    {
+        auto it = label_to_id.find(Label);
+        if (it != label_to_id.end())
+            return &values[it->second];
+        return nullptr;
+    }
+
+
+    const T* GetGradient(const std::string& Label) const
+    {
+        auto it = label_to_id.find(Label);
+        if (it != label_to_id.end())
+            return &grads[it->second];
+        return nullptr;
+    }
+
+    T* SetValue(size_t Index)
+    {
+        return &values[Index];
+    }
+
+    T* SetGradient(size_t Index)
+    {
+        return &grads[Index];
+    }
+
+    bool IsTrainable(size_t Index) const
+    {
+        return trainable[Index];
+    }
+
+    size_t GetNumberOfValues() const
+    {
+        return values.size();
+    }
+
+    int AddDataEntry(const T& v, bool Trainable = false)
+    {
+        values.push_back(v);
+
+        T new_grad{};
+        new_grad.SetLength(v.GetLength());//initialize gradient with same length
+		grads.push_back(new_grad);
+
+        trainable.push_back(Trainable);
+
+        return (int)values.size() - 1;
+    }
+
+	void AddOpEntry(Operator op, int a, int b, int out)
+	{
+        if (a == 5 && b == 6 && op == Operator::Add)
+            int t = 45;
+        tape.push_back({ op, a, b, {}, out });
+	}
+
+    void AddOpEntry(Operator op, const std::vector<int>& inputs, int out)
+    {
+        tape.push_back({ op, -1, -1, inputs, out });
+    }
+
+    void PrintTape() const;
+
+private:
+    void Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T>, int>& node_to_id);
+
+	std::vector<TapeEntry> tape;
+
+    std::vector<T> values;
+    std::vector<T> grads;
+    std::vector<bool> trainable;
+
+    std::unordered_map<std::string, int> label_to_id;
+};
+
+
+
+template<typename T>
+void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T>, int>& node_to_id)
+{
+    auto GetID = [&](const NodePtr<T>& node) -> int
+    {
+        auto it = node_to_id.find(node);
+        if (it != node_to_id.end())
+            return it->second;
+        return -1; // Not found
+    };
+
+	if (GetID(node) != -1)//Already visited?
+		return;
+
+    if (node->left)
+        Visit(node->left, node_to_id);
+    if (node->right)
+        Visit(node->right, node_to_id);
+    for (auto& i : node->inputs)
+        Visit(i, node_to_id);
+
+
+    auto node_id = AddDataEntry(node->GetValue(), node->IsTrainable());
+    label_to_id.insert({ node->GetLabel(), node_id });
+	node_to_id.insert({ node, node_id });
+    std::vector<int> input_ids;
+
+    switch (node->op)
+    {
+    case Operator::Undefined:
+        break;
+
+    //Two operands
+    case Operator::Add:
+    case Operator::Subtract:
+    case Operator::Multiply:
+    case Operator::ElementwiseAdd:
+        AddOpEntry(node->op, GetID(node->left), GetID(node->right), node_id);
+        break;
+
+	//1 Operand
+	case Operator::Sum:
+    case Operator::Tanh:
+    case Operator::ReLU:
+        AddOpEntry(node->op, GetID(node->left), -1, node_id);
+        break;
+
+	//N operands
+    case Operator::Pack:
+		for (const auto& input : node->inputs)
+			input_ids.push_back(GetID(input));
+
+		AddOpEntry(node->op, input_ids, node_id);
+		break;
+
+	default:
+		throw std::runtime_error("Unsupported Operation");
+    }
+}
+
+
+
+template<typename T>
+inline void TapeRecorder<T>::Compile(const NodePtr<T>& root)
+{
+    std::unordered_map<NodePtr<T>, int> node_to_id;
+    Visit(root, node_to_id);
+}
+
+
+
+template<typename T>
+void TapeRecorder<T>::Forward()
+{
+	for (const auto& entry : tape)
+	{
+        switch (entry.op)
+        {
+		case Operator::Add:
+            values[entry.out] = values[entry.a] + values[entry.b];
+			break;
+		case Operator::Subtract:
+            values[entry.out] = values[entry.a] - values[entry.b];
+            break;
+        case Operator::Multiply:
+            values[entry.out] = values[entry.a] * values[entry.b];
+            break;
+
+        case Operator::Sum:
+            values[entry.out] = values[entry.a].Sum();
+            break;
+
+        case Operator::Pack:
+            values[entry.out].SetLength(entry.inputs.size());//Neccessary???
+            for (size_t j = 0; j < entry.inputs.size(); j++)
+                values[entry.out].SetValue()[j] = values[entry.inputs[j]].GetValue()[0];
+            break;
+
+        case Operator::Tanh:
+            values[entry.out] = values[entry.a].Tanh();
+            break;
+
+        default:
+            throw std::runtime_error("Unsupported Operation");
+        }
+	}
+}
+
+
+
+template<typename T>
+inline void TapeRecorder<T>::Backward()
+{
+    for (auto& g : grads)
+        g.SetZero();
+
+    grads[grads.size() - 1].SetOne();
+
+    for (int i = (int)tape.size() - 1; i >= 0; i--)
+    {
+        const auto& entry = tape[i];
+        const auto& outer_grad  = grads[entry.out];
+
+        switch (entry.op)
+        {
+        case Operator::Add:
+            grads[entry.a] += outer_grad;
+            grads[entry.b] += outer_grad;
+            break;
+        case Operator::Subtract:
+            grads[entry.a] += outer_grad;
+            grads[entry.b] -= outer_grad;
+            break;
+        case Operator::Multiply:
+            grads[entry.a] += values[entry.b] * outer_grad;
+            grads[entry.b] += values[entry.a] * outer_grad;
+            break;
+        case Operator::Sum:
+            grads[entry.a] = grads[entry.a].ElementwiseAdd(outer_grad);
+            break;
+
+        case Operator::ElementwiseAdd:
+            grads[entry.a] += outer_grad;
+            grads[entry.b] += outer_grad.Sum();
+            break;
+        case Operator::Pack:
+            for (size_t j = 0; j < entry.inputs.size(); j++)
+                grads[entry.inputs[j]] += outer_grad.GetValue()[j];
+            break;
+
+        case Operator::Tanh:
+            grads[entry.a] += (1.0f - values[entry.out] * values[entry.out]) * outer_grad;//tanh' = 1 - tanh^2
+            break;
+        case Operator::ReLU:
+            grads[entry.a] += grads[entry.out].Heaviside() * outer_grad;//ReLU' = 1 if x > 0 else 0
+            break;
+
+        default:
+            throw std::runtime_error("Unsupported Operation");
+        }
+    }
+}
+
+
+
+template<typename T>
+inline void TapeRecorder<T>::PrintTape() const
+{
+    int i = 0;
+
+    for (const auto& entry : tape)
+    {
+        std::string op_text = "???";
+
+        switch (entry.op)
+        {
+        case Operator::Add:
+            op_text = "Add";
+            break;
+        case Operator::Subtract:
+            op_text = "Add";
+            break;
+        }
+
+        printf("%.02d: %s %d = %d x %d", ++i, op_text.c_str(), entry.out, entry.a, entry.b);
+    }
+}

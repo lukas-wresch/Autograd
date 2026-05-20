@@ -33,10 +33,8 @@ template<typename T>
 using NodePtr = std::shared_ptr<Node<T>>;
 
 using Scalar  = Node<ScalarType>;
-using Scalar_ = NodePtr<ScalarType>;
 
 using Vector  = Node<VectorType>;
-using Vector_ = NodePtr<VectorType>;
 
 
 
@@ -56,6 +54,8 @@ public:
 
     T& GetGradient() { return grad; }
 
+    bool IsTrainable() const { return trainable; }
+
     static NodePtr<T> Create(T Value, const std::string& Label = "") { return std::make_shared<Node<T>>(Value, Label); }
     static NodePtr<T> Create() { return std::make_shared<Node<T>>(); }
     static NodePtr<T> CreateWithSize(size_t Length) { return std::make_shared<Node<T>>(Length); }
@@ -71,10 +71,8 @@ public:
 
     std::vector<NodePtr<T>> CollectParams();
 
-    void SetLabel(const std::string& Label)
-    {
-        label = Label;
-    }
+    const std::string& GetLabel() const { return label;  }
+    void SetLabel(const std::string& Label) { label = Label; }
 
     void Print() const
     {

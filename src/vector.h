@@ -2,6 +2,7 @@
 #include <initializer_list>
 #include <stdexcept>
 #include <algorithm>
+#include <vector>
 
 
 
@@ -12,6 +13,8 @@ class VectorType;
 class VectorType
 {
 public:
+	VectorType() = default;
+
 	VectorType(std::initializer_list<float> init)
 		: m_Length(init.size())
 	{
@@ -31,6 +34,13 @@ public:
 	{
 		m_pValues = new float[m_Length];
 		std::fill(m_pValues, m_pValues + m_Length, 0.0f);
+	}
+
+	VectorType(const VectorType& other)
+		: m_Length(other.m_Length)
+	{
+		m_pValues = new float[m_Length];
+		std::copy(other.m_pValues, other.m_pValues + m_Length, m_pValues);
 	}
 
 	VectorType(VectorType&& other) noexcept
@@ -59,13 +69,6 @@ public:
 		std::fill(m_pValues, m_pValues + m_Length, 1.0f);
 	}
 
-	VectorType(const VectorType& other)
-		: m_Length(other.m_Length)
-	{
-		m_pValues = new float[m_Length];
-		std::copy(other.m_pValues, other.m_pValues + m_Length, m_pValues);
-	}
-
 	~VectorType()
 	{
 		delete[] m_pValues;
@@ -78,12 +81,13 @@ public:
 	const float* GetValue() const { return m_pValues; }
 	float* SetValue() { return m_pValues; }
 
-	float Sum() const
+	VectorType Sum() const
 	{
 		float sum = 0.0f;
 		for (size_t i = 0; i < m_Length; i++)
 			sum += m_pValues[i];
-		return sum;
+		VectorType result({ sum });
+		return result;
 	}
 
 	VectorType& operator=(const VectorType& other)
@@ -95,6 +99,22 @@ public:
 		m_Length = other.m_Length;
 		m_pValues = new float[m_Length];
 		std::copy(other.m_pValues, other.m_pValues + m_Length, m_pValues);
+
+		return *this;
+	}
+
+	VectorType& operator=(VectorType&& other) noexcept
+	{
+		if (this == &other)
+			return *this;
+
+		delete[] m_pValues;
+
+		m_pValues = other.m_pValues;
+		m_Length  = other.m_Length;
+
+		other.m_pValues = nullptr;
+		other.m_Length = 0;
 
 		return *this;
 	}
@@ -124,32 +144,13 @@ public:
 		return out;
 	}
 
-	VectorType operator+(const VectorType& other) const
-	{
-		VectorType result{};
-
-		if (m_Length != other.m_Length)
-			throw std::runtime_error("Vector size mismatch");
-
-		result.m_Length = m_Length;
-		result.m_pValues = new float[m_Length];
-
-		for (size_t i = 0; i < m_Length; i++)
-			result.m_pValues[i] = m_pValues[i] + other.m_pValues[i];
-
-		return result;
-	}
-
 	[[nodiscard]]
 	VectorType ElementwiseAdd(const VectorType& other) const
 	{
-		VectorType result{};
-
 		if (other.m_Length != 1)
 			throw std::runtime_error("Vector size mismatch");
 
-		result.m_Length = m_Length;
-		result.m_pValues = new float[m_Length];
+		VectorType result(m_Length);
 
 		for (size_t i = 0; i < m_Length; i++)
 			result.m_pValues[i] = m_pValues[i] + other.m_pValues[0];
@@ -201,13 +202,10 @@ public:
 
 	VectorType operator*(const VectorType& other) const
 	{
-		VectorType result{};
-
 		if (m_Length != other.m_Length)
-			throw std::runtime_error("Vector size mismatch");
+			throw std::runtime_error("Vector operator *: size mismatch");
 
-		result.m_Length = m_Length;
-		result.m_pValues = new float[m_Length];
+		VectorType result(m_Length);
 
 		for (size_t i = 0; i < m_Length; i++)
 			result.m_pValues[i] = m_pValues[i] * other.m_pValues[i];
@@ -236,15 +234,12 @@ public:
 
 
 
-inline VectorType operator+(VectorType& left, VectorType& right)
+inline VectorType operator+(const VectorType& left, const VectorType& right)
 {
-	VectorType result{};
-
 	if (left.m_Length != right.m_Length)
-		throw std::runtime_error("Vector size mismatch");
+		throw std::runtime_error("Vector operator +: Size mismatch");
 
-	result.m_Length  = left.m_Length;
-	result.m_pValues = new float[left.m_Length];
+	VectorType result(left.m_Length);
 
 	for (size_t i = 0; i < left.m_Length; i++)
 		result.m_pValues[i] = left.m_pValues[i] + right.m_pValues[i];
@@ -254,15 +249,12 @@ inline VectorType operator+(VectorType& left, VectorType& right)
 
 
 
-inline VectorType operator-(VectorType& left, VectorType& right)
+inline VectorType operator-(const VectorType& left, const VectorType& right)
 {
-	VectorType result{};
-
 	if (left.m_Length != right.m_Length)
-		throw std::runtime_error("Vector size mismatch");
+		throw std::runtime_error("Vector operator -: Size mismatch");
 
-	result.m_Length  = left.m_Length;
-	result.m_pValues = new float[left.m_Length];
+	VectorType result(left.m_Length);
 
 	for (size_t i = 0; i < left.m_Length; i++)
 		result.m_pValues[i] = left.m_pValues[i] - right.m_pValues[i];

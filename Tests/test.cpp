@@ -4,6 +4,7 @@
 #include "../src/neuron.h"
 #include "../src/layer.h"
 #include "../src/sgd.h"
+#include "../src/tape_recorder.h"
 
 
 
@@ -986,7 +987,7 @@ TEST(SGD, SpiralClassification_MSE)
 
 	float epoch_loss = 0.0f;
 
-	for (size_t epoch = 0; epoch < 1200; epoch++)
+	for (size_t epoch = 0; epoch < 1250; epoch++)
 	{
 		ShuffleDataset(xs, labels);
 
@@ -1006,6 +1007,266 @@ TEST(SGD, SpiralClassification_MSE)
 			sgd.SetTrainableParams(loss->CollectParams());
 
 			loss->Backwards();
+			sgd.Step();
+
+			epoch_loss += loss->GetValue()[0];
+		}
+
+		epoch_loss /= xs.size();
+
+		if (epoch % 100 == 0)
+			std::cout << "Epoch " << epoch << " Loss: " << epoch_loss << std::endl;
+	}
+
+	// evaluate classification accuracy
+	int correct = 0;
+
+	for (size_t i = 0; i < xs.size(); i++)
+	{
+		auto h1 = L1.Forward(xs[i]);
+		auto h2 = L2.Forward(h1);
+		auto out = L3.Forward(h2);
+
+		float pred = out->GetValue()[0];
+		float target = labels[i]->GetValue()[0];
+
+		int predicted_class = pred > 0.5f ? 1 : 0;
+		int target_class = target > 0.5f ? 1 : 0;
+
+		if (predicted_class == target_class)
+			correct++;
+	}
+
+	float accuracy = (float)correct / xs.size();
+
+	std::cout << "Final Accuracy: " << accuracy << std::endl;
+
+	EXPECT_GT(accuracy, 0.90f);
+}
+
+
+
+TEST(TapeRecorder, Kapathy_Example2)
+{
+	auto x1 = Node<ScalarType>::Create(2.0f, "x1");
+	auto x2 = Node<ScalarType>::Create(0.0f, "x2");
+
+	auto w1 = Node<ScalarType>::Create(-3.0f, "w1");
+	auto w2 = Node<ScalarType>::Create(1.0f, "w2");
+
+	auto b = Node<ScalarType>::Create(6.881375f, "b");
+
+	auto x1w1 = x1 * w1;
+	auto x2w2 = x2 * w2;
+	x1w1->SetLabel("x1w1");
+	x2w2->SetLabel("x2w2");
+
+	auto x1w1x2w2 = x1w1 + x2w2;
+	x1w1x2w2->SetLabel("x1w1x2w2");
+
+	auto n = x1w1x2w2 + b;
+	auto o = n->Tanh();
+
+	n->SetLabel("n");
+	o->SetLabel("o");
+
+	auto graph = TapeRecorder<ScalarType>();
+	graph.Compile(o);
+
+	graph.Forward();
+
+	graph.PrintTape();
+
+	graph.Backward();
+
+	EXPECT_NEAR(graph.GetValue("x1")[0], 2.0f, 1e-5f);
+	EXPECT_NEAR(graph.GetGradient("x1")[0], -1.5f, 1e-5f);
+
+	EXPECT_NEAR(graph.GetValue("x2")[0], 0.0f, 1e-5f);
+	EXPECT_NEAR(graph.GetGradient("x2")[0], 0.5f, 1e-5f);
+
+	EXPECT_NEAR(graph.GetValue("w1")[0], -3.0f, 1e-5f);
+	EXPECT_NEAR(graph.GetGradient("w1")[0], 1.0f, 1e-5f);
+
+	EXPECT_NEAR(graph.GetValue("w2")[0], 1.0f, 1e-5f);
+	EXPECT_NEAR(graph.GetGradient("w2")[0], 0.0f, 1e-5f);
+	
+	EXPECT_NEAR(graph.GetValue("x1w1")[0], -6.0f, 1e-5f);
+	EXPECT_NEAR(graph.GetGradient("x1w1")[0], 0.5f, 1e-5f);
+
+	EXPECT_NEAR(graph.GetValue("x2w2")[0], 0.0f, 1e-5f);
+	EXPECT_NEAR(graph.GetGradient("x2w2")[0], 0.5f, 1e-5f);
+
+	EXPECT_NEAR(graph.GetValue("x1w1x2w2")[0], -6.0f, 1e-5f);
+	EXPECT_NEAR(graph.GetGradient("x1w1x2w2")[0], 0.5f, 1e-5f);
+
+	EXPECT_NEAR(graph.GetValue("b")[0], 6.8814f, 1e-4f);
+	EXPECT_NEAR(graph.GetGradient("b")[0], 0.5f, 1e-5f);
+
+	EXPECT_NEAR(graph.GetValue("n")[0], 0.8814f, 1e-4f);
+	EXPECT_NEAR(graph.GetGradient("n")[0], 0.5f, 1e-5f);
+
+	EXPECT_NEAR(graph.GetValue("o")[0], 0.7071f, 1e-5f);
+	EXPECT_NEAR(graph.GetGradient("o")[0], 1.0f, 1e-5f);
+}
+
+
+
+TEST(TapeRecorder, XOR)
+{
+	std::vector<NodePtr<VectorType>> xs = {
+		Node<VectorType>::Create({ 0.0f, 0.0f }),
+		Node<VectorType>::Create({ 0.0f, 1.0f }),
+		Node<VectorType>::Create({ 1.0f, 0.0f }),
+		Node<VectorType>::Create({ 1.0f, 1.0f })
+	};
+
+	std::vector<NodePtr<VectorType>> labels = {
+		Node<VectorType>::Create({ 0.0f }),
+		Node<VectorType>::Create({ 1.0f }),
+		Node<VectorType>::Create({ 1.0f }),
+		Node<VectorType>::Create({ 0.0f })
+	};
+
+	Layer2D<VectorType> L1(2, 3, Activation::Tanh);
+	Layer2D<VectorType> L2(3, 1, Activation::Tanh);
+
+	SGD<VectorType> sgd(0.1f);
+
+	auto x_ = Node<VectorType>::Create({ 0.0f, 0.0f }, "x");
+	auto label_ = Node<VectorType>::Create({ 0.0f }, "label");
+	auto l1_out = L1.Forward(x_);
+	auto out_ = L2.Forward(l1_out);
+
+	auto diff = out_ - label_;
+	auto loss_ = diff * diff;
+	out_->SetLabel("output");
+	loss_->SetLabel("loss");
+
+	auto tape = TapeRecorder<VectorType>();
+	tape.Compile(loss_);
+
+	sgd.SetTrainableParams(tape);
+
+	auto input  = tape.SetValue("x");
+	auto label  = tape.SetValue("label");
+	auto output = tape.SetValue("output");
+	auto loss   = tape.SetValue("loss");
+
+	float lr = 0.1f;
+	float epoch_loss = 0.0f;
+
+	for (size_t epoch = 0; epoch < 300; epoch++)
+	{
+		epoch_loss = 0.0f;
+
+		for (size_t i = 0; i < xs.size(); i++)
+		{
+			*input = xs[i]->GetValue();
+			*label = labels[i]->GetValue();
+
+			tape.Forward();
+
+			tape.Backward();
+
+			sgd.Step();
+
+			epoch_loss += loss->GetValue()[0];
+		}
+	}
+
+	EXPECT_NEAR(epoch_loss, 0.0f, 0.1f);
+
+	for (size_t i = 0; i < xs.size(); i++)
+	{
+		*input = xs[i]->GetValue();
+
+		tape.Forward();
+
+		auto diff = *output - labels[i]->GetValue();
+		EXPECT_NEAR(diff.GetValue()[0], 0.0f, 0.1f);
+	}
+}
+
+
+
+TEST(TapeRecorder, SpiralClassification_MSE)
+{
+	std::vector<NodePtr<VectorType>> xs;
+	std::vector<NodePtr<VectorType>> labels;
+
+	const int points_per_class = 50;
+	const float pi = 3.14159265f;
+
+	// generate 2-class spiral dataset
+	for (int class_id = 0; class_id < 2; class_id++)
+	{
+		for (int i = 0; i < points_per_class; i++)
+		{
+			float r = (float)i / points_per_class;
+
+			// spiral angle
+			float t = 4.0f * pi * r + class_id * pi;
+
+			float x = r * std::sin(t);
+			float y = r * std::cos(t);
+
+			xs.push_back(Node<VectorType>::Create({ x, y }));
+
+			// one-hot-ish target for MSE
+			if (class_id == 0)
+				labels.push_back(Node<VectorType>::Create({ 0.0f }));
+			else
+				labels.push_back(Node<VectorType>::Create({ 1.0f }));
+		}
+	}
+
+	// MLP: 2 -> 32 -> 32 -> 1
+	Layer2D<VectorType> L1(2, 32, Activation::Tanh);
+	Layer2D<VectorType> L2(32, 32, Activation::Tanh);
+	Layer2D<VectorType> L3(32, 1, Activation::Tanh);
+
+	SGD<VectorType> sgd(0.01f);
+	const int batch_size = 8;
+
+	auto x_ = Node<VectorType>::Create({ 0.0f, 0.0f }, "input");
+	auto label_ = Node<VectorType>::Create({ 0.0f }, "label");
+
+	auto h1 = L1.Forward(x_);
+	auto h2 = L2.Forward(h1);
+	auto out_ = L3.Forward(h2);
+
+	auto loss_ = (out_ - labels[0]) * (out_ - label_);
+
+	auto tape = TapeRecorder<VectorType>();
+	tape.Compile(loss_);
+	sgd.SetTrainableParams(tape);
+
+	auto input  = tape.SetValue("x");
+	auto label  = tape.SetValue("label");
+	auto output = tape.SetValue("output");
+	auto loss   = tape.SetValue("loss");
+
+	tape.PrintTape();
+
+	//Training
+
+	float epoch_loss = 0.0f;
+
+	for (size_t epoch = 0; epoch < 1250; epoch++)
+	{
+		ShuffleDataset(xs, labels);
+
+		epoch_loss = 0.0f;
+
+		for (size_t i = 0; i < xs.size(); i++)
+		{
+			*input = xs[i];
+
+			tape.Forward();
+
+			tape.Backward();
+
 			sgd.Step();
 
 			epoch_loss += loss->GetValue()[0];
