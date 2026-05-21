@@ -4,13 +4,13 @@
 
 
 
-class ScalarType
+class Scalar
 {
 public:
-	ScalarType() : value(0.0f) {}
-	ScalarType(float Value) : value(Value) {}
+	Scalar() : value(0.0f) {}
+	Scalar(float Value) : value(Value) {}
 
-	void operator=(const ScalarType& rhs)
+	void operator=(const Scalar& rhs)
 	{
 		value = rhs.value;
 	}
@@ -43,9 +43,9 @@ public:
 
 	size_t GetLength() const { return 1; }
 
-	ScalarType ElementwiseAdd(const ScalarType& rhs) const
+	Scalar ElementwiseAdd(const Scalar& rhs) const
 	{
-		return ScalarType(value + rhs.value);
+		return Scalar(value + rhs.value);
 	}
 
 	float Sum() const
@@ -69,7 +69,7 @@ public:
 		return (value > 0.0f ? 1.0f : 0.0f);
 	}
 	
-	void operator+=(const ScalarType& rhs)
+	void operator+=(const Scalar& rhs)
 	{
 		value += rhs.value;
 	}
@@ -79,7 +79,7 @@ public:
 		value += rhs;
 	}
 
-	void operator-=(const ScalarType& rhs)
+	void operator-=(const Scalar& rhs)
 	{
 		value -= rhs.value;
 	}
@@ -89,24 +89,24 @@ public:
 		value -= rhs;
 	}
 
-	void operator*=(const ScalarType& rhs)
+	void operator*=(const Scalar& rhs)
 	{
 		value *= rhs.value;
 	}
 
-	ScalarType operator+(const ScalarType& other) const
+	Scalar operator+(const Scalar& other) const
 	{
-		return ScalarType(value + other.value);
+		return Scalar(value + other.value);
 	}
 
-	ScalarType operator-(const ScalarType& other) const
+	Scalar operator-(const Scalar& other) const
 	{
-		return ScalarType(value - other.value);
+		return Scalar(value - other.value);
 	}
 
-	ScalarType operator*(const ScalarType& other) const
+	Scalar operator*(const Scalar& other) const
 	{
-		return ScalarType(value * other.value);
+		return Scalar(value * other.value);
 	}
 
 	operator float() const { return value; }
@@ -125,8 +125,8 @@ public:
 
 
 
-inline ScalarType operator-(float lhs, const ScalarType& rhs)
+inline Scalar operator-(float lhs, const Scalar& rhs)
 {
-	ScalarType out = lhs - rhs.value;
+	Scalar out = lhs - rhs.value;
 	return out;
 }

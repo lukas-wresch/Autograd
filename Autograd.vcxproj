@@ -134,6 +134,7 @@
   <ItemGroup>
     <ClInclude Include="mnist.h" />
     <ClInclude Include="src\layer.h" />
+    <ClInclude Include="src\matrix.h" />
     <ClInclude Include="src\neuron.h" />
     <ClInclude Include="src\node.h" />
     <ClInclude Include="src\scalar.h" />

@@ -15,8 +15,8 @@ public:
 	NodePtr<T> Forward(const NodePtr<T>& Input) const;
 
 	Neuron2D* GetNeuron(size_t Index) { return &m_pNeurons[Index]; }
-	NodePtr<VectorType> GetWeight(size_t Index) { return m_pNeurons[Index].GetWeight(); }
-	NodePtr<VectorType> GetBias(  size_t Index) { return m_pNeurons[Index].GetBias();   }
+	NodePtr<Vector> GetWeight(size_t Index) { return m_pNeurons[Index].GetWeight(); }
+	NodePtr<Vector> GetBias(  size_t Index) { return m_pNeurons[Index].GetBias();   }
 
 	size_t GetOutputLength() const { return m_OutputLength; }
 

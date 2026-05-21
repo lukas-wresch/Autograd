@@ -12,8 +12,8 @@ float RandomFloatMinus1To1()
 
 Neuron::Neuron(Activation Activation) : m_Activation(Activation)
 {
-    m_Weight = Node<ScalarType>::Create();
-    m_Bias   = Node<ScalarType>::Create();
+    m_Weight = Node<Scalar>::Create();
+    m_Bias   = Node<Scalar>::Create();
 }
 
 
@@ -46,8 +46,8 @@ NodePtr<T> Neuron::Forward(const NodePtr<T>& Input) const
 
 Neuron2D::Neuron2D(size_t InputLength, Activation Activation) : m_Activation(Activation)
 {
-    m_Weight = Node<VectorType>::Create(InputLength);
-    m_Bias   = Node<VectorType>::Create(1);
+    m_Weight = Node<Vector>::Create(InputLength);
+    m_Bias   = Node<Vector>::Create(1);
 
     for (size_t i = 0; i < InputLength; i++)
     {

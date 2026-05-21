@@ -32,10 +32,6 @@ class Node;
 template<typename T>
 using NodePtr = std::shared_ptr<Node<T>>;
 
-using Scalar  = Node<ScalarType>;
-
-using Vector  = Node<VectorType>;
-
 
 
 template<typename T>

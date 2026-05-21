@@ -23,8 +23,8 @@ public:
 
 
 private:
-	NodePtr<ScalarType> m_Weight;
-	NodePtr<ScalarType> m_Bias;
+	NodePtr<Scalar> m_Weight;
+	NodePtr<Scalar> m_Bias;
 	Activation m_Activation = Activation::Identity;
 };
 
@@ -57,8 +57,8 @@ public:
 
 
 private:
-	NodePtr<VectorType> m_Weight;
-	NodePtr<VectorType> m_Bias;
+	NodePtr<Vector> m_Weight;
+	NodePtr<Vector> m_Bias;
 	Activation m_Activation = Activation::Identity;
 };
 

@@ -8,7 +8,7 @@
 
 
 
-void ShuffleDataset(std::vector<NodePtr<VectorType>>& xs, std::vector<NodePtr<VectorType>>& labels)
+void ShuffleDataset(std::vector<NodePtr<Vector>>& xs, std::vector<NodePtr<Vector>>& labels)
 {
 	static std::random_device rd;
 	static std::mt19937 rng(rd());
@@ -27,9 +27,9 @@ void ShuffleDataset(std::vector<NodePtr<VectorType>>& xs, std::vector<NodePtr<Ve
 
 TEST(ScalarTests, BasicArithmeticAndBackprop)
 { // d = a * b + c
-	auto a = Node<ScalarType>::Create(2.0f);
-	auto b = Node<ScalarType>::Create(-3.0f);
-	auto c = Node<ScalarType>::Create(10.0f);
+	auto a = Node<Scalar>::Create(2.0f);
+	auto b = Node<Scalar>::Create(-3.0f);
+	auto c = Node<Scalar>::Create(10.0f);
 
 	auto d = a * b + c;
 	d->Backwards();
@@ -45,9 +45,9 @@ TEST(ScalarTests, BasicArithmeticAndBackprop)
 
 TEST(VectorTests, ElementwiseMultiplyAddBackprop)
 { // out = (w * x) + b2 (elementwise add with scalar bias)
-	auto x  = Node<VectorType>::Create({ 0.5f, 0.0f });
-	auto w  = Node<VectorType>::Create({ 1.0f, 0.5f });
-	auto b2 = Node<VectorType>::Create({ 1.0f });
+	auto x  = Node<Vector>::Create({ 0.5f, 0.0f });
+	auto w  = Node<Vector>::Create({ 1.0f, 0.5f });
+	auto b2 = Node<Vector>::Create({ 1.0f });
 
 	auto out = (w * x)->ElementwiseAdd(b2);
 
@@ -83,7 +83,7 @@ TEST(Neuron2DTests, ForwardAndBackpropTanh)
 	w->value.m_pValues[1] = 0.5f;
 	b->value.m_pValues[0] = 1.0f;
 
-	auto x = Node<VectorType>::Create({ 0.5f, 0.0f });
+	auto x = Node<Vector>::Create({ 0.5f, 0.0f });
 
 	auto out = n.Forward(x); // returns a length-1 vector (pre_act -> tanh)
 	out->Backwards();
@@ -113,13 +113,13 @@ TEST(Neuron2DTests, ForwardAndBackpropTanh)
 
 TEST(Examples, Kapathy_Example2)
 {
-	auto x1 = Node<ScalarType>::Create(2.0f, "x1");
-	auto x2 = Node<ScalarType>::Create(0.0f, "x2");
+	auto x1 = Node<Scalar>::Create(2.0f, "x1");
+	auto x2 = Node<Scalar>::Create(0.0f, "x2");
 
-	auto w1 = Node<ScalarType>::Create(-3.0f, "w1");
-	auto w2 = Node<ScalarType>::Create(1.0f, "w2");
+	auto w1 = Node<Scalar>::Create(-3.0f, "w1");
+	auto w2 = Node<Scalar>::Create(1.0f, "w2");
 
-	auto b = Node<ScalarType>::Create(6.881375f, "b");
+	auto b = Node<Scalar>::Create(6.881375f, "b");
 
 	auto x1w1 = x1 * w1;
 	auto x2w2 = x2 * w2;
@@ -172,9 +172,9 @@ TEST(Examples, Kapathy_Example2)
 
 TEST(Examples, Kapathy_Example2_Vec)
 {
-	auto x = Node<VectorType>::Create({ 2.0f, 0.0f },  "x");
-	auto w = Node<VectorType>::Create({ -3.0f, 1.0f }, "w");
-	auto b = Node<VectorType>::Create({ 6.881375f },   "b");
+	auto x = Node<Vector>::Create({ 2.0f, 0.0f },  "x");
+	auto w = Node<Vector>::Create({ -3.0f, 1.0f }, "w");
+	auto b = Node<Vector>::Create({ 6.881375f },   "b");
 
 	auto xw = x * w;
 	xw->SetLabel("xw");
@@ -225,7 +225,7 @@ TEST(Examples, Kapathy_Example2_Vec)
 
 TEST(Examples, Kapathy_Example2_Neuron)
 {
-	auto x = Node<VectorType>::Create({ 2.0f, 0.0f }, "x");
+	auto x = Node<Vector>::Create({ 2.0f, 0.0f }, "x");
 	Neuron2D n(2, Activation::Tanh);
 	n.GetWeight()->value.m_pValues[0] = -3.0f;
 	n.GetWeight()->value.m_pValues[1] = 1.0f;
@@ -258,10 +258,10 @@ TEST(Examples, Kapathy_Example2_Neuron)
 
 TEST(Autograd, DiamondGraphGradient)
 {
-	auto a = Node<ScalarType>::Create(1.0f);
+	auto a = Node<Scalar>::Create(1.0f);
 
-	auto b = a * Node<ScalarType>::Create(2.0f);
-	auto c = a * Node<ScalarType>::Create(3.0f);
+	auto b = a * Node<Scalar>::Create(2.0f);
+	auto c = a * Node<Scalar>::Create(3.0f);
 	auto d = b + c;
 
 	d->Backwards();
@@ -273,7 +273,7 @@ TEST(Autograd, DiamondGraphGradient)
 
 TEST(Autograd, SharedNodeMultiply)
 {
-	auto x = Node<ScalarType>::Create(3.0f);
+	auto x = Node<Scalar>::Create(3.0f);
 
 	auto y = x * x;
 
@@ -286,8 +286,8 @@ TEST(Autograd, SharedNodeMultiply)
 
 TEST(Autograd, VectorMultiplyGradient)
 {
-	auto a = Node<VectorType>::Create({ 2.0f, 3.0f });
-	auto b = Node<VectorType>::Create({ 4.0f, 5.0f });
+	auto a = Node<Vector>::Create({ 2.0f, 3.0f });
+	auto b = Node<Vector>::Create({ 4.0f, 5.0f });
 
 	auto c = a * b;
 	auto loss = c->Sum();
@@ -304,7 +304,7 @@ TEST(Autograd, VectorMultiplyGradient)
 
 TEST(Autograd, SumGradient)
 {
-	auto x = Node<VectorType>::Create({ 1.0f, 2.0f, 3.0f });
+	auto x = Node<Vector>::Create({ 1.0f, 2.0f, 3.0f });
 
 	auto y = x->Sum();
 
@@ -319,9 +319,9 @@ TEST(Autograd, SumGradient)
 
 TEST(Autograd, NeuronGradient)
 {
-	auto input = Node<VectorType>::Create({ 1.0f, 2.0f });
-	auto weight = Node<VectorType>::Create({ 3.0f, 4.0f });
-	auto bias = Node<VectorType>::Create({ 5.0f });
+	auto input = Node<Vector>::Create({ 1.0f, 2.0f });
+	auto weight = Node<Vector>::Create({ 3.0f, 4.0f });
+	auto bias = Node<Vector>::Create({ 5.0f });
 
 	auto z = weight * input;
 	auto s = z->Sum();
@@ -342,7 +342,7 @@ TEST(Autograd, NeuronGradient)
 
 TEST(Autograd, TanhGradient)
 {
-	auto x = Node<ScalarType>::Create(0.5f);
+	auto x = Node<Scalar>::Create(0.5f);
 
 	auto y = x->Tanh();
 
@@ -360,7 +360,7 @@ TEST(Autograd, ReLU_Vector_Gradient)
 	// -------------------------
 	// Input: mixed values
 	// -------------------------
-	auto x = Node<VectorType>::Create({ -2.0f, -0.5f, 0.0f, 1.5f, 3.0f });
+	auto x = Node<Vector>::Create({ -2.0f, -0.5f, 0.0f, 1.5f, 3.0f });
 
 	// forward
 	auto y = x->ReLU();
@@ -388,7 +388,7 @@ TEST(Autograd, ReLU_Vector_Gradient)
 
 TEST(Autograd, ReLU_FiniteDifference)
 {
-	auto x = Node<VectorType>::Create({ -1.3f, 0.7f, 2.2f });
+	auto x = Node<Vector>::Create({ -1.3f, 0.7f, 2.2f });
 
 	auto y = x->ReLU();
 
@@ -400,8 +400,8 @@ TEST(Autograd, ReLU_FiniteDifference)
 	{
 		float eps = 1e-4f;
 
-		auto x_pos = Node<VectorType>::Create(x->GetValue());
-		auto x_neg = Node<VectorType>::Create(x->GetValue());
+		auto x_pos = Node<Vector>::Create(x->GetValue());
+		auto x_neg = Node<Vector>::Create(x->GetValue());
 
 		x_pos->GetValue().SetValue()[i] += eps;
 		x_neg->GetValue().SetValue()[i] -= eps;
@@ -419,8 +419,8 @@ TEST(Autograd, ReLU_FiniteDifference)
 
 TEST(Training, GradientChangesAfterUpdate)
 {
-	auto x = Node<VectorType>::Create({ 1.0f, 2.0f });
-	auto target = Node<VectorType>::Create({ 1.0f });
+	auto x = Node<Vector>::Create({ 1.0f, 2.0f });
+	auto target = Node<Vector>::Create({ 1.0f });
 
 	Neuron2D n(2, Activation::Tanh);
 
@@ -460,7 +460,7 @@ TEST(Training, GradientChangesAfterUpdate)
 
 TEST(Node, ValueIsMutable)
 {
-	auto n = Node<ScalarType>::Create(2.0f);
+	auto n = Node<Scalar>::Create(2.0f);
 
 	auto before = n->GetValue()[0];
 
@@ -475,7 +475,7 @@ TEST(Node, ValueIsMutable)
 
 TEST(Node, GradientIsMutable)
 {
-	auto n = Node<ScalarType>::Create(2.0f);
+	auto n = Node<Scalar>::Create(2.0f);
 
 	auto before = n->GetGradient()[0];
 
@@ -490,13 +490,13 @@ TEST(Node, GradientIsMutable)
 
 TEST(Autograd, Pack_NoDoubleGradientPropagation)
 {
-	auto x1 = Node<VectorType>::Create({ 1.0f });
-	auto x2 = Node<VectorType>::Create({ 2.0f });
-	auto x3 = Node<VectorType>::Create({ 3.0f });
+	auto x1 = Node<Vector>::Create({ 1.0f });
+	auto x2 = Node<Vector>::Create({ 2.0f });
+	auto x3 = Node<Vector>::Create({ 3.0f });
 
-	std::vector<NodePtr<VectorType>> inputs = { x1, x2, x3 };
+	std::vector<NodePtr<Vector>> inputs = { x1, x2, x3 };
 
-	auto packed = Node<VectorType>::CreateWithSize(3);
+	auto packed = Node<Vector>::CreateWithSize(3);
 	packed->Pack(inputs);
 
 	EXPECT_NEAR(packed->GetValue()[0], x1->GetValue()[0], 1e-5f);
@@ -521,11 +521,11 @@ TEST(Autograd, Pack_NoDoubleGradientPropagation)
 TEST(Autograd, DetectDoubleBackpropagation)
 {
 	// shared node
-	auto x = Node<ScalarType>::Create(2.0f);
+	auto x = Node<Scalar>::Create(2.0f);
 
 	// diamond graph with shared dependency
-	auto a = x * Node<ScalarType>::Create(3.0f);
-	auto b = x * Node<ScalarType>::Create(4.0f);
+	auto a = x * Node<Scalar>::Create(3.0f);
+	auto b = x * Node<Scalar>::Create(4.0f);
 
 	auto y = a + b;
 
@@ -542,11 +542,11 @@ TEST(Autograd, DetectDoubleBackpropagation)
 
 TEST(Autograd, DetectMultipleBackpropPathsExplosion)
 {
-	auto x = Node<ScalarType>::Create(1.0f);
+	auto x = Node<Scalar>::Create(1.0f);
 
-	auto a = x * Node<ScalarType>::Create(2.0f);
-	auto b = x * Node<ScalarType>::Create(3.0f);
-	auto c = x * Node<ScalarType>::Create(4.0f);
+	auto a = x * Node<Scalar>::Create(2.0f);
+	auto b = x * Node<Scalar>::Create(3.0f);
+	auto c = x * Node<Scalar>::Create(4.0f);
 
 	auto y = a + b + c;
 
@@ -562,8 +562,8 @@ TEST(Autograd, DetectMultipleBackpropPathsExplosion)
 
 TEST(Training, XOR_OverfitSingleEpochSanity)
 {
-	auto x = Node<VectorType>::Create({ 0.0f, 1.0f });
-	auto y_true = Node<VectorType>::Create({ 1.0f });
+	auto x = Node<Vector>::Create({ 0.0f, 1.0f });
+	auto y_true = Node<Vector>::Create({ 1.0f });
 
 	Neuron2D n(2, Activation::Tanh);
 
@@ -605,22 +605,22 @@ TEST(Training, XOR_OverfitSingleEpochSanity)
 
 TEST(Training, XOR)
 {
-	std::vector<NodePtr<VectorType>> xs = {
-		Node<VectorType>::Create({ 0.0f, 0.0f }),
-		Node<VectorType>::Create({ 0.0f, 1.0f }),
-		Node<VectorType>::Create({ 1.0f, 0.0f }),
-		Node<VectorType>::Create({ 1.0f, 1.0f })
+	std::vector<NodePtr<Vector>> xs = {
+		Node<Vector>::Create({ 0.0f, 0.0f }),
+		Node<Vector>::Create({ 0.0f, 1.0f }),
+		Node<Vector>::Create({ 1.0f, 0.0f }),
+		Node<Vector>::Create({ 1.0f, 1.0f })
 	};
 
-	std::vector<NodePtr<VectorType>> label = {
-		Node<VectorType>::Create({ 0.0f }),
-		Node<VectorType>::Create({ 1.0f }),
-		Node<VectorType>::Create({ 1.0f }),
-		Node<VectorType>::Create({ 0.0f })
+	std::vector<NodePtr<Vector>> label = {
+		Node<Vector>::Create({ 0.0f }),
+		Node<Vector>::Create({ 1.0f }),
+		Node<Vector>::Create({ 1.0f }),
+		Node<Vector>::Create({ 0.0f })
 	};
 
-	Layer2D<VectorType> L1(2, 3, Activation::Tanh);
-	Layer2D<VectorType> L2(3, 1, Activation::Tanh);
+	Layer2D<Vector> L1(2, 3, Activation::Tanh);
+	Layer2D<Vector> L2(3, 1, Activation::Tanh);
 
 	float lr = 0.1f;
 	float epoch_loss = 0.0f;
@@ -677,8 +677,8 @@ TEST(Training, XOR)
 
 TEST(Autograd, ScalarLossSanity)
 {
-	auto x = Node<VectorType>::Create({ 0.5f });
-	auto y = Node<VectorType>::Create({ 1.0f });
+	auto x = Node<Vector>::Create({ 0.5f });
+	auto y = Node<Vector>::Create({ 1.0f });
 
 	auto diff = x - y;
 	auto loss = (diff * diff)->Sum();
@@ -693,24 +693,24 @@ TEST(Autograd, ScalarLossSanity)
 
 TEST(SGD, XOR)
 {
-	std::vector<NodePtr<VectorType>> xs = {
-		Node<VectorType>::Create({ 0.0f, 0.0f }),
-		Node<VectorType>::Create({ 0.0f, 1.0f }),
-		Node<VectorType>::Create({ 1.0f, 0.0f }),
-		Node<VectorType>::Create({ 1.0f, 1.0f })
+	std::vector<NodePtr<Vector>> xs = {
+		Node<Vector>::Create({ 0.0f, 0.0f }),
+		Node<Vector>::Create({ 0.0f, 1.0f }),
+		Node<Vector>::Create({ 1.0f, 0.0f }),
+		Node<Vector>::Create({ 1.0f, 1.0f })
 	};
 
-	std::vector<NodePtr<VectorType>> label = {
-		Node<VectorType>::Create({ 0.0f }),
-		Node<VectorType>::Create({ 1.0f }),
-		Node<VectorType>::Create({ 1.0f }),
-		Node<VectorType>::Create({ 0.0f })
+	std::vector<NodePtr<Vector>> label = {
+		Node<Vector>::Create({ 0.0f }),
+		Node<Vector>::Create({ 1.0f }),
+		Node<Vector>::Create({ 1.0f }),
+		Node<Vector>::Create({ 0.0f })
 	};
 
-	Layer2D<VectorType> L1(2, 3, Activation::Tanh);
-	Layer2D<VectorType> L2(3, 1, Activation::Tanh);
+	Layer2D<Vector> L1(2, 3, Activation::Tanh);
+	Layer2D<Vector> L2(3, 1, Activation::Tanh);
 
-	SGD<VectorType> sgd(0.1f);
+	SGD<Vector> sgd(0.1f);
 
 	auto l1_out = L1.Forward(xs[0]);
 	auto out = L2.Forward(l1_out);
@@ -763,24 +763,24 @@ TEST(SGD, XOR)
 
 TEST(SGD, XOR_BATCHED)
 {
-	std::vector<NodePtr<VectorType>> xs = {
-		Node<VectorType>::Create({ 0.0f, 0.0f }),
-		Node<VectorType>::Create({ 0.0f, 1.0f }),
-		Node<VectorType>::Create({ 1.0f, 0.0f }),
-		Node<VectorType>::Create({ 1.0f, 1.0f })
+	std::vector<NodePtr<Vector>> xs = {
+		Node<Vector>::Create({ 0.0f, 0.0f }),
+		Node<Vector>::Create({ 0.0f, 1.0f }),
+		Node<Vector>::Create({ 1.0f, 0.0f }),
+		Node<Vector>::Create({ 1.0f, 1.0f })
 	};
 
-	std::vector<NodePtr<VectorType>> labels = {
-		Node<VectorType>::Create({ 0.0f }),
-		Node<VectorType>::Create({ 1.0f }),
-		Node<VectorType>::Create({ 1.0f }),
-		Node<VectorType>::Create({ 0.0f })
+	std::vector<NodePtr<Vector>> labels = {
+		Node<Vector>::Create({ 0.0f }),
+		Node<Vector>::Create({ 1.0f }),
+		Node<Vector>::Create({ 1.0f }),
+		Node<Vector>::Create({ 0.0f })
 	};
 
-	Layer2D<VectorType> L1(2, 3, Activation::Tanh);
-	Layer2D<VectorType> L2(3, 1, Activation::Tanh);
+	Layer2D<Vector> L1(2, 3, Activation::Tanh);
+	Layer2D<Vector> L2(3, 1, Activation::Tanh);
 
-	SGD<VectorType> sgd(0.1f);
+	SGD<Vector> sgd(0.1f);
 
 	const int batch_size = 4; // XOR fits perfectly in one batch
 
@@ -805,7 +805,7 @@ TEST(SGD, XOR_BATCHED)
 		{
 			size_t end = std::min(i + batch_size, xs.size());
 
-			NodePtr<VectorType> batch_loss = nullptr;
+			NodePtr<Vector> batch_loss = nullptr;
 
 			for (size_t j = i; j < end; j++)
 			{
@@ -862,8 +862,8 @@ TEST(SGD, XOR_BATCHED)
 TEST(SGD, SinRegression)
 {
 	// training data: y = sin(x)
-	std::vector<NodePtr<VectorType>> xs;
-	std::vector<NodePtr<VectorType>> labels;
+	std::vector<NodePtr<Vector>> xs;
+	std::vector<NodePtr<Vector>> labels;
 
 	const int N = 20;
 
@@ -872,16 +872,16 @@ TEST(SGD, SinRegression)
 		float x = -3.1415f + i * (6.2830f / (N - 1)); // [-pi, pi]
 		float y = std::sin(x);
 
-		xs.push_back(Node<VectorType>::Create({ x }));
-		labels.push_back(Node<VectorType>::Create({ y }));
+		xs.push_back(Node<Vector>::Create({ x }));
+		labels.push_back(Node<Vector>::Create({ y }));
 	}
 
 	// simple MLP: 1 → 8 → 8 → 1
-	Layer2D<VectorType> L1(1, 8, Activation::Tanh);
-	Layer2D<VectorType> L2(8, 8, Activation::Tanh);
-	Layer2D<VectorType> L3(8, 1, Activation::Tanh);
+	Layer2D<Vector> L1(1, 8, Activation::Tanh);
+	Layer2D<Vector> L2(8, 8, Activation::Tanh);
+	Layer2D<Vector> L3(8, 1, Activation::Tanh);
 
-	SGD<VectorType> sgd(0.02f);
+	SGD<Vector> sgd(0.02f);
 
 	float epoch_loss = 0.0f;
 
@@ -935,8 +935,8 @@ TEST(SGD, SinRegression)
 
 TEST(SGD, SpiralClassification_MSE)
 {
-	std::vector<NodePtr<VectorType>> xs;
-	std::vector<NodePtr<VectorType>> labels;
+	std::vector<NodePtr<Vector>> xs;
+	std::vector<NodePtr<Vector>> labels;
 
 	const int points_per_class = 50;
 	const float pi = 3.14159265f;
@@ -954,22 +954,22 @@ TEST(SGD, SpiralClassification_MSE)
 			float x = r * std::sin(t);
 			float y = r * std::cos(t);
 
-			xs.push_back(Node<VectorType>::Create({ x, y }));
+			xs.push_back(Node<Vector>::Create({ x, y }));
 
 			// one-hot-ish target for MSE
 			if (class_id == 0)
-				labels.push_back(Node<VectorType>::Create({ 0.0f }));
+				labels.push_back(Node<Vector>::Create({ 0.0f }));
 			else
-				labels.push_back(Node<VectorType>::Create({ 1.0f }));
+				labels.push_back(Node<Vector>::Create({ 1.0f }));
 		}
 	}
 
 	// MLP: 2 -> 32 -> 32 -> 1
-	Layer2D<VectorType> L1(2, 32, Activation::Tanh);
-	Layer2D<VectorType> L2(32, 32, Activation::Tanh);
-	Layer2D<VectorType> L3(32, 1, Activation::Tanh);
+	Layer2D<Vector> L1(2, 32, Activation::Tanh);
+	Layer2D<Vector> L2(32, 32, Activation::Tanh);
+	Layer2D<Vector> L3(32, 1, Activation::Tanh);
 
-	SGD<VectorType> sgd(0.01f);
+	SGD<Vector> sgd(0.01f);
 	const int batch_size = 8;
 
 	// IMPORTANT: collect params ONCE
@@ -1048,13 +1048,13 @@ TEST(SGD, SpiralClassification_MSE)
 
 TEST(TapeRecorder, Kapathy_Example2)
 {
-	auto x1 = Node<ScalarType>::Create(2.0f, "x1");
-	auto x2 = Node<ScalarType>::Create(0.0f, "x2");
+	auto x1 = Node<Scalar>::Create(2.0f, "x1");
+	auto x2 = Node<Scalar>::Create(0.0f, "x2");
 
-	auto w1 = Node<ScalarType>::Create(-3.0f, "w1");
-	auto w2 = Node<ScalarType>::Create(1.0f, "w2");
+	auto w1 = Node<Scalar>::Create(-3.0f, "w1");
+	auto w2 = Node<Scalar>::Create(1.0f, "w2");
 
-	auto b = Node<ScalarType>::Create(6.881375f, "b");
+	auto b = Node<Scalar>::Create(6.881375f, "b");
 
 	auto x1w1 = x1 * w1;
 	auto x2w2 = x2 * w2;
@@ -1070,7 +1070,7 @@ TEST(TapeRecorder, Kapathy_Example2)
 	n->SetLabel("n");
 	o->SetLabel("o");
 
-	auto graph = TapeRecorder<ScalarType>();
+	auto graph = TapeRecorder<Scalar>();
 	graph.Compile(o);
 
 	graph.Forward();
@@ -1115,27 +1115,27 @@ TEST(TapeRecorder, Kapathy_Example2)
 
 TEST(TapeRecorder, XOR)
 {
-	std::vector<NodePtr<VectorType>> xs = {
-		Node<VectorType>::Create({ 0.0f, 0.0f }),
-		Node<VectorType>::Create({ 0.0f, 1.0f }),
-		Node<VectorType>::Create({ 1.0f, 0.0f }),
-		Node<VectorType>::Create({ 1.0f, 1.0f })
+	std::vector<NodePtr<Vector>> xs = {
+		Node<Vector>::Create({ 0.0f, 0.0f }),
+		Node<Vector>::Create({ 0.0f, 1.0f }),
+		Node<Vector>::Create({ 1.0f, 0.0f }),
+		Node<Vector>::Create({ 1.0f, 1.0f })
 	};
 
-	std::vector<NodePtr<VectorType>> labels = {
-		Node<VectorType>::Create({ 0.0f }),
-		Node<VectorType>::Create({ 1.0f }),
-		Node<VectorType>::Create({ 1.0f }),
-		Node<VectorType>::Create({ 0.0f })
+	std::vector<NodePtr<Vector>> labels = {
+		Node<Vector>::Create({ 0.0f }),
+		Node<Vector>::Create({ 1.0f }),
+		Node<Vector>::Create({ 1.0f }),
+		Node<Vector>::Create({ 0.0f })
 	};
 
-	Layer2D<VectorType> L1(2, 3, Activation::Tanh);
-	Layer2D<VectorType> L2(3, 1, Activation::Tanh);
+	Layer2D<Vector> L1(2, 3, Activation::Tanh);
+	Layer2D<Vector> L2(3, 1, Activation::Tanh);
 
-	SGD<VectorType> sgd(0.1f);
+	SGD<Vector> sgd(0.1f);
 
-	auto x_ = Node<VectorType>::Create({ 0.0f, 0.0f }, "x");
-	auto label_ = Node<VectorType>::Create({ 0.0f }, "label");
+	auto x_ = Node<Vector>::Create({ 0.0f, 0.0f }, "x");
+	auto label_ = Node<Vector>::Create({ 0.0f }, "label");
 	auto l1_out = L1.Forward(x_);
 	auto out_ = L2.Forward(l1_out);
 
@@ -1144,7 +1144,7 @@ TEST(TapeRecorder, XOR)
 	out_->SetLabel("output");
 	loss_->SetLabel("loss");
 
-	auto tape = TapeRecorder<VectorType>();
+	auto tape = TapeRecorder<Vector>();
 	tape.Compile(loss_);
 
 	sgd.SetTrainableParams(tape);
@@ -1194,8 +1194,8 @@ TEST(TapeRecorder, XOR)
 
 TEST(TapeRecorder, SpiralClassification_MSE)
 {
-	std::vector<NodePtr<VectorType>> xs;
-	std::vector<NodePtr<VectorType>> labels;
+	std::vector<NodePtr<Vector>> xs;
+	std::vector<NodePtr<Vector>> labels;
 
 	const int points_per_class = 50;
 	const float pi = 3.14159265f;
@@ -1213,26 +1213,26 @@ TEST(TapeRecorder, SpiralClassification_MSE)
 			float x = r * std::sin(t);
 			float y = r * std::cos(t);
 
-			xs.push_back(Node<VectorType>::Create({ x, y }));
+			xs.push_back(Node<Vector>::Create({ x, y }));
 
 			// one-hot-ish target for MSE
 			if (class_id == 0)
-				labels.push_back(Node<VectorType>::Create({ 0.0f }));
+				labels.push_back(Node<Vector>::Create({ 0.0f }));
 			else
-				labels.push_back(Node<VectorType>::Create({ 1.0f }));
+				labels.push_back(Node<Vector>::Create({ 1.0f }));
 		}
 	}
 
 	// MLP: 2 -> 32 -> 32 -> 1
-	Layer2D<VectorType> L1(2, 32, Activation::Tanh);
-	Layer2D<VectorType> L2(32, 32, Activation::Tanh);
-	Layer2D<VectorType> L3(32, 1, Activation::Tanh);
+	Layer2D<Vector> L1(2, 32, Activation::Tanh);
+	Layer2D<Vector> L2(32, 32, Activation::Tanh);
+	Layer2D<Vector> L3(32, 1, Activation::Tanh);
 
-	SGD<VectorType> sgd(0.01f);
+	SGD<Vector> sgd(0.01f);
 	const int batch_size = 8;
 
-	auto x_ = Node<VectorType>::Create({ 0.0f, 0.0f }, "input");
-	auto label_ = Node<VectorType>::Create({ 0.0f }, "label");
+	auto x_ = Node<Vector>::Create({ 0.0f, 0.0f }, "input");
+	auto label_ = Node<Vector>::Create({ 0.0f }, "label");
 
 	auto h1 = L1.Forward(x_);
 	auto h2 = L2.Forward(h1);
@@ -1242,7 +1242,7 @@ TEST(TapeRecorder, SpiralClassification_MSE)
 	out_->SetLabel("output");
 	loss_->SetLabel("loss");
 
-	auto tape = TapeRecorder<VectorType>();
+	auto tape = TapeRecorder<Vector>();
 	tape.Compile(loss_);
 	sgd.SetTrainableParams(tape);
 
@@ -1314,8 +1314,8 @@ TEST(TapeRecorder, SpiralClassification_MSE)
 
 TEST(TapeRecorder, SpiralClassification_MSE_Batching)
 {
-	std::vector<NodePtr<VectorType>> xs;
-	std::vector<NodePtr<VectorType>> labels;
+	std::vector<NodePtr<Vector>> xs;
+	std::vector<NodePtr<Vector>> labels;
 
 	const int points_per_class = 50;
 	const float pi = 3.14159265f;
@@ -1333,26 +1333,26 @@ TEST(TapeRecorder, SpiralClassification_MSE_Batching)
 			float x = r * std::sin(t);
 			float y = r * std::cos(t);
 
-			xs.push_back(Node<VectorType>::Create({ x, y }));
+			xs.push_back(Node<Vector>::Create({ x, y }));
 
 			// one-hot-ish target for MSE
 			if (class_id == 0)
-				labels.push_back(Node<VectorType>::Create({ 0.0f }));
+				labels.push_back(Node<Vector>::Create({ 0.0f }));
 			else
-				labels.push_back(Node<VectorType>::Create({ 1.0f }));
+				labels.push_back(Node<Vector>::Create({ 1.0f }));
 		}
 	}
 
 	// MLP: 2 -> 32 -> 32 -> 1
-	Layer2D<VectorType> L1(2, 32, Activation::Tanh);
-	Layer2D<VectorType> L2(32, 32, Activation::Tanh);
-	Layer2D<VectorType> L3(32, 1, Activation::Tanh);
+	Layer2D<Vector> L1(2, 32, Activation::Tanh);
+	Layer2D<Vector> L2(32, 32, Activation::Tanh);
+	Layer2D<Vector> L3(32, 1, Activation::Tanh);
 
-	SGD<VectorType> sgd(0.01f);
+	SGD<Vector> sgd(0.01f);
 	int batch_size = 16;
 
-	auto x_ = Node<VectorType>::Create({ 0.0f, 0.0f }, "input");
-	auto label_ = Node<VectorType>::Create({ 0.0f }, "label");
+	auto x_ = Node<Vector>::Create({ 0.0f, 0.0f }, "input");
+	auto label_ = Node<Vector>::Create({ 0.0f }, "label");
 
 	auto h1 = L1.Forward(x_);
 	auto h2 = L2.Forward(h1);
@@ -1362,7 +1362,7 @@ TEST(TapeRecorder, SpiralClassification_MSE_Batching)
 	out_->SetLabel("output");
 	loss_->SetLabel("loss");
 
-	auto tape = TapeRecorder<VectorType>();
+	auto tape = TapeRecorder<Vector>();
 	tape.Compile(loss_);
 	sgd.SetTrainableParams(tape);
 
