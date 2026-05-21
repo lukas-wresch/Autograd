@@ -30,21 +30,21 @@ public:
         }
     }
 
-    void Step()
+    void Step(float Scale = 1.0f)
     {
         if (params.empty())
         {
             //throw std::runtime_error("No parameters to train");
 
             for (size_t i = 0; i < values.size(); i++)
-                *values[i] -= lr * (*grads[i]);
+                *values[i] -= lr * Scale * (*grads[i]);
         }
 
 
         else
         {
             for (auto& p : params)
-                p->GetValue() -= lr * p->GetGradient();
+                p->GetValue() -= lr * Scale * p->GetGradient();
         }
     }
 

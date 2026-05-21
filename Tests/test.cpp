@@ -1077,6 +1077,7 @@ TEST(TapeRecorder, Kapathy_Example2)
 
 	graph.PrintTape();
 
+	graph.ZeroGradients();
 	graph.Backward();
 
 	EXPECT_NEAR(graph.GetValue("x1")[0], 2.0f, 1e-5f);
@@ -1167,6 +1168,7 @@ TEST(TapeRecorder, XOR)
 
 			tape.Forward();
 
+			tape.ZeroGradients();
 			tape.Backward();
 
 			sgd.Step();
@@ -1236,13 +1238,15 @@ TEST(TapeRecorder, SpiralClassification_MSE)
 	auto h2 = L2.Forward(h1);
 	auto out_ = L3.Forward(h2);
 
-	auto loss_ = (out_ - labels[0]) * (out_ - label_);
+	auto loss_ = (out_ - label_) * (out_ - label_);
+	out_->SetLabel("output");
+	loss_->SetLabel("loss");
 
 	auto tape = TapeRecorder<VectorType>();
 	tape.Compile(loss_);
 	sgd.SetTrainableParams(tape);
 
-	auto input  = tape.SetValue("x");
+	auto input  = tape.SetValue("input");
 	auto label  = tape.SetValue("label");
 	auto output = tape.SetValue("output");
 	auto loss   = tape.SetValue("loss");
@@ -1261,10 +1265,12 @@ TEST(TapeRecorder, SpiralClassification_MSE)
 
 		for (size_t i = 0; i < xs.size(); i++)
 		{
-			*input = xs[i];
+			*input = xs[i]->GetValue();
+			*label = labels[i]->GetValue();
 
 			tape.Forward();
 
+			tape.ZeroGradients();
 			tape.Backward();
 
 			sgd.Step();
@@ -1283,11 +1289,141 @@ TEST(TapeRecorder, SpiralClassification_MSE)
 
 	for (size_t i = 0; i < xs.size(); i++)
 	{
-		auto h1 = L1.Forward(xs[i]);
-		auto h2 = L2.Forward(h1);
-		auto out = L3.Forward(h2);
+		*input = xs[i]->GetValue();
 
-		float pred = out->GetValue()[0];
+		tape.Forward();
+
+		float pred = output->GetValue()[0];
+		float target = labels[i]->GetValue()[0];
+
+		int predicted_class = pred > 0.5f ? 1 : 0;
+		int target_class = target > 0.5f ? 1 : 0;
+
+		if (predicted_class == target_class)
+			correct++;
+	}
+
+	float accuracy = (float)correct / xs.size();
+
+	std::cout << "Final Accuracy: " << accuracy << std::endl;
+
+	EXPECT_GT(accuracy, 0.90f);
+}
+
+
+
+TEST(TapeRecorder, SpiralClassification_MSE_Batching)
+{
+	std::vector<NodePtr<VectorType>> xs;
+	std::vector<NodePtr<VectorType>> labels;
+
+	const int points_per_class = 50;
+	const float pi = 3.14159265f;
+
+	// generate 2-class spiral dataset
+	for (int class_id = 0; class_id < 2; class_id++)
+	{
+		for (int i = 0; i < points_per_class; i++)
+		{
+			float r = (float)i / points_per_class;
+
+			// spiral angle
+			float t = 4.0f * pi * r + class_id * pi;
+
+			float x = r * std::sin(t);
+			float y = r * std::cos(t);
+
+			xs.push_back(Node<VectorType>::Create({ x, y }));
+
+			// one-hot-ish target for MSE
+			if (class_id == 0)
+				labels.push_back(Node<VectorType>::Create({ 0.0f }));
+			else
+				labels.push_back(Node<VectorType>::Create({ 1.0f }));
+		}
+	}
+
+	// MLP: 2 -> 32 -> 32 -> 1
+	Layer2D<VectorType> L1(2, 32, Activation::Tanh);
+	Layer2D<VectorType> L2(32, 32, Activation::Tanh);
+	Layer2D<VectorType> L3(32, 1, Activation::Tanh);
+
+	SGD<VectorType> sgd(0.01f);
+	int batch_size = 16;
+
+	auto x_ = Node<VectorType>::Create({ 0.0f, 0.0f }, "input");
+	auto label_ = Node<VectorType>::Create({ 0.0f }, "label");
+
+	auto h1 = L1.Forward(x_);
+	auto h2 = L2.Forward(h1);
+	auto out_ = L3.Forward(h2);
+
+	auto loss_ = (out_ - label_) * (out_ - label_);
+	out_->SetLabel("output");
+	loss_->SetLabel("loss");
+
+	auto tape = TapeRecorder<VectorType>();
+	tape.Compile(loss_);
+	sgd.SetTrainableParams(tape);
+
+	auto input  = tape.SetValue("input");
+	auto label  = tape.SetValue("label");
+	auto output = tape.SetValue("output");
+	auto loss   = tape.SetValue("loss");
+
+	tape.PrintTape();
+
+	//Training
+
+	float epoch_loss = 0.0f;
+
+	for (size_t epoch = 0; epoch < 1250; epoch++)
+	{
+		ShuffleDataset(xs, labels);
+
+		epoch_loss = 0.0f;
+
+		for (size_t i = 0; i < xs.size(); i += batch_size)
+		{
+			size_t end = std::min(i + batch_size, xs.size());
+
+			size_t actual_batch_size = end - i;
+
+			float batch_loss = 0.0f;
+
+			tape.ZeroGradients();
+
+			for (size_t j = i; j < end; j++)
+			{
+				*input = xs[j]->GetValue();
+				*label = labels[j]->GetValue();
+
+				tape.Forward();
+				tape.Backward();
+
+				epoch_loss += loss->GetValue()[0];
+				batch_loss += loss->GetValue()[0];
+			}
+
+			sgd.Step(1.0f / actual_batch_size);
+		}
+
+		epoch_loss /= xs.size();
+
+		if (epoch % 100 == 0)
+			std::cout << "Epoch " << epoch << " Loss: " << epoch_loss << std::endl;
+	}
+
+	// evaluate classification accuracy
+	int correct = 0;
+
+	for (size_t i = 0; i < xs.size(); i++)
+	{
+		*input = xs[i]->GetValue();
+
+		tape.Forward();
+
+		float pred = output->GetValue()[0];
 		float target = labels[i]->GetValue()[0];
 
 		int predicted_class = pred > 0.5f ? 1 : 0;

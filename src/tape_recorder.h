@@ -23,9 +23,14 @@ template<typename T>
 class TapeRecorder
 {
 public:
+    TapeRecorder() = default;
+    TapeRecorder(const NodePtr<T>& root) { Compile(root); }
+
     void Compile(const NodePtr<T>& root);
 
     void Forward();
+
+    void ZeroGradients();
 
     void Backward();
 
@@ -89,8 +94,6 @@ public:
 
 	void AddOpEntry(Operator op, int a, int b, int out)
 	{
-        if (a == 5 && b == 6 && op == Operator::Add)
-            int t = 45;
         tape.push_back({ op, a, b, {}, out });
 	}
 
@@ -226,13 +229,19 @@ void TapeRecorder<T>::Forward()
 
 
 template<typename T>
-inline void TapeRecorder<T>::Backward()
+inline void TapeRecorder<T>::ZeroGradients()
 {
     for (auto& g : grads)
         g.SetZero();
 
     grads[grads.size() - 1].SetOne();
+}
 
+
+
+template<typename T>
+inline void TapeRecorder<T>::Backward()
+{
     for (int i = (int)tape.size() - 1; i >= 0; i--)
     {
         const auto& entry = tape[i];
@@ -269,7 +278,7 @@ inline void TapeRecorder<T>::Backward()
             grads[entry.a] += (1.0f - values[entry.out] * values[entry.out]) * outer_grad;//tanh' = 1 - tanh^2
             break;
         case Operator::ReLU:
-            grads[entry.a] += grads[entry.out].Heaviside() * outer_grad;//ReLU' = 1 if x > 0 else 0
+            grads[entry.a] += values[entry.out].Heaviside() * outer_grad;//ReLU' = 1 if x > 0 else 0
             break;
 
         default:
@@ -299,6 +308,6 @@ inline void TapeRecorder<T>::PrintTape() const
             break;
         }
 
-        printf("%.02d: %s %d = %d x %d", ++i, op_text.c_str(), entry.out, entry.a, entry.b);
+        printf("%.02d: %s %d = %d x %d\n", ++i, op_text.c_str(), entry.out, entry.a, entry.b);
     }
 }

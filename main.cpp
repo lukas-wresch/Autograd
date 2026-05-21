@@ -52,21 +52,36 @@ void MNist_Test()
 		labels.push_back(Node<VectorType>::Create(one_hot));
 	}
 
-	Layer2D<VectorType> L1(784, 128, Activation::Tanh);
-	Layer2D<VectorType> L2(128, 10, Activation::Tanh);
 
+	auto tape = TapeRecorder<VectorType>();
 	SGD<VectorType> sgd(0.02f);
-	const int batch_size = 8;
+	const int batch_size = 1;//!!!
 
 	// IMPORTANT: collect params ONCE
 	{
-		auto x = xs[0];
+		auto x = Node<VectorType>::Create(784, "input");
+		auto label = Node<VectorType>::Create(10, "label");
+
+		Layer2D<VectorType> L1(784, 128, Activation::Tanh);
+		Layer2D<VectorType> L2(128, 10, Activation::Tanh);
+
 		auto h1 = L1.Forward(x);
 		auto pred = L2.Forward(h1);
+		pred->SetLabel("output");
 
-		auto loss = (pred - labels[0]) * (pred - labels[0]);
-		sgd.SetTrainableParams(loss->CollectParams());
+		auto loss = ( (pred - label) * (pred - label) )->Sum();
+		loss->SetLabel("loss");
+
+		tape.Compile(loss);
+		sgd.SetTrainableParams(tape);
 	}
+
+	auto input  = tape.SetValue("input");
+	auto label  = tape.SetValue("label");
+	auto output = tape.SetValue("output");
+	auto loss   = tape.SetValue("loss");
+
+	tape.PrintTape();
 
 
 	//Training loop
@@ -82,27 +97,30 @@ void MNist_Test()
 
 		for (size_t i = 0; i < xs.size(); i += batch_size)
 		{
-			//if (i / batch_size % 100 == 0)
+			//if (i / batch_size % 500 == 0)
 				//std::cout << "Batch " << i / batch_size << " of " << xs.size() / batch_size << std::endl;
 
 			size_t end = std::min(i + batch_size, xs.size());
 
-			NodePtr<VectorType> batch_loss = nullptr;
+			size_t actual_batch_size = end - i;
+
+			float batch_loss = 0.0f;
+
+			tape.ZeroGradients();
 
 			for (size_t j = i; j < end; j++)
 			{
-				auto pred = L2.Forward(L1.Forward(xs[j]));
-				auto loss = ( (pred - labels[j]) * (pred - labels[j]) )->Sum();
+				*input = xs[j]->GetValue();
+				*label = labels[j]->GetValue();
+
+				tape.Forward();
+				tape.Backward();
 
 				epoch_loss += loss->GetValue()[0];
-
-				batch_loss = batch_loss ? (batch_loss + loss) : loss;
+				batch_loss += loss->GetValue()[0];
 			}
 
-			//batch_loss /= float(end - i);
-
-			batch_loss->Backwards();
-			sgd.Step();
+			sgd.Step(1.0f / actual_batch_size);
 		}
 
 		epoch_loss /= xs.size();
@@ -113,9 +131,9 @@ void MNist_Test()
 
 	int correct = 0;
 
-	for (size_t i = 0; i < xs.size(); i++)
+	/*for (size_t i = 0; i < xs.size(); i++)
 	{
-		auto pred = L2.Forward(L1.Forward(xs[i]));
+		//auto pred = L2.Forward(L1.Forward(xs[i]));
 
 		//Convert one hot to class index
 		int pred_class = 0;
@@ -136,7 +154,7 @@ void MNist_Test()
 		float target = labels[i]->GetValue()[0];
 
 		if (pred_class == target_class) correct++;
-	}
+	}*/
 
 	std::cout << "Final Accuracy: " << (float)correct / xs.size() << std::endl;
 }
