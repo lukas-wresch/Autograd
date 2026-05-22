@@ -129,7 +129,6 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="mnist.cpp" />
-    <ClCompile Include="src\neuron.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="mnist.h" />

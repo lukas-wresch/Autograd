@@ -212,6 +212,36 @@ TEST(Matrix, MatrixMultiplication2)
 
 
 
+TEST(Matrix, MatrixVectorMultiplication)
+{
+    Matrix a(2, 2);
+    Matrix b(2, 1);
+
+    EXPECT_EQ(a.GetRows(),    2);
+    EXPECT_EQ(a.GetColumns(), 2);
+    EXPECT_EQ(b.GetRows(),    2);
+    EXPECT_EQ(b.GetColumns(), 1);
+
+    float* av = a.SetValue();
+    float* bv = b.SetValue();
+
+    av[0] = 1; av[1] = 0;
+    av[2] = 0; av[3] = 1;
+
+    bv[0] = 13;
+    bv[1] = -7;
+
+    Matrix c = a * b;
+
+    EXPECT_EQ(c.GetRows(), 2);
+    EXPECT_EQ(c.GetColumns(), 1);
+
+    EXPECT_FLOAT_EQ(c[0], 13.0f);
+    EXPECT_FLOAT_EQ(c[1], -7.0f);
+}
+
+
+
 TEST(Matrix, ReLU)
 {
     Matrix m(1, 4);

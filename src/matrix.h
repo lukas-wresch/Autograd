@@ -120,6 +120,16 @@ public:
 	size_t GetRows() const { return m_Rows; }
 	size_t GetColumns() const { return m_Columns; }
 
+	float& At(size_t row, size_t col)
+	{
+		return m_pValues[row * m_Columns + col];
+	}
+
+	float At(size_t row, size_t col) const
+	{
+		return m_pValues[row * m_Columns + col];
+	}
+
 	/*Vector Sum() const
 	{
 		float sum = 0.0f;
@@ -277,9 +287,10 @@ inline Matrix operator+(const Matrix& left, const Matrix& right)
 
 	const float* l = left.GetValue();
 	const float* r = right.GetValue();
+	float* out = result.SetValue();
 
 	for (size_t i = 0; i < left.GetRows() * left.GetColumns(); i++)
-		result.m_pValues[i] = l[i] + r[i];
+		out[i] = l[i] + r[i];
 
 	return result;
 }
@@ -295,9 +306,10 @@ inline Matrix operator-(const Matrix& left, const Matrix& right)
 
 	const float* l = left.GetValue();
 	const float* r = right.GetValue();
+	float* out = result.SetValue();
 
 	for (size_t i = 0; i < left.GetRows() * left.GetColumns(); i++)
-		result.m_pValues[i] = l[i] - r[i];
+		out[i] = l[i] - r[i];
 
 	return result;
 }
@@ -306,18 +318,20 @@ inline Matrix operator-(const Matrix& left, const Matrix& right)
 
 inline Matrix operator-(float lhs, const Matrix& rhs)
 {
-	Matrix out = rhs;
+	Matrix result = rhs;
+	float* out = result.SetValue();
 	for (size_t i = 0; i < rhs.GetLength(); i++)
-		out.m_pValues[i] = lhs - rhs.m_pValues[i];
-	return out;
+		out[i] = lhs - out[i];
+	return result;
 }
 
 
 
 inline Matrix operator*(float lhs, const Matrix& rhs)
 {
-	Matrix out = rhs;
+	Matrix result = rhs;
+	float* out = result.SetValue();
 	for (size_t i = 0; i < rhs.GetLength(); i++)
-		out.m_pValues[i] = lhs * rhs.m_pValues[i];
-	return out;
+		out[i] = lhs * rhs[i];
+	return result;
 }

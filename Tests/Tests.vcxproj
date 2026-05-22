@@ -97,7 +97,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\neuron.cpp" />
     <ClCompile Include="matrix.cpp" />
     <ClCompile Include="test.cpp" />
   </ItemGroup>
