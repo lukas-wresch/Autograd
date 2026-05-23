@@ -226,6 +226,249 @@ TEST(MatrixBackprop, SimpleTanhGraph)
 
 
 
+TEST(MatrixBackprop, MatrixMultiplicationGraph)
+{
+	// A: 2x3
+	auto A = Node<Matrix>::Create({
+		{ 1.0f, 2.0f, 3.0f },
+		{ 4.0f, 5.0f, 6.0f }
+		}, "A");
+
+	// B: 3x2
+	auto B = Node<Matrix>::Create({
+		{ 7.0f,  8.0f },
+		{ 9.0f, 10.0f },
+		{11.0f, 12.0f }
+		}, "B");
+
+	// bias: scalar matrix
+	auto bias = Node<Matrix>::Create({
+		{ 1.0f }
+		}, "bias");
+
+	// Matrix multiplication
+	auto C = A * B;
+	C->SetLabel("C");
+
+	// Sum reduction
+	auto S = C->Sum();
+	S->SetLabel("S");
+
+	// Final output
+	auto Y = S + bias;
+	Y->SetLabel("Y");
+
+	// backward pass
+	Y->Backwards();
+
+	// -------------------------------------------------
+	// Forward checks
+	// -------------------------------------------------
+
+	// C expected:
+	//
+	// [ 58,  64 ]
+	// [139, 154 ]
+	//
+	// Calculation:
+	// row0 col0 = 1*7 + 2*9 + 3*11 = 58
+	// row0 col1 = 1*8 + 2*10 + 3*12 = 64
+	// row1 col0 = 4*7 + 5*9 + 6*11 = 139
+	// row1 col1 = 4*8 + 5*10 + 6*12 = 154
+
+	EXPECT_NEAR(C->GetValue().At(0, 0), 58.0f, 1e-5f);
+	EXPECT_NEAR(C->GetValue().At(0, 1), 64.0f, 1e-5f);
+	EXPECT_NEAR(C->GetValue().At(1, 0), 139.0f, 1e-5f);
+	EXPECT_NEAR(C->GetValue().At(1, 1), 154.0f, 1e-5f);
+
+	// Sum = 58 + 64 + 139 + 154 = 415
+	EXPECT_NEAR(S->GetValue().At(0, 0), 415.0f, 1e-5f);
+
+	// Y = 416
+	EXPECT_NEAR(Y->GetValue().At(0, 0), 416.0f, 1e-5f);
+
+	// -------------------------------------------------
+	// Gradient checks
+	// -------------------------------------------------
+
+	// dY/dY = 1
+	EXPECT_NEAR(Y->GetGradient().At(0, 0), 1.0f, 1e-5f);
+
+	// dY/dS = 1
+	EXPECT_NEAR(S->GetGradient().At(0, 0), 1.0f, 1e-5f);
+
+	// dY/dbias = 1
+	EXPECT_NEAR(bias->GetGradient().At(0, 0), 1.0f, 1e-5f);
+
+	// Since S = sum(C),
+	// dS/dC is a matrix full of ones:
+	//
+	// [1 1]
+	// [1 1]
+
+	EXPECT_NEAR(C->GetGradient().At(0, 0), 1.0f, 1e-5f);
+	EXPECT_NEAR(C->GetGradient().At(0, 1), 1.0f, 1e-5f);
+	EXPECT_NEAR(C->GetGradient().At(1, 0), 1.0f, 1e-5f);
+	EXPECT_NEAR(C->GetGradient().At(1, 1), 1.0f, 1e-5f);
+
+	// -------------------------------------------------
+	// Expected gradients
+	// -------------------------------------------------
+	//
+	// dL/dA = dL/dC * B^T
+	//
+	// ones(2x2) * B^T =
+	//
+	// [1 1]   [ 7  9 11 ]   [15 19 23]
+	// [1 1] * [ 8 10 12 ] = [15 19 23]
+	//
+
+	EXPECT_NEAR(A->GetGradient().At(0, 0), 15.0f, 1e-5f);
+	EXPECT_NEAR(A->GetGradient().At(0, 1), 19.0f, 1e-5f);
+	EXPECT_NEAR(A->GetGradient().At(0, 2), 23.0f, 1e-5f);
+
+	EXPECT_NEAR(A->GetGradient().At(1, 0), 15.0f, 1e-5f);
+	EXPECT_NEAR(A->GetGradient().At(1, 1), 19.0f, 1e-5f);
+	EXPECT_NEAR(A->GetGradient().At(1, 2), 23.0f, 1e-5f);
+
+	// -------------------------------------------------
+	// dL/dB = A^T * dL/dC
+	//
+	// A^T =
+	// [1 4]
+	// [2 5]
+	// [3 6]
+	//
+	// * ones(2x2)
+	//
+	// =
+	// [5 5]
+	// [7 7]
+	// [9 9]
+	//
+
+	EXPECT_NEAR(B->GetGradient().At(0, 0), 5.0f, 1e-5f);
+	EXPECT_NEAR(B->GetGradient().At(0, 1), 5.0f, 1e-5f);
+
+	EXPECT_NEAR(B->GetGradient().At(1, 0), 7.0f, 1e-5f);
+	EXPECT_NEAR(B->GetGradient().At(1, 1), 7.0f, 1e-5f);
+
+	EXPECT_NEAR(B->GetGradient().At(2, 0), 9.0f, 1e-5f);
+	EXPECT_NEAR(B->GetGradient().At(2, 1), 9.0f, 1e-5f);
+}
+
+
+
+TEST(MatrixBackprop, LargerMatrixGraphWithoutActivation)
+{
+	// x: 3x3
+	auto x = Node<Matrix>::Create({
+		{ 1.0f,  2.0f,  3.0f },
+		{ 4.0f,  5.0f,  6.0f },
+		{ 7.0f,  8.0f,  9.0f }
+		}, "x");
+
+	// w: 3x3
+	auto w = Node<Matrix>::Create({
+		{ 0.5f, -1.0f,  2.0f },
+		{ 1.5f,  0.0f, -0.5f },
+		{ 2.0f, -2.0f,  1.0f }
+		}, "w");
+
+	// b: scalar matrix
+	auto b = Node<Matrix>::Create({
+		{ 10.0f }
+		}, "b");
+
+	// elementwise multiplication
+	auto xw = x->ElementwiseMul(w);
+	xw->SetLabel("xw");
+
+	EXPECT_EQ(xw->GetValue().GetRows(),       3);
+	EXPECT_EQ(xw->GetValue().GetColumns(),    3);
+	EXPECT_EQ(xw->GetGradient().GetRows(),    3);
+	EXPECT_EQ(xw->GetGradient().GetColumns(), 3);
+
+	// reduction sum
+	auto s = xw->Sum();
+	s->SetLabel("s");
+
+	// final output
+	auto y = s + b;
+	y->SetLabel("y");
+
+	// backward pass
+	y->Backwards();
+
+	// -------------------------------------------------
+	// Forward checks
+	// -------------------------------------------------
+
+	// xw expected:
+	// [ 0.5, -2,   6 ]
+	// [ 6,    0,  -3 ]
+	// [14,  -16,   9 ]
+
+	EXPECT_NEAR(xw->GetValue().At(0, 0), 0.5f, 1e-5f);
+	EXPECT_NEAR(xw->GetValue().At(0, 1), -2.0f, 1e-5f);
+	EXPECT_NEAR(xw->GetValue().At(0, 2), 6.0f, 1e-5f);
+
+	EXPECT_NEAR(xw->GetValue().At(1, 0), 6.0f, 1e-5f);
+	EXPECT_NEAR(xw->GetValue().At(1, 1), 0.0f, 1e-5f);
+	EXPECT_NEAR(xw->GetValue().At(1, 2), -3.0f, 1e-5f);
+
+	EXPECT_NEAR(xw->GetValue().At(2, 0), 14.0f, 1e-5f);
+	EXPECT_NEAR(xw->GetValue().At(2, 1), -16.0f, 1e-5f);
+	EXPECT_NEAR(xw->GetValue().At(2, 2), 9.0f, 1e-5f);
+
+	// sum = 14.5
+	EXPECT_NEAR(s->GetValue().At(0, 0), 14.5f, 1e-5f);
+
+	// y = 24.5
+	EXPECT_NEAR(y->GetValue().At(0, 0), 24.5f, 1e-5f);
+
+	// -------------------------------------------------
+	// Gradient checks
+	// -------------------------------------------------
+
+	// dy/dy = 1
+	EXPECT_NEAR(y->GetGradient().At(0, 0), 1.0f, 1e-5f);
+
+	// dy/ds = 1
+	EXPECT_NEAR(s->GetGradient().At(0, 0), 1.0f, 1e-5f);
+
+	// dy/db = 1
+	EXPECT_NEAR(b->GetGradient().At(0, 0), 1.0f, 1e-5f);
+
+	// gradients wrt x are w
+	EXPECT_NEAR(x->GetGradient().At(0, 0), 0.5f, 1e-5f);
+	EXPECT_NEAR(x->GetGradient().At(0, 1), -1.0f, 1e-5f);
+	EXPECT_NEAR(x->GetGradient().At(0, 2), 2.0f, 1e-5f);
+
+	EXPECT_NEAR(x->GetGradient().At(1, 0), 1.5f, 1e-5f);
+	EXPECT_NEAR(x->GetGradient().At(1, 1), 0.0f, 1e-5f);
+	EXPECT_NEAR(x->GetGradient().At(1, 2), -0.5f, 1e-5f);
+
+	EXPECT_NEAR(x->GetGradient().At(2, 0), 2.0f, 1e-5f);
+	EXPECT_NEAR(x->GetGradient().At(2, 1), -2.0f, 1e-5f);
+	EXPECT_NEAR(x->GetGradient().At(2, 2), 1.0f, 1e-5f);
+
+	// gradients wrt w are x
+	EXPECT_NEAR(w->GetGradient().At(0, 0), 1.0f, 1e-5f);
+	EXPECT_NEAR(w->GetGradient().At(0, 1), 2.0f, 1e-5f);
+	EXPECT_NEAR(w->GetGradient().At(0, 2), 3.0f, 1e-5f);
+
+	EXPECT_NEAR(w->GetGradient().At(1, 0), 4.0f, 1e-5f);
+	EXPECT_NEAR(w->GetGradient().At(1, 1), 5.0f, 1e-5f);
+	EXPECT_NEAR(w->GetGradient().At(1, 2), 6.0f, 1e-5f);
+
+	EXPECT_NEAR(w->GetGradient().At(2, 0), 7.0f, 1e-5f);
+	EXPECT_NEAR(w->GetGradient().At(2, 1), 8.0f, 1e-5f);
+	EXPECT_NEAR(w->GetGradient().At(2, 2), 9.0f, 1e-5f);
+}
+
+
+
 TEST(Examples, Kapathy_Example2_Vec)
 {
 	auto x = Node<Vector>::Create({ 2.0f, 0.0f },  "x");
@@ -514,9 +757,9 @@ TEST(Training, GradientChangesAfterUpdate)
 	Neuron2D n(2, Activation::Tanh);
 
 	// deterministic params
-	n.GetWeight()->value.m_pValues[0] = 0.5f;
+	n.GetWeight()->value.m_pValues[0] =  0.5f;
 	n.GetWeight()->value.m_pValues[1] = -0.3f;
-	n.GetBias()->value.m_pValues[0] = 0.1f;
+	n.GetBias()->value.m_pValues[0]   =  0.1f;
 
 	// --- first pass ---
 	auto out1 = n.Forward(x);
