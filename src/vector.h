@@ -77,6 +77,11 @@ public:
 	const float* GetValue() const { return m_pValues; }
 	float* SetValue() { return m_pValues; }
 
+	Vector Transpose() const
+	{
+		return *this;
+	}
+
 	Vector Sum() const
 	{
 		float sum = 0.0f;
@@ -156,8 +161,15 @@ public:
 
 	void operator+=(const Vector& rhs)
 	{
-		if (m_Length != rhs.m_Length)
+		if (m_Length != rhs.m_Length && rhs.m_Length != 1)
 			throw std::runtime_error("Vector size mismatch");
+
+		if (rhs.m_Length == 1)
+		{
+			for (size_t i = 0; i < m_Length; i++)
+				m_pValues[i] += rhs.m_pValues[0];
+			return;
+		}
 
 		for (size_t i = 0; i < m_Length; i++)
 			m_pValues[i] += rhs.m_pValues[i];

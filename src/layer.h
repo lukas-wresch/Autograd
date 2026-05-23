@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include "neuron.h"
+#include "matrix.h"
 
 
 
@@ -37,6 +38,41 @@ private:
 
 
 
+class Layer3D
+{
+public:
+	Layer3D(size_t InputLength, size_t OutputLength, Activation Activation) : m_Activation(Activation), m_OutputLength(OutputLength)
+	{
+		m_Weights = Node<Matrix>::CreateWithSize(OutputLength, InputLength);
+		m_Biases  = Node<Matrix>::CreateWithSize(OutputLength, 1);
+
+		for (size_t i = 0; i < m_Weights->GetValue().GetLength(); i++)
+			m_Weights->GetValue().SetValue()[i] = RandomFloatMinus1To1();
+		for (size_t i = 0; i < m_Biases->GetValue().GetLength(); i++)
+			m_Biases->GetValue().SetValue()[i]  = RandomFloatMinus1To1();
+
+		m_Weights->trainable = true;
+		m_Biases->trainable  = true;
+		m_Weights->SetLabel("W");
+		m_Biases->SetLabel("B");
+	}
+
+	NodePtr<Matrix> Forward(const NodePtr<Matrix>& Input) const;
+
+	NodePtr<Matrix> GetWeights() { return m_Weights; }
+	NodePtr<Matrix> GetBiases()  { return m_Biases;  }
+
+	size_t GetOutputLength() const { return m_Weights->GetValue().GetRows(); }
+
+private:
+	NodePtr<Matrix> m_Weights;
+	NodePtr<Matrix> m_Biases;
+	Activation m_Activation;
+	size_t m_OutputLength;
+};
+
+
+
 template<typename T>
 Layer2D<T>::Layer2D(size_t InputLength, size_t OutputLength, Activation Activation)
 {
@@ -60,4 +96,32 @@ NodePtr<T> Layer2D<T>::Forward(const NodePtr<T>& Input) const
 
 	out->Pack(outputs);
 	return out;
+}
+
+
+
+NodePtr<Matrix> Layer3D::Forward(const NodePtr<Matrix>& Input) const
+{
+	auto pre_activation = m_Weights * Input + m_Biases;
+
+	switch (m_Activation)
+	{
+	case Activation::Identity:
+		return pre_activation;
+		break;
+		/*case Activation::ReLU:
+			z.SetValue(std::max(0.0f, z.GetValue()));
+			break;
+		case Activation::Sigmoid:
+			z.SetValue(1.0f / (1.0f + std::exp(-z.GetValue())));
+			break;*/
+	case Activation::Tanh:
+		return pre_activation->Tanh();
+		break;
+	default:
+		throw std::runtime_error("Layer3D: Unsupported activation function");
+		break;
+	}
+
+	return pre_activation;
 }

@@ -17,6 +17,7 @@ enum class Operator
 
     Sum,
     ElementwiseAdd,
+    ElementwiseMul,
 	Pack, // List of nodes -> vector. [x0, x1, x2] -> [(x0, x1, x2)]
 
     Tanh,
@@ -45,6 +46,9 @@ public:
         grad.SetLength(value.GetLength());
     }
 
+    Node(size_t Length1, size_t Length2, const std::string& Label = "") : value(Length1, Length2), grad(Length1, Length2), label(Label)
+    {}
+
     T& GetValue() { return value; }
     void SetValue(const T& v){ value = v; }
 
@@ -55,10 +59,13 @@ public:
     static NodePtr<T> Create(T Value, const std::string& Label = "") { return std::make_shared<Node<T>>(Value, Label); }
     static NodePtr<T> Create() { return std::make_shared<Node<T>>(); }
     static NodePtr<T> CreateWithSize(size_t Length) { return std::make_shared<Node<T>>(Length); }
+    static NodePtr<T> CreateWithSize(size_t Length1, size_t Length2) { return std::make_shared<Node<T>>(Length1, Length2); }
     static NodePtr<T> Create(std::initializer_list<float> init) { return std::make_shared<Node<T>>(init); }
+    static NodePtr<T> Create(std::initializer_list<std::initializer_list<float>> init) { return std::make_shared<Node<T>>(init); }
 
     NodePtr<T> Sum();
 	NodePtr<T> ElementwiseAdd(const NodePtr<T>& other);
+    NodePtr<T> ElementwiseMul(const NodePtr<T>& other);
     void Pack(const std::vector<NodePtr<T>>& List);
     NodePtr<T> Tanh();
     NodePtr<T> ReLU();
@@ -128,15 +135,20 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
         right->grad -= grad;
         break;
     case Operator::Multiply:
-        left->grad  += right->value * grad;
-        right->grad += left->value  * grad;
+        left->grad  += right->value.Transpose() * grad;
+        right->grad += left->value.Transpose()  * grad;
         break;
     case Operator::Sum:
-        left->grad = left->grad.ElementwiseAdd(grad);
+        //left->grad = left->grad.ElementwiseAdd(grad);
+        left->grad += grad;
         break;
     case Operator::ElementwiseAdd:
         left->grad  += grad;
         right->grad += grad.Sum();
+        break;
+    case Operator::ElementwiseMul:
+        left->grad  += right->value * grad;
+        right->grad += left->value  * grad;
         break;
     case Operator::Pack:
         for (size_t i = 0; i < inputs.size(); i++)
@@ -268,7 +280,7 @@ NodePtr<T> operator*(const NodePtr<T>& left, const NodePtr<T>& right)
 template<typename T>
 NodePtr<T> Node<T>::Sum()
 {
-    auto out = Node<T>::Create({ value.Sum() });
+    auto out = Node<T>::Create(value.Sum());
 
     out->grad.SetLength(1);
 
@@ -287,6 +299,20 @@ NodePtr<T> Node<T>::ElementwiseAdd(const NodePtr<T>& other)
 
     out->op    = Operator::ElementwiseAdd;
     out->left  = this->shared_from_this();
+    out->right = other;
+
+    return out;
+}
+
+
+
+template<typename T>
+NodePtr<T> Node<T>::ElementwiseMul(const NodePtr<T>& other)
+{
+    auto out = std::make_shared<Node<T>>(this->value.ElementwiseMul(other->value));
+
+    out->op = Operator::ElementwiseMul;
+    out->left = this->shared_from_this();
     out->right = other;
 
     return out;

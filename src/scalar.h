@@ -48,6 +48,11 @@ public:
 		return Scalar(value + rhs.value);
 	}
 
+	Scalar Transpose() const
+	{
+		return *this;
+	}
+
 	float Sum() const
 	{
 		return value;

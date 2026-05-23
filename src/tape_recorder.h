@@ -155,6 +155,7 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
     case Operator::Subtract:
     case Operator::Multiply:
     case Operator::ElementwiseAdd:
+    case Operator::ElementwiseMul:
         AddOpEntry(node->op, GetID(node->left), GetID(node->right), node_id);
         break;
 
@@ -258,16 +259,21 @@ inline void TapeRecorder<T>::Backward()
             grads[entry.b] -= outer_grad;
             break;
         case Operator::Multiply:
-            grads[entry.a] += values[entry.b] * outer_grad;
-            grads[entry.b] += values[entry.a] * outer_grad;
+            grads[entry.a] += values[entry.b].Transpose() * outer_grad;
+            grads[entry.b] += values[entry.a].Transpose() * outer_grad;
             break;
         case Operator::Sum:
-            grads[entry.a] = grads[entry.a].ElementwiseAdd(outer_grad);
+            //grads[entry.a] = grads[entry.a].ElementwiseAdd(outer_grad);
+            grads[entry.a] += outer_grad;
             break;
 
         case Operator::ElementwiseAdd:
             grads[entry.a] += outer_grad;
             grads[entry.b] += outer_grad.Sum();
+            break;
+        case Operator::ElementwiseMul:
+            grads[entry.a] += values[entry.b] * outer_grad;
+            grads[entry.b] += values[entry.a] * outer_grad;
             break;
         case Operator::Pack:
             for (size_t j = 0; j < entry.inputs.size(); j++)

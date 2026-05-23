@@ -16,13 +16,26 @@ class Matrix
 public:
 	Matrix() = default;
 
-	/*Matrix(std::initializer_list<std::initializer_list<float>> init)
-		: m_Length(init.size())
+	Matrix(std::initializer_list<std::initializer_list<float>> init)
+		: m_Rows(init.size()), m_Columns(init.begin()->size())
 	{
-		m_pValues = new float[m_Length];
+		m_pValues = new float[m_Rows * m_Columns];
 
-		std::copy(init.begin(), init.end(), m_pValues);
-	}*/
+		size_t rows = 0;
+		for (const auto& row : init)
+		{
+			if (row.size() != m_Columns)
+				throw std::runtime_error("Initializer rows must have equal column size");
+
+			size_t col = 0;
+			for (const auto& v : row)
+			{
+				m_pValues[rows * m_Columns + col] = v;
+				col++;
+			}
+			rows++;
+		}
+	}
 
 	/*Matrix(const std::vector<float>& Vec)
 		: m_Length(Vec.size())
@@ -86,13 +99,14 @@ public:
 		return *this;
 	}
 
-	/*void SetLength(size_t Length)
+	void SetLength(size_t Length)
 	{
 		delete[] m_pValues;
-		m_Length = Length;
+		m_Rows = Length;
+		m_Columns = 1;
 		m_pValues = new float[Length];
 		std::fill(m_pValues, m_pValues + Length, 0.0f);
-	}*/
+	}
 
 	void SetZero()
 	{
@@ -130,14 +144,27 @@ public:
 		return m_pValues[row * m_Columns + col];
 	}
 
-	/*Vector Sum() const
+	Matrix Transpose() const
+	{
+		Matrix result(m_Columns, m_Rows);
+
+		for (size_t row = 0; row < m_Rows; ++row)
+		{
+			for (size_t col = 0; col < m_Columns; ++col)
+				result.m_pValues[col * result.m_Columns + row] = m_pValues[row * m_Columns + col];
+		}
+
+		return result;
+	}
+
+	Matrix Sum() const
 	{
 		float sum = 0.0f;
-		for (size_t i = 0; i < m_Length; i++)
+		for (size_t i = 0; i < m_Rows * m_Columns; i++)
 			sum += m_pValues[i];
-		VectorType result({ sum });
+		Matrix result({ { sum } });
 		return result;
-	}*/
+	}
 
 	Matrix Tanh() const
 	{
@@ -167,21 +194,29 @@ public:
 	/*[[nodiscard]]
 	Matrix ElementwiseAdd(const Matrix& other) const
 	{
-		if (other.m_Length != 1)
+		return *this + other;
+		/*if (m_Rows != other.m_Rows)
 			throw std::runtime_error("Vector size mismatch");
 
-		Matrix result(m_Length);
+		Matrix result(1, 1);
 
-		for (size_t i = 0; i < m_Length; i++)
-			result.m_pValues[i] = m_pValues[i] + other.m_pValues[0];
+		//for (size_t i = 0; i < m_Length; i++)
+			//result.m_pValues[i] = m_pValues[i] + other.m_pValues[0];
 
 		return result;
 	}*/
 
 	void operator+=(const Matrix& rhs)
 	{
-		if (m_Rows != rhs.m_Rows || m_Columns != rhs.m_Columns)
+		if ( (m_Rows != rhs.m_Rows || m_Columns != rhs.m_Columns) && (rhs.m_Rows != 1 && rhs.m_Columns != 1) )
 			throw std::runtime_error("Matrix operator += size mismatch");
+
+		if (rhs.m_Rows == 1 && rhs.m_Columns == 1)
+		{
+			for (size_t i = 0; i < m_Rows * m_Columns; i++)
+				m_pValues[i] += rhs.m_pValues[0];
+			return;
+		}
 
 		for (size_t i = 0; i < m_Rows * m_Columns; i++)
 			m_pValues[i] += rhs.m_pValues[i];
@@ -220,10 +255,10 @@ public:
 			m_pValues[i] /= rhs;
 	}
 
-	/*Matrix operator*(const Matrix& rhs) const
+	Matrix ElementwiseMul(const Matrix& rhs) const
 	{
 		if (m_Rows != rhs.m_Rows || m_Columns != rhs.m_Columns)
-			throw std::runtime_error("Matrix operator * size mismatch");
+			throw std::runtime_error("Matrix elementwise multiplication size mismatch");
 
 		Matrix result(m_Rows, m_Columns);
 
@@ -231,13 +266,26 @@ public:
 			result.m_pValues[i] = m_pValues[i] * rhs.m_pValues[i];
 
 		return result;
-	}*/
+	}
 
 	Matrix operator*(const Matrix& rhs) const
 	{
-		if (m_Columns != rhs.m_Rows)
+		if ( m_Columns != rhs.m_Rows && (m_Rows != 1 && m_Columns != 1) )
 			throw std::runtime_error("Matrix multiplication size mismatch");
 
+		if (m_Rows == 1 && m_Columns == 1)
+		{
+			Matrix result(rhs.m_Rows, rhs.m_Columns);
+			float s = m_pValues[0];
+
+			for (size_t i = 0; i < rhs.m_Rows * rhs.m_Columns; i++)
+				result.m_pValues[i] = s * rhs.m_pValues[i];
+
+			return result;
+		}
+
+		
+		//Normal matrix multiplication
 		Matrix result(m_Rows, rhs.m_Columns);
 
 		for (size_t row = 0; row < m_Rows; row++)

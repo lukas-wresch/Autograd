@@ -17,6 +17,42 @@ TEST(Matrix, ConstructorInitializesToZero)
 
 
 
+TEST(Matrix, ConstructorFromList)
+{
+    Matrix m({
+              { 1.0f, 2.0f, 3.0f },
+              { 4.0f, 5.0f, 6.0f }
+             });
+
+    EXPECT_EQ(m.GetRows(),    2);
+    EXPECT_EQ(m.GetColumns(), 3);
+    EXPECT_EQ(m.GetLength(),  6);
+
+    EXPECT_FLOAT_EQ(m[0], 1.0f);
+    EXPECT_FLOAT_EQ(m[1], 2.0f);
+}
+
+
+
+TEST(Matrix, Transpose)
+{
+    Matrix m({
+              { 1.0f, 2.0f, 3.0f },
+              { 4.0f, 5.0f, 6.0f }
+        });
+
+    m = m.Transpose();
+
+    EXPECT_EQ(m.GetRows(),    3);
+    EXPECT_EQ(m.GetColumns(), 2);
+    EXPECT_EQ(m.GetLength(), 6);
+
+    EXPECT_FLOAT_EQ(m[0], 1.0f);
+    EXPECT_FLOAT_EQ(m[1], 4.0f);
+}
+
+
+
 TEST(Matrix, SetZero)
 {
     Matrix m(2, 2);
@@ -135,6 +171,37 @@ TEST(Matrix, ScalarMultiplication)
 
     for (size_t i = 0; i < b.GetLength(); i++)
         EXPECT_FLOAT_EQ(b[i], 5.0f);
+}
+
+
+
+TEST(Matrix, ElementwiseMultiplication)
+{
+    Matrix a({
+        { 1.0f, -2.0f,  3.0f },
+        { 4.0f,  0.0f, -6.0f }
+        });
+
+    Matrix b({
+        { 7.0f,  8.0f, -9.0f },
+        {-1.0f,  2.0f,  3.0f }
+        });
+
+    Matrix c = a.ElementwiseMul(b);
+
+    EXPECT_EQ(c.GetRows(),    2);
+    EXPECT_EQ(c.GetColumns(), 3);
+    EXPECT_EQ(c.GetLength(),  6);
+
+    // Row 0
+    EXPECT_FLOAT_EQ(c.At(0, 0), 7.0f);   //  1 *  7
+    EXPECT_FLOAT_EQ(c.At(0, 1), -16.0f);  // -2 *  8
+    EXPECT_FLOAT_EQ(c.At(0, 2), -27.0f);  //  3 * -9
+
+    // Row 1
+    EXPECT_FLOAT_EQ(c.At(1, 0), -4.0f);   //  4 * -1
+    EXPECT_FLOAT_EQ(c.At(1, 1), 0.0f);   //  0 *  2
+    EXPECT_FLOAT_EQ(c.At(1, 2), -18.0f);  // -6 *  3
 }
 
 

@@ -170,6 +170,62 @@ TEST(Examples, Kapathy_Example2)
 
 
 
+TEST(MatrixBackprop, SimpleTanhGraph)
+{
+	// x: 2x1
+	auto x = Node<Matrix>::Create({ {2.0f}, {0.0f} }, "x");
+
+	// w: 2x1
+	auto w = Node<Matrix>::Create({ {-3.0f}, {1.0f} }, "w");
+
+	// b: 1x1 (broadcast oder scalar-matrix)
+	auto b = Node<Matrix>::Create({ {6.881375f} }, "b");
+
+	// elementwise multiply
+	auto xw = w->ElementwiseMul(x);
+	xw->SetLabel("xw");
+
+	// sum (assuming elementwise or reduction consistent with your lib)
+	auto xw_sum = xw->Sum();
+	auto n = xw_sum + b;
+
+	n->SetLabel("n");
+
+	auto o = n->Tanh();
+	o->SetLabel("o");
+
+	o->Backwards();
+
+	// forward checks
+	EXPECT_NEAR(x->GetValue().At(0, 0), 2.0f, 1e-5f);
+	EXPECT_NEAR(x->GetValue().At(1, 0), 0.0f, 1e-5f);
+
+	EXPECT_NEAR(w->GetValue().At(0, 0), -3.0f, 1e-5f);
+	EXPECT_NEAR(w->GetValue().At(1, 0), 1.0f, 1e-5f);
+
+	EXPECT_NEAR(b->GetValue().At(0, 0), 6.8814f, 1e-4f);
+
+	// forward expected intermediate (elementwise product)
+	EXPECT_NEAR(xw->GetValue().At(0, 0), -6.0f, 1e-5f);
+	EXPECT_NEAR(xw->GetValue().At(1, 0), 0.0f, 1e-5f);
+
+	// gradients (elementwise)
+	EXPECT_NEAR(x->GetGradient().At(0, 0), -1.5f, 1e-5f);
+	EXPECT_NEAR(x->GetGradient().At(1, 0), 0.5f, 1e-5f);
+
+	EXPECT_NEAR(w->GetGradient().At(0, 0), 1.0f, 1e-5f);
+	EXPECT_NEAR(w->GetGradient().At(1, 0), 0.0f, 1e-5f);
+
+	EXPECT_NEAR(b->GetGradient().At(0, 0), 0.5f, 1e-5f);
+
+	EXPECT_NEAR(n->GetGradient().At(0, 0), 0.5f, 1e-5f);
+
+	EXPECT_NEAR(o->GetValue().At(0, 0), 0.7071f, 1e-4f);
+	EXPECT_NEAR(o->GetGradient().At(0, 0), 1.0f, 1e-5f);
+}
+
+
+
 TEST(Examples, Kapathy_Example2_Vec)
 {
 	auto x = Node<Vector>::Create({ 2.0f, 0.0f },  "x");
@@ -249,6 +305,39 @@ TEST(Examples, Kapathy_Example2_Neuron)
 
 	EXPECT_NEAR(n.GetBias()->GetValue()[0], 6.8814f, 1e-4f);
 	EXPECT_NEAR(n.GetBias()->GetGradient()[0], 0.5f, 1e-5f);
+
+	EXPECT_NEAR(o->GetValue()[0], 0.7071f, 1e-5f);
+	EXPECT_NEAR(o->GetGradient()[0], 1.0f, 1e-5f);
+}
+
+
+
+TEST(Examples, Kapathy_Example2_Layer2D)
+{
+	auto x = Node<Vector>::Create({ 2.0f, 0.0f }, "x");
+	auto L = Layer2D<Vector>(2, 1, Activation::Tanh);
+	L.GetWeight(0)->GetValue().SetValue()[0] = -3.0f;
+	L.GetWeight(0)->GetValue().SetValue()[1] = 1.0f;
+	L.GetBias(0)->GetValue().SetValue()[0] = 6.881375f;
+
+	auto o = L.Forward(x);
+
+	o->Backwards();
+
+	EXPECT_NEAR(x->GetValue()[0], 2.0f, 1e-5f);
+	EXPECT_NEAR(x->GetGradient()[0], -1.5f, 1e-5f);
+
+	EXPECT_NEAR(x->GetValue()[1], 0.0f, 1e-5f);
+	EXPECT_NEAR(x->GetGradient()[1], 0.5f, 1e-5f);
+
+	EXPECT_NEAR(L.GetWeight(0)->GetValue()[0], -3.0f, 1e-5f);
+	EXPECT_NEAR(L.GetWeight(0)->GetGradient()[0], 1.0f, 1e-5f);
+
+	EXPECT_NEAR(L.GetWeight(0)->GetValue()[1], 1.0f, 1e-5f);
+	EXPECT_NEAR(L.GetWeight(0)->GetGradient()[1], 0.0f, 1e-5f);
+
+	EXPECT_NEAR(L.GetBias(0)->GetValue()[0], 6.8814f, 1e-4f);
+	EXPECT_NEAR(L.GetBias(0)->GetGradient()[0], 0.5f, 1e-5f);
 
 	EXPECT_NEAR(o->GetValue()[0], 0.7071f, 1e-5f);
 	EXPECT_NEAR(o->GetGradient()[0], 1.0f, 1e-5f);
@@ -653,6 +742,78 @@ TEST(Training, XOR)
 			{
 				L2.GetWeight(i)->GetValue() -= lr * L2.GetWeight(i)->GetGradient();
 				L2.GetBias(i)->GetValue()   -= lr * L2.GetBias(i)->GetGradient();
+			}
+
+			epoch_loss += loss->GetValue()[0];
+		}
+	}
+
+	EXPECT_NEAR(epoch_loss, 0.0f, 0.1f);
+
+	for (size_t i = 0; i < xs.size(); i++)
+	{
+		auto x = xs[i];
+
+		auto l1_out = L1.Forward(x);
+		auto out = L2.Forward(l1_out);
+
+		auto diff = out - label[i];
+		EXPECT_NEAR(diff->GetValue()[0], 0.0f, 0.1f);
+	}
+}
+
+
+
+TEST(Training, XOR_Layer3D)
+{
+	std::vector<NodePtr<Matrix>> xs = {
+		Node<Matrix>::Create({ {0.0f}, {0.0f} }),
+		Node<Matrix>::Create({ {0.0f}, {1.0f} }),
+		Node<Matrix>::Create({ {1.0f}, {0.0f} }),
+		Node<Matrix>::Create({ {1.0f}, {1.0f} }),
+	};
+
+	std::vector<NodePtr<Matrix>> label = {
+		Node<Matrix>::Create({{ 0.0f }}),
+		Node<Matrix>::Create({{ 1.0f }}),
+		Node<Matrix>::Create({{ 1.0f }}),
+		Node<Matrix>::Create({{ 0.0f }})
+	};
+
+	Layer3D L1(2, 3, Activation::Tanh);
+	Layer3D L2(3, 1, Activation::Tanh);
+
+	float lr = 0.1f;
+	float epoch_loss = 0.0f;
+
+	for (size_t epoch = 0; epoch < 200; epoch++)
+	{
+		epoch_loss = 0.0f;
+
+		for (size_t i = 0; i < xs.size(); i++)
+		{
+			auto x = xs[i];
+
+			auto l1_out = L1.Forward(x);
+			auto out = L2.Forward(l1_out);
+
+			auto diff = out - label[i];
+			auto loss = diff * diff;
+
+			auto params = loss->CollectParams();
+			EXPECT_EQ(params.size(), 4);
+
+			loss->Backwards();
+
+			for (size_t i = 0; i < L1.GetOutputLength(); i++)
+			{
+				L1.GetWeights()->GetValue() -= lr * L1.GetWeights()->GetGradient();
+				L1.GetBiases()->GetValue()  -= lr * L1.GetBiases()->GetGradient();
+			}
+			for (size_t i = 0; i < L2.GetOutputLength(); i++)
+			{
+				L2.GetWeights()->GetValue() -= lr * L2.GetWeights()->GetGradient();
+				L2.GetBiases()->GetValue()  -= lr * L2.GetBiases()->GetGradient();
 			}
 
 			epoch_loss += loss->GetValue()[0];
