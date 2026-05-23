@@ -208,6 +208,19 @@ public:
 			m_pValues[i] /= rhs;
 	}
 
+	Vector ElementwiseMul(const Vector& other) const
+	{
+		if (m_Length != other.m_Length)
+			throw std::runtime_error("Vector ElementwiseMul: size mismatch");
+
+		Vector result(m_Length);
+
+		for (size_t i = 0; i < m_Length; i++)
+			result.m_pValues[i] = m_pValues[i] * other.m_pValues[i];
+
+		return result;
+	}
+
 	Vector operator*(const Vector& other) const
 	{
 		if (m_Length != other.m_Length)

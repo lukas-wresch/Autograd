@@ -45,7 +45,7 @@ TEST(Matrix, Transpose)
 
     EXPECT_EQ(m.GetRows(),    3);
     EXPECT_EQ(m.GetColumns(), 2);
-    EXPECT_EQ(m.GetLength(), 6);
+    EXPECT_EQ(m.GetLength(),  6);
 
     EXPECT_FLOAT_EQ(m[0], 1.0f);
     EXPECT_FLOAT_EQ(m[1], 4.0f);
@@ -72,8 +72,10 @@ TEST(Matrix, SetOne)
 
     m.SetOne();
 
-    for (size_t i = 0; i < m.GetLength(); i++)
-        EXPECT_FLOAT_EQ(m[i], 1.0f);
+    EXPECT_FLOAT_EQ(m.At(0, 0), 1.0f);
+    EXPECT_FLOAT_EQ(m.At(0, 1), 0.0f);
+    EXPECT_FLOAT_EQ(m.At(1, 0), 0.0f);
+    EXPECT_FLOAT_EQ(m.At(1, 1), 1.0f);
 }
 
 
@@ -123,8 +125,10 @@ TEST(Matrix, Addition)
 
     Matrix c = a + b;
 
-    for (size_t i = 0; i < c.GetLength(); i++)
-        EXPECT_FLOAT_EQ(c[i], 2.0f);
+    EXPECT_FLOAT_EQ(c.At(0, 0), 2.0f);
+    EXPECT_FLOAT_EQ(c.At(0, 1), 0.0f);
+    EXPECT_FLOAT_EQ(c.At(1, 0), 0.0f);
+    EXPECT_FLOAT_EQ(c.At(1, 1), 2.0f);
 }
 
 
@@ -139,8 +143,10 @@ TEST(Matrix, AdditionAssignment)
 
     a += b;
 
-    for (size_t i = 0; i < a.GetLength(); i++)
-        EXPECT_FLOAT_EQ(a[i], 2.0f);
+    EXPECT_FLOAT_EQ(a.At(0, 0), 2.0f);
+    EXPECT_FLOAT_EQ(a.At(0, 1), 0.0f);
+    EXPECT_FLOAT_EQ(a.At(1, 0), 0.0f);
+    EXPECT_FLOAT_EQ(a.At(1, 1), 2.0f);
 }
 
 
@@ -169,8 +175,10 @@ TEST(Matrix, ScalarMultiplication)
 
     Matrix b = 5.0f * a;
 
-    for (size_t i = 0; i < b.GetLength(); i++)
-        EXPECT_FLOAT_EQ(b[i], 5.0f);
+    EXPECT_FLOAT_EQ(b.At(0, 0), 5.0f);
+    EXPECT_FLOAT_EQ(b.At(0, 1), 0.0f);
+    EXPECT_FLOAT_EQ(b.At(1, 0), 0.0f);
+    EXPECT_FLOAT_EQ(b.At(1, 1), 5.0f);
 }
 
 
@@ -275,6 +283,32 @@ TEST(Matrix, MatrixMultiplication2)
     EXPECT_FLOAT_EQ(c[1], 2.0f);
     EXPECT_FLOAT_EQ(c[2], 3.0f);
     EXPECT_FLOAT_EQ(c[3], 7.0f);
+}
+
+
+
+TEST(Matrix, MatrixMultiplication3)
+{
+    Matrix a(1, 3);
+    Matrix b(1, 1);
+
+    float* av = a.SetValue();
+    float* bv = b.SetValue();
+
+    av[0] =  1.0f;
+    av[1] = -0.5f;
+    av[2] =  2.0f;
+
+    bv[0] = 2.0f;
+
+    Matrix c = a * b;
+
+    EXPECT_EQ(c.GetRows(),    1);
+    EXPECT_EQ(c.GetColumns(), 3);
+
+    EXPECT_FLOAT_EQ(c[0],  2.0f);
+    EXPECT_FLOAT_EQ(c[1], -1.0f);
+    EXPECT_FLOAT_EQ(c[2],  4.0f);
 }
 
 

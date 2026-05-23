@@ -529,7 +529,74 @@ int main()
 
 	//SpiralClassification_MSE();
 
-	MNist_Test();
+	//MNist_Test();
+
+
+
+	{
+
+		std::vector<NodePtr<Matrix>> xs = {
+			Node<Matrix>::Create({ {0.0f}, {0.0f} }),
+			Node<Matrix>::Create({ {0.0f}, {1.0f} }),
+			Node<Matrix>::Create({ {1.0f}, {0.0f} }),
+			Node<Matrix>::Create({ {1.0f}, {1.0f} }),
+		};
+
+		std::vector<NodePtr<Matrix>> label = {
+			Node<Matrix>::Create({{ 0.0f }}),
+			Node<Matrix>::Create({{ 1.0f }}),
+			Node<Matrix>::Create({{ 1.0f }}),
+			Node<Matrix>::Create({{ 0.0f }})
+		};
+
+		Layer3D L1(2, 3, Activation::Tanh);
+		Layer3D L2(3, 1, Activation::Tanh);
+
+		float lr = 0.1f;
+		float epoch_loss = 0.0f;
+
+		for (size_t epoch = 0; epoch < 200; epoch++)
+		{
+			epoch_loss = 0.0f;
+
+			for (size_t i = 0; i < xs.size(); i++)
+			{
+				auto x = xs[i];
+
+				auto l1_out = L1.Forward(x);
+				auto out = L2.Forward(l1_out);
+
+				auto diff = out - label[i];
+				auto loss = diff * diff;
+
+				auto params = loss->CollectParams();
+
+				L2.GetWeights()->GetGradient().Print();
+
+				loss->Backwards();
+
+				x->GetGradient().Print();
+				L2.GetWeights()->GetGradient().Print();
+				L1.GetWeights()->GetGradient().Print();
+
+				for (size_t i = 0; i < L1.GetOutputLength(); i++)
+				{
+					L1.GetWeights()->GetValue() -= lr * L1.GetWeights()->GetGradient();
+					L1.GetBiases()->GetValue() -= lr * L1.GetBiases()->GetGradient();
+				}
+				for (size_t i = 0; i < L2.GetOutputLength(); i++)
+				{
+					L2.GetWeights()->GetValue() -= lr * L2.GetWeights()->GetGradient();
+					L2.GetBiases()->GetValue() -= lr * L2.GetBiases()->GetGradient();
+				}
+
+				epoch_loss += loss->GetValue()[0];
+			}
+		}
+
+	}
+
+
 
 	return 0;
 }

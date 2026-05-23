@@ -147,15 +147,15 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
         right->grad += grad.Sum();
         break;
     case Operator::ElementwiseMul:
-        left->grad  += right->value * grad;
-        right->grad += left->value  * grad;
+        left->grad  += right->value.ElementwiseMul(grad);
+        right->grad += left->value.ElementwiseMul(grad);
         break;
     case Operator::Pack:
         for (size_t i = 0; i < inputs.size(); i++)
             inputs[i]->grad += grad.GetValue()[i];
         break;
     case Operator::Tanh:
-        left->grad += (1.0f - value*value) * grad;//tanh' = 1 - tanh^2
+        left->grad += (1.0f - value.ElementwiseMul(value)).ElementwiseMul(grad);//tanh' = 1 - tanh^2
         break;
     case Operator::ReLU:
 		left->grad += value.Heaviside() * grad;//ReLU' = 1 if x > 0 else 0

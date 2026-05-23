@@ -113,9 +113,19 @@ public:
 		std::fill(m_pValues, m_pValues + m_Rows * m_Columns, 0.0f);
 	}
 
-	void SetOne()
+	/*void SetOne()
 	{
 		std::fill(m_pValues, m_pValues + m_Rows * m_Columns, 1.0f);
+	}*/
+
+	void SetOne()
+	{
+		std::fill(m_pValues, m_pValues + m_Rows * m_Columns, 0.0f);
+
+		size_t minDim = std::min(m_Rows, m_Columns);
+
+		for (size_t i = 0; i < minDim; ++i)
+			m_pValues[i * m_Columns + i] = 1.0f;
 	}
 
 	~Matrix()
@@ -153,6 +163,8 @@ public:
 			for (size_t col = 0; col < m_Columns; ++col)
 				result.m_pValues[col * result.m_Columns + row] = m_pValues[row * m_Columns + col];
 		}
+
+		result.Print();
 
 		return result;
 	}
@@ -270,38 +282,52 @@ public:
 
 	Matrix operator*(const Matrix& rhs) const
 	{
-		if ( m_Columns != rhs.m_Rows && (m_Rows != 1 && m_Columns != 1) )
-			throw std::runtime_error("Matrix multiplication size mismatch");
-
 		if (m_Rows == 1 && m_Columns == 1)
 		{
 			Matrix result(rhs.m_Rows, rhs.m_Columns);
-			float s = m_pValues[0];
 
 			for (size_t i = 0; i < rhs.m_Rows * rhs.m_Columns; i++)
-				result.m_pValues[i] = s * rhs.m_pValues[i];
+				result.m_pValues[i] = m_pValues[0] * rhs.m_pValues[i];
 
 			return result;
 		}
 
-		
-		//Normal matrix multiplication
-		Matrix result(m_Rows, rhs.m_Columns);
-
-		for (size_t row = 0; row < m_Rows; row++)
+		else if (rhs.m_Rows == 1 && rhs.m_Columns == 1)
 		{
-			for (size_t col = 0; col < rhs.m_Columns; col++)
-			{
-				float sum = 0.0f;
+			Matrix result(m_Rows, m_Columns);
 
-				for (size_t k = 0; k < m_Columns; k++)
-					sum += m_pValues[row * m_Columns + k] * rhs.m_pValues[k * rhs.m_Columns + col];
+			for (size_t i = 0; i < m_Rows * m_Columns; i++)
+				result.m_pValues[i] = m_pValues[i] * rhs.m_pValues[0];
 
-				result.m_pValues[row * rhs.m_Columns + col] = sum;
-			}
+			return result;
 		}
 
-		return result;
+		//Normal matrix multiplication
+		else if (m_Columns == rhs.m_Rows)
+		{
+			Matrix result(m_Rows, rhs.m_Columns);
+			this->Print();
+			rhs.Print();
+
+			for (size_t row = 0; row < m_Rows; row++)
+			{
+				for (size_t col = 0; col < rhs.m_Columns; col++)
+				{
+					float sum = 0.0f;
+
+					for (size_t k = 0; k < m_Columns; k++)
+						sum += m_pValues[row * m_Columns + k] * rhs.m_pValues[k * rhs.m_Columns + col];
+
+					result.m_pValues[row * rhs.m_Columns + col] = sum;
+				}
+			}
+
+			result.Print();
+
+			return result;
+		}
+
+		throw std::runtime_error("Matrix multiplication size mismatch");
 	}
 
 	float operator[](size_t Index) const
@@ -313,9 +339,12 @@ public:
 
 	void Print() const
 	{
-		for (size_t i = 0; i < m_Rows * m_Columns; i++)
-			printf("%.4f ", m_pValues[i]);
-		printf("\n");
+		for (size_t row = 0; row < m_Rows; ++row)
+		{
+			for (size_t col = 0; col < m_Columns; ++col)
+				printf("%.2f ", m_pValues[row * m_Columns + col]);
+			printf("\n");
+		}
 	}
 
 private:

@@ -109,6 +109,11 @@ public:
 		return Scalar(value - other.value);
 	}
 
+	Scalar ElementwiseMul(const Scalar& other) const
+	{
+		return Scalar(value * other.value);
+	}
+
 	Scalar operator*(const Scalar& other) const
 	{
 		return Scalar(value * other.value);
