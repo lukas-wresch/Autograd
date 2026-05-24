@@ -164,8 +164,6 @@ public:
 				result.m_pValues[col * result.m_Columns + row] = m_pValues[row * m_Columns + col];
 		}
 
-		result.Print();
-
 		return result;
 	}
 
@@ -220,18 +218,20 @@ public:
 
 	void operator+=(const Matrix& rhs)
 	{
-		if ( (m_Rows != rhs.m_Rows || m_Columns != rhs.m_Columns) && (rhs.m_Rows != 1 && rhs.m_Columns != 1) )
-			throw std::runtime_error("Matrix operator += size mismatch");
-
 		if (rhs.m_Rows == 1 && rhs.m_Columns == 1)
 		{
 			for (size_t i = 0; i < m_Rows * m_Columns; i++)
 				m_pValues[i] += rhs.m_pValues[0];
-			return;
 		}
 
-		for (size_t i = 0; i < m_Rows * m_Columns; i++)
-			m_pValues[i] += rhs.m_pValues[i];
+		else if (m_Rows == rhs.m_Rows && m_Columns == rhs.m_Columns)
+		{
+			for (size_t i = 0; i < m_Rows * m_Columns; i++)
+				m_pValues[i] += rhs.m_pValues[i];
+		}
+
+		else
+			throw std::runtime_error("Matrix operator += size mismatch");
 	}
 
 	void operator+=(float rhs)
@@ -306,8 +306,6 @@ public:
 		else if (m_Columns == rhs.m_Rows)
 		{
 			Matrix result(m_Rows, rhs.m_Columns);
-			this->Print();
-			rhs.Print();
 
 			for (size_t row = 0; row < m_Rows; row++)
 			{
@@ -321,8 +319,6 @@ public:
 					result.m_pValues[row * rhs.m_Columns + col] = sum;
 				}
 			}
-
-			result.Print();
 
 			return result;
 		}

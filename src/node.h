@@ -133,8 +133,8 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
         right->grad -= grad;
         break;
     case Operator::Multiply:
-        left->grad  += grad * right->value;
-        right->grad += grad * left->value;
+        left->grad  += grad * right->value.Transpose();
+        right->grad += left->value.Transpose() * grad;
         break;
     case Operator::Sum:
         //left->grad = left->grad.ElementwiseAdd(grad);
