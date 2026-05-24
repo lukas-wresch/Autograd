@@ -53,6 +53,7 @@ public:
     T& GetGradient() { return grad; }
 
     bool IsTrainable() const { return trainable; }
+    void SetAsTrainable(bool Trainable = true) { trainable = Trainable; }
 
     static NodePtr<T> Create(T Value, const std::string& Label = "") { return std::make_shared<Node<T>>(Value, Label); }
     static NodePtr<T> Create() { return std::make_shared<Node<T>>(); }
@@ -156,7 +157,7 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
         left->grad += (1.0f - value.ElementwiseMul(value)).ElementwiseMul(grad);//tanh' = 1 - tanh^2
         break;
     case Operator::ReLU:
-		left->grad += value.Heaviside() * grad;//ReLU' = 1 if x > 0 else 0
+		left->grad += value.Heaviside().ElementwiseMul(grad);//ReLU' = 1 if x > 0 else 0
         break;
     default:
         throw std::runtime_error("Unsupported Operation");

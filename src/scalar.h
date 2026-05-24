@@ -69,9 +69,9 @@ public:
 	}
 
 	//Derivate of ReLU
-	float Heaviside() const
+	Scalar Heaviside() const
 	{
-		return (value > 0.0f ? 1.0f : 0.0f);
+		return Scalar(value > 0.0f ? 1.0f : 0.0f);
 	}
 	
 	void operator+=(const Scalar& rhs)

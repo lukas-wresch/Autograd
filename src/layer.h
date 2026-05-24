@@ -51,8 +51,8 @@ public:
 		for (size_t i = 0; i < m_Biases->GetValue().GetLength(); i++)
 			m_Biases->GetValue().SetValue()[i]  = RandomFloatMinus1To1();
 
-		m_Weights->trainable = true;
-		m_Biases->trainable  = true;
+		m_Weights->SetAsTrainable();
+		m_Biases->SetAsTrainable();
 		m_Weights->SetLabel("W");
 		m_Biases->SetLabel("B");
 	}

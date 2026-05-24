@@ -1517,6 +1517,193 @@ TEST(TapeRecorder, Kapathy_Example2)
 
 
 
+TEST(TapeRecorder, VectorOpsMatchNodeBackprop)
+{
+	auto x1 = Node<Vector>::Create({ 2.0f, -3.0f }, "x1");
+	auto x2 = Node<Vector>::Create({ 4.0f,  5.0f }, "x2");
+	auto b  = Node<Vector>::Create({ 1.5f }, "b");
+
+	// -----------------------------
+	// Build graph
+	// -----------------------------
+
+	auto mul = x1->ElementwiseMul(x2);
+	mul->SetLabel("mul");
+
+	auto sum = mul->Sum();
+	sum->SetLabel("sum");
+
+	auto add = sum->ElementwiseAdd(b);
+	add->SetLabel("add");
+
+	auto out = add->Tanh();
+	out->SetLabel("out");
+
+	// -----------------------------
+	// Reference autograd
+	// -----------------------------
+
+	out->Backwards();
+
+	auto ref_x1_grad = x1->GetGradient();
+	auto ref_x2_grad = x2->GetGradient();
+	auto ref_b_grad = b->GetGradient();
+
+	auto ref_out = out->GetValue();
+
+	// -----------------------------
+	// Tape version
+	// -----------------------------
+
+	TapeRecorder<Vector> tape;
+	tape.Compile(out);
+
+	auto tx1 = tape.SetValue("x1");
+	auto tx2 = tape.SetValue("x2");
+	auto tb = tape.SetValue("b");
+
+	*tx1 = x1->GetValue();
+	*tx2 = x2->GetValue();
+	*tb = b->GetValue();
+
+	tape.ZeroGradients();
+	tape.Forward();
+	tape.Backward();
+
+	auto tape_x1_grad = tape.GetGradient("x1");
+	auto tape_x2_grad = tape.GetGradient("x2");
+	auto tape_b_grad = tape.GetGradient("b");
+
+	auto tape_out = tape.GetValue("out");
+
+	// -----------------------------
+	// Compare outputs
+	// -----------------------------
+
+	EXPECT_NEAR((*tape_out)[0], ref_out[0], 1e-5f);
+
+	// -----------------------------
+	// Compare gradients
+	// -----------------------------
+
+	EXPECT_NEAR((*tape_x1_grad)[0], ref_x1_grad[0], 1e-5f);
+	EXPECT_NEAR((*tape_x1_grad)[1], ref_x1_grad[1], 1e-5f);
+
+	EXPECT_NEAR((*tape_x2_grad)[0], ref_x2_grad[0], 1e-5f);
+	EXPECT_NEAR((*tape_x2_grad)[1], ref_x2_grad[1], 1e-5f);
+
+	EXPECT_NEAR((*tape_b_grad)[0], ref_b_grad[0], 1e-5f);
+}
+
+
+
+TEST(TapeRecorder, GradientAccumulationMatchesTwoBackwardPasses)
+{
+	auto x = Node<Vector>::Create({ 2.0f, 3.0f }, "x");
+	auto w = Node<Vector>::Create({ 4.0f, 5.0f }, "w");
+	w->SetAsTrainable(true);
+
+	auto y = (x->ElementwiseMul(w))->Sum();
+	y->SetLabel("y");
+
+	TapeRecorder<Vector> tape;
+	tape.Compile(y);
+
+	auto tx = tape.SetValue("x");
+	auto tw = tape.SetValue("w");
+
+	*tx = { 2.0f, 3.0f };
+	*tw = { 4.0f, 5.0f };
+
+	tape.ZeroGradients();
+
+	// first sample
+	tape.Forward();
+	tape.Backward();
+
+	auto grad_after_first = *tape.GetGradient("w");
+
+	// second sample SAME INPUT
+	tape.Forward();
+	tape.Backward();
+
+	auto grad_after_second = *tape.GetGradient("w");
+
+	// should double
+	EXPECT_NEAR(grad_after_second[0], grad_after_first[0] * 2.0f, 1e-5f);
+
+	EXPECT_NEAR(grad_after_second[1], grad_after_first[1] * 2.0f, 1e-5f);
+}
+
+
+
+TEST(TapeRecorder, ZeroGradientsActuallyZerosEverything)
+{
+	auto x = Node<Vector>::Create({ 1.0f, 2.0f }, "x");
+	auto y = x->Sum();
+
+	TapeRecorder<Vector> tape;
+	tape.Compile(y);
+
+	tape.ZeroGradients();
+
+	tape.Forward();
+	tape.Backward();
+
+	auto grad_before = *tape.GetGradient("x");
+
+	EXPECT_NEAR(grad_before[0], 1.0f, 1e-5f);
+	EXPECT_NEAR(grad_before[1], 1.0f, 1e-5f);
+
+	tape.ZeroGradients();
+
+	auto grad_after = *tape.GetGradient("x");
+
+	EXPECT_NEAR(grad_after[0], 0.0f, 1e-5f);
+	EXPECT_NEAR(grad_after[1], 0.0f, 1e-5f);
+}
+
+
+
+TEST(TapeRecorder, BatchAccumulationEqualsManualGradientSum)
+{
+	TapeRecorder<Vector> tape;
+
+	auto x = Node<Vector>::Create({ 0.0f, 0.0f }, "x");
+	auto w = Node<Vector>::Create({ 1.0f, 2.0f }, "w");
+	w->SetAsTrainable(true);
+
+	auto y = (x->ElementwiseMul(w))->Sum();
+
+	tape.Compile(y);
+
+	auto tx = tape.SetValue("x");
+
+	tape.ZeroGradients();
+
+	// sample 1
+	*tx = { 1.0f, 2.0f };
+	tape.Forward();
+	tape.Backward();
+
+	// sample 2
+	*tx = { 3.0f, 4.0f };
+	tape.Forward();
+	tape.Backward();
+
+	auto gw = tape.GetGradient("w");
+
+	// expected:
+	// grad sample1 = [1,2]
+	// grad sample2 = [3,4]
+	// accumulated = [4,6]
+
+	EXPECT_NEAR((*gw)[0], 4.0f, 1e-5f);
+	EXPECT_NEAR((*gw)[1], 6.0f, 1e-5f);
+}
+
+
+
 TEST(TapeRecorder, XOR)
 {
 	std::vector<NodePtr<Vector>> xs = {
@@ -1748,9 +1935,9 @@ TEST(TapeRecorder, SpiralClassification_MSE_Batching)
 	}
 
 	// MLP: 2 -> 32 -> 32 -> 1
-	Layer2D<Vector> L1(2, 32, Activation::Tanh);
+	Layer2D<Vector> L1(2, 32,  Activation::Tanh);
 	Layer2D<Vector> L2(32, 32, Activation::Tanh);
-	Layer2D<Vector> L3(32, 1, Activation::Tanh);
+	Layer2D<Vector> L3(32, 1,  Activation::Tanh);
 
 	SGD<Vector> sgd(0.01f);
 	int batch_size = 16;
@@ -1781,7 +1968,7 @@ TEST(TapeRecorder, SpiralClassification_MSE_Batching)
 
 	float epoch_loss = 0.0f;
 
-	for (size_t epoch = 0; epoch < 1250; epoch++)
+	for (size_t epoch = 0; epoch < 1500; epoch++)
 	{
 		ShuffleDataset(xs, labels);
 
@@ -1830,8 +2017,8 @@ TEST(TapeRecorder, SpiralClassification_MSE_Batching)
 		float pred = output->GetValue()[0];
 		float target = labels[i]->GetValue()[0];
 
-		int predicted_class = pred > 0.5f ? 1 : 0;
-		int target_class = target > 0.5f ? 1 : 0;
+		int predicted_class = pred   > 0.5f ? 1 : 0;
+		int target_class    = target > 0.5f ? 1 : 0;
 
 		if (predicted_class == target_class)
 			correct++;

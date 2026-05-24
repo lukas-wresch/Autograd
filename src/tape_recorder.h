@@ -210,6 +210,12 @@ void TapeRecorder<T>::Forward()
         case Operator::Sum:
             values[entry.out] = values[entry.a].Sum();
             break;
+        case Operator::ElementwiseAdd:
+            values[entry.out] = values[entry.a].ElementwiseAdd(values[entry.b]);
+            break;
+        case Operator::ElementwiseMul:
+            values[entry.out] = values[entry.a].ElementwiseMul(values[entry.b]);
+            break;
 
         case Operator::Pack:
             values[entry.out].SetLength(entry.inputs.size());//Neccessary???
@@ -243,10 +249,17 @@ inline void TapeRecorder<T>::ZeroGradients()
 template<typename T>
 inline void TapeRecorder<T>::Backward()
 {
+    //Zero all the gradients except the trainable parameter. For them gradients should accumulate
+    for (size_t i = 0; i < grads.size() - 1; i++)
+    {
+        if (!trainable[i])
+            grads[i].SetZero();
+    }
+
     for (int i = (int)tape.size() - 1; i >= 0; i--)
     {
         const auto& entry = tape[i];
-        const auto& outer_grad  = grads[entry.out];
+        const auto& outer_grad = grads[entry.out];
 
         switch (entry.op)
         {
@@ -259,7 +272,7 @@ inline void TapeRecorder<T>::Backward()
             grads[entry.b] -= outer_grad;
             break;
         case Operator::Multiply:
-            grads[entry.a] += values[entry.b].Transpose() * outer_grad;
+            grads[entry.a] += outer_grad * values[entry.b].Transpose();
             grads[entry.b] += values[entry.a].Transpose() * outer_grad;
             break;
         case Operator::Sum:
@@ -272,8 +285,8 @@ inline void TapeRecorder<T>::Backward()
             grads[entry.b] += outer_grad.Sum();
             break;
         case Operator::ElementwiseMul:
-            grads[entry.a] += values[entry.b] * outer_grad;
-            grads[entry.b] += values[entry.a] * outer_grad;
+            grads[entry.a] += values[entry.b].ElementwiseMul(outer_grad);
+            grads[entry.b] += values[entry.a].ElementwiseMul(outer_grad);
             break;
         case Operator::Pack:
             for (size_t j = 0; j < entry.inputs.size(); j++)
@@ -281,10 +294,10 @@ inline void TapeRecorder<T>::Backward()
             break;
 
         case Operator::Tanh:
-            grads[entry.a] += (1.0f - values[entry.out] * values[entry.out]) * outer_grad;//tanh' = 1 - tanh^2
+            grads[entry.a] += (1.0f - values[entry.out].ElementwiseMul(values[entry.out])).ElementwiseMul(outer_grad);//tanh' = 1 - tanh^2
             break;
         case Operator::ReLU:
-            grads[entry.a] += values[entry.out].Heaviside() * outer_grad;//ReLU' = 1 if x > 0 else 0
+            grads[entry.a] += values[entry.out].Heaviside().ElementwiseMul(outer_grad);//ReLU' = 1 if x > 0 else 0
             break;
 
         default:
