@@ -94,7 +94,7 @@ int MNist::ReadLabelData(const std::string& Filename, unsigned char** Data)
 
 std::vector<float> MNist::GetTrainingImageData(size_t Index) const
 {
-    if (Index >= m_NumImages)
+    if (Index >= m_TrainNumImages)
         throw std::runtime_error("MNist: Index out of range");
 
     std::vector<float> image_data(m_Width * m_Height);
@@ -106,14 +106,14 @@ std::vector<float> MNist::GetTrainingImageData(size_t Index) const
 
 
 
-std::vector<std::vector<float>> MNist::GetTrainingImageData2(size_t Index) const
+std::vector<float> MNist::GetValidationImageData(size_t Index) const
 {
-    if (Index >= m_NumImages)
+    if (Index >= m_ValidNumImages)
         throw std::runtime_error("MNist: Index out of range");
 
-    std::vector<std::vector<float>> image_data;
+    std::vector<float> image_data(m_Width * m_Height);
     for (uint32_t i = 0; i < m_Width * m_Height; i++)
-        image_data.push_back(std::vector({ (float)m_TrainImages[Index * m_Height * m_Width + i] / 255.0f }) );
+        image_data[i] = (float)m_ValidationImages[Index * m_Height * m_Width + i] / 255.0f;
 
     return image_data;
 }
@@ -122,16 +122,25 @@ std::vector<std::vector<float>> MNist::GetTrainingImageData2(size_t Index) const
 
 int MNist::GetTrainingLabelData(size_t Index) const
 {
-    if (Index >= m_NumImages)
+    if (Index >= m_TrainNumImages)
         throw std::runtime_error("MNist: Index out of range");
     return m_TrainLabels[Index];
 }
 
 
 
+int MNist::GetValidationLabelData(size_t Index) const
+{
+    if (Index >= m_ValidNumImages)
+        throw std::runtime_error("MNist: Index out of range");
+    return m_ValidationLabels[Index];
+}
+
+
+
 void MNist::PrintTrainImage(size_t Index)
 {
-	if (Index >= m_NumImages)
+	if (Index >= m_TrainNumImages)
         throw std::runtime_error("MNist: Index out of range");
 
     for (uint32_t y = 0; y < m_Height; y++)

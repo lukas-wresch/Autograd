@@ -22,6 +22,8 @@ enum class Operator
 
     Tanh,
     ReLU,
+
+    Softmax,
 };
 
 
@@ -66,6 +68,7 @@ public:
     void Pack(const std::vector<NodePtr<T>>& List);
     NodePtr<T> Tanh();
     NodePtr<T> ReLU();
+    NodePtr<T> Softmax();
 
     void Backwards();
 
@@ -350,6 +353,19 @@ NodePtr<T> Node<T>::ReLU()
     auto out = std::make_shared<Node<T>>(this->value.ReLU());
 
     out->op = Operator::ReLU;
+    out->left = this->shared_from_this();
+    out->right = nullptr;
+    return out;
+}
+
+
+
+template<typename T>
+NodePtr<T> Node<T>::Softmax()
+{
+    auto out = std::make_shared<Node<T>>(this->value.Softmax());
+
+    out->op = Operator::Softmax;
     out->left = this->shared_from_this();
     out->right = nullptr;
     return out;

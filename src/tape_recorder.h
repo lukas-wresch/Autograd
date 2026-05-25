@@ -352,8 +352,8 @@ inline void TapeRecorder<T>::PrintTape() const
         }
 
         std::string out_label = "t" + std::to_string(entry.out);
-        std::string a_label = std::to_string(entry.a);
-        std::string b_label = std::to_string(entry.b);
+        std::string a_label   = "t" + std::to_string(entry.a);
+        std::string b_label   = "t" + std::to_string(entry.b);
 
         auto it = id_to_label.find(entry.out);
         if (it != id_to_label.end())

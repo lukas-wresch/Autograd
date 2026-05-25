@@ -5,6 +5,7 @@
 #include "../src/layer.h"
 #include "../src/sgd.h"
 #include "../src/tape_recorder.h"
+#include "../mnist.h"
 
 
 
@@ -533,6 +534,82 @@ TEST(MatrixBackprop, LargerMatrixGraphWithoutActivation)
 
 
 
+TEST(MatrixBackprop, SoftmaxGradient)
+{
+	// input
+	auto x = Node<Matrix>::Create({ {1.0f}, {2.0f}, {3.0f} }, "x");
+
+	// softmax
+	auto s = x->Softmax();
+	s->SetLabel("softmax");
+
+	// loss = sum(softmax)
+	auto loss = s->Sum();
+	loss->SetLabel("loss");
+
+	// backward
+	loss->Backwards();
+
+	// -------------------------------------------------
+	// Forward sanity checks
+	// -------------------------------------------------
+
+	float s0 = s->GetValue().At(0, 0);
+	float s1 = s->GetValue().At(0, 1);
+	float s2 = s->GetValue().At(0, 2);
+
+	float sum = s0 + s1 + s2;
+	EXPECT_NEAR(sum, 1.0f, 1e-5f);
+
+	// -------------------------------------------------
+	// Gradient checks (analytisch)
+	// -------------------------------------------------
+	// For L = sum(s), gradient is:
+	// dL/dx_i = s_i * (1 - sum(s)) = 0
+	// BUT due to coupling, actual result is:
+	// dL/dx_i = s_i * (1 - 1) + cross terms = 0
+	//
+	// => result: all gradients should be ~0
+
+	EXPECT_NEAR(x->GetGradient().At(0, 0), 0.0f, 1e-5f);
+	EXPECT_NEAR(x->GetGradient().At(0, 1), 0.0f, 1e-5f);
+	EXPECT_NEAR(x->GetGradient().At(0, 2), 0.0f, 1e-5f);
+}
+
+
+
+/*TEST(MatrixBackprop, SoftmaxCrossEntropyGradient)
+{
+	// input logits
+	auto x = Node<Matrix>::Create({
+		{ 1.0f, 2.0f, 3.0f }
+		}, "x");
+
+	// softmax
+	auto s = x->Softmax();
+
+	// target class = index 2
+	auto y = Node<Matrix>::Create({
+		{ 0.0f, 0.0f, 1.0f }
+		}, "y");
+
+	// cross entropy (manual)
+	auto log_s = s->Log();
+	auto mul = y->ElementwiseMul(log_s);
+	auto loss = mul->Sum() * -1.0f;
+
+	loss->Backwards();
+
+	// expected gradient: s - y
+	Matrix soft = s->GetValue();
+
+	EXPECT_NEAR(x->GetGradient().At(0, 0), soft[0] - 0.0f, 1e-5f);
+	EXPECT_NEAR(x->GetGradient().At(0, 1), soft[1] - 0.0f, 1e-5f);
+	EXPECT_NEAR(x->GetGradient().At(0, 2), soft[2] - 1.0f, 1e-5f);
+}*/
+
+
+
 TEST(Examples, Kapathy_Example2_Vec)
 {
 	auto x = Node<Vector>::Create({ 2.0f, 0.0f },  "x");
@@ -850,6 +927,182 @@ TEST(Training, GradientChangesAfterUpdate)
 
 	// gradients should differ after parameter update
 	EXPECT_NE(grad_before, grad_after);
+}
+
+
+
+TEST(Training, MNist)
+{
+	MNist mnist = MNist();
+
+	mnist.PrintTrainImage(0);
+	mnist.PrintTrainImage(1);
+	mnist.PrintTrainImage(2);
+
+	std::vector<NodePtr<Matrix>> xs;
+	std::vector<NodePtr<Matrix>> labels;
+
+	std::vector<NodePtr<Matrix>> val_xs;
+	std::vector<NodePtr<Matrix>> val_labels;
+
+	for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
+	{
+		xs.push_back(Node<Matrix>::Create(mnist.GetTrainingImageData(i)));
+
+		int label = mnist.GetTrainingLabelData(i);
+		//Convert to one hot encoding
+		std::vector<float> one_hot(10, 0.0f);
+		one_hot[label] = 1.0f;
+
+		labels.push_back(Node<Matrix>::Create(one_hot));
+	}
+
+	for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
+	{
+		val_xs.push_back(Node<Matrix>::Create(mnist.GetValidationImageData(i)));
+
+		int label = mnist.GetValidationLabelData(i);
+		//Convert to one hot encoding
+		std::vector<float> one_hot(10, 0.0f);
+		one_hot[label] = 1.0f;
+
+		val_labels.push_back(Node<Matrix>::Create(one_hot));
+	}
+
+
+	auto tape = TapeRecorder<Matrix>();
+	SGD<Matrix> sgd(0.06f);
+	const int batch_size = 8;
+
+	{
+		auto x = Node<Matrix>::CreateWithSize(784, "input");
+		auto label = Node<Matrix>::CreateWithSize(10, "label");
+
+		Layer3D L1(784, 128, Activation::Tanh);
+		Layer3D L2(128, 10, Activation::Identity);
+
+		auto h1 = L1.Forward(x);
+		auto pred = L2.Forward(h1);
+		pred->SetLabel("output");
+
+		auto loss = ((pred - label)->ElementwiseMul(pred - label))->Sum();
+		loss->SetLabel("loss");
+
+		tape.Compile(loss);
+		sgd.SetTrainableParams(tape);
+	}
+
+	auto input = tape.SetValue("input");
+	auto label = tape.SetValue("label");
+	auto output = tape.SetValue("output");
+	auto loss = tape.SetValue("loss");
+
+	tape.PrintTape();
+
+
+	// Forward pass
+	auto calculate_acc = [&]() {
+		int correct = 0;
+		int val_correct = 0;
+
+		for (size_t i = 0; i < xs.size(); i++)
+		{
+			*input = xs[i]->GetValue();
+
+			tape.Forward();
+
+			//Convert one hot to class index
+			int pred_class = 0;
+			float max_val = output->GetValue()[0];
+			int target_class = 0;
+			for (int c = 1; c < 10; c++)
+			{
+				float val = output->GetValue()[c];
+				if (val > max_val)
+				{
+					max_val = val;
+					pred_class = c;
+				}
+				if (labels[i]->GetValue()[c] == 1.0f)
+					target_class = c;
+			}
+
+			if (pred_class == target_class) correct++;
+		}
+
+		for (size_t i = 0; i < val_xs.size(); i++)
+		{
+			*input = val_xs[i]->GetValue();
+
+			tape.Forward();
+
+			//Convert one hot to class index
+			int pred_class = 0;
+			float max_val = output->GetValue()[0];
+			int target_class = 0;
+			for (int c = 1; c < 10; c++)
+			{
+				float val = output->GetValue()[c];
+				if (val > max_val)
+				{
+					max_val = val;
+					pred_class = c;
+				}
+				if (val_labels[i]->GetValue()[c] == 1.0f)
+					target_class = c;
+			}
+
+			if (pred_class == target_class) val_correct++;
+		}
+
+		return std::tuple{ (float)correct / xs.size(), (float)val_correct / val_xs.size() };
+	};
+
+
+	//Training loop
+
+	float epoch_loss = 0.0f;
+
+	for (size_t epoch = 0; epoch < 3; epoch++)
+	{
+		ShuffleDataset(xs, labels);
+
+
+		epoch_loss = 0.0f;
+
+		for (size_t i = 0; i < xs.size(); i += batch_size)
+		{
+			size_t end = std::min(i + batch_size, xs.size());
+
+			size_t actual_batch_size = end - i;
+
+			float batch_loss = 0.0f;
+
+			tape.ZeroGradients();
+
+			for (size_t j = i; j < end; j++)
+			{
+				*input = xs[j]->GetValue();
+				*label = labels[j]->GetValue();
+
+				tape.Forward();
+				tape.Backward();
+
+				epoch_loss += loss->GetValue()[0];
+				batch_loss += loss->GetValue()[0];
+			}
+
+			sgd.Step(1.0f / actual_batch_size);
+		}
+
+		epoch_loss /= xs.size();
+	}
+
+	auto [train_acc, val_acc] = calculate_acc();
+
+	EXPECT_LE(epoch_loss, 0.25f);
+	EXPECT_GE(train_acc,  0.90f);
+	EXPECT_GE(val_acc,    0.90f);
 }
 
 

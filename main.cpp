@@ -40,6 +40,9 @@ void MNist_Test()
 	std::vector<NodePtr<Matrix>> xs;
 	std::vector<NodePtr<Matrix>> labels;
 
+	std::vector<NodePtr<Matrix>> val_xs;
+	std::vector<NodePtr<Matrix>> val_labels;
+
 	for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
 	{
 		xs.push_back(Node<Matrix>::Create(mnist.GetTrainingImageData(i)));
@@ -52,9 +55,21 @@ void MNist_Test()
 		labels.push_back(Node<Matrix>::Create(one_hot));
 	}
 
+	for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
+	{
+		val_xs.push_back(Node<Matrix>::Create(mnist.GetValidationImageData(i)));
+
+		int label = mnist.GetValidationLabelData(i);
+		//Convert to one hot encoding
+		std::vector<float> one_hot(10, 0.0f);
+		one_hot[label] = 1.0f;
+
+		val_labels.push_back(Node<Matrix>::Create(one_hot));
+	}
+
 
 	auto tape = TapeRecorder<Matrix>();
-	SGD<Matrix> sgd(0.03f);
+	SGD<Matrix> sgd(0.05f);
 	const int batch_size = 8;
 
 	{
@@ -62,7 +77,7 @@ void MNist_Test()
 		auto label = Node<Matrix>::CreateWithSize(10, "label");
 
 		Layer3D L1(784, 128, Activation::Tanh);
-		Layer3D L2(128,  10, Activation::Tanh);
+		Layer3D L2(128,  10, Activation::Identity);
 
 		auto h1 = L1.Forward(x);
 		auto pred = L2.Forward(h1);
@@ -83,11 +98,70 @@ void MNist_Test()
 	tape.PrintTape();
 
 
+	// Forward pass
+	auto calculate_acc = [&]() {
+		int correct = 0;
+		int val_correct = 0;
+
+		for (size_t i = 0; i < xs.size(); i++)
+		{
+			*input = xs[i]->GetValue();
+
+			tape.Forward();
+
+			//Convert one hot to class index
+			int pred_class = 0;
+			float max_val = output->GetValue()[0];
+			int target_class = 0;
+			for (int c = 1; c < 10; c++)
+			{
+				float val = output->GetValue()[c];
+				if (val > max_val)
+				{
+					max_val = val;
+					pred_class = c;
+				}
+				if (labels[i]->GetValue()[c] == 1.0f)
+					target_class = c;
+			}
+
+			if (pred_class == target_class) correct++;
+		}
+
+		for (size_t i = 0; i < val_xs.size(); i++)
+		{
+			*input = val_xs[i]->GetValue();
+
+			tape.Forward();
+
+			//Convert one hot to class index
+			int pred_class = 0;
+			float max_val = output->GetValue()[0];
+			int target_class = 0;
+			for (int c = 1; c < 10; c++)
+			{
+				float val = output->GetValue()[c];
+				if (val > max_val)
+				{
+					max_val = val;
+					pred_class = c;
+				}
+				if (val_labels[i]->GetValue()[c] == 1.0f)
+					target_class = c;
+			}
+
+			if (pred_class == target_class) val_correct++;
+		}
+
+		return std::tuple{ (float)correct * 100.0f / xs.size(), (float)val_correct * 100.0f / val_xs.size() };
+	};
+
+
 	//Training loop
 
 	float epoch_loss = 0.0f;
 
-	for (size_t epoch = 0; epoch < 20; epoch++)
+	for (size_t epoch = 0; epoch < 10; epoch++)
 	{
 		ShuffleDataset(xs, labels);
 
@@ -125,37 +199,15 @@ void MNist_Test()
 		epoch_loss /= xs.size();
 
 		//if (epoch % 2 == 0)
-		std::cout << "Epoch " << epoch << " Loss: " << epoch_loss << std::endl;
+		std::cout << "Epoch " << epoch+1 << " Loss: " << epoch_loss << std::endl;
+		auto [train_acc, val_acc] = calculate_acc();
+		std::cout << "Train Accuracy: " << train_acc << "%" << std::endl;
+		std::cout << "Valid Accuracy: " << val_acc << "%" << std::endl;
 	}
 
-	int correct = 0;
-
-	for (size_t i = 0; i < xs.size(); i++)
-	{
-		//auto pred = L2.Forward(L1.Forward(xs[i]));
-
-		//Convert one hot to class index
-		int pred_class = 0;
-		float max_val = output->GetValue()[0];
-		int target_class = -1;
-		for (int c = 1; c < 10; c++)
-		{
-			float val = output->GetValue()[c];
-			if (val > max_val)
-			{
-				max_val = val;
-				pred_class = c;
-			}
-			if (labels[i]->GetValue()[c] == 1.0f)
-				target_class = c;
-		}
-
-		float target = labels[i]->GetValue()[0];
-
-		if (pred_class == target_class) correct++;
-	}
-
-	std::cout << "Final Accuracy: " << (float)correct / xs.size() << std::endl;
+	/*auto [train_acc, val_acc] = calculate_acc();
+	std::cout << "Final Train Accuracy: " << train_acc << "%" << std::endl;
+	std::cout << "Final Valid Accuracy: " << val_acc   << "%" << std::endl;*/
 }
 
 

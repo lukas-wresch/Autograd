@@ -199,9 +199,50 @@ public:
 	Matrix Heaviside() const
 	{
 		Matrix out = *this;
-		for (size_t i = 0; i < m_Rows* m_Columns; i++)
+		for (size_t i = 0; i < m_Rows * m_Columns; i++)
 			out.m_pValues[i] = (m_pValues[i] > 0.0f ? 1.0f : 0.0f);
 		return out;
+	}
+
+	Matrix Softmax() const
+	{
+		if (m_Columns != 1)
+			throw std::runtime_error("Matrix softmax size mismatch");
+
+		float max_value = m_pValues[0];
+		for (size_t i = 1; i < m_Rows * m_Columns; i++)
+			if (m_pValues[i] > max_value)
+				max_value = m_pValues[i];
+
+		Matrix copy = *this;
+		float sum = 0.0f;
+		for (size_t i = 0; i < m_Rows * m_Columns; i++)
+		{
+			copy.m_pValues[i] = std::exp(m_pValues[i] - max_value);
+			sum += copy.m_pValues[i];
+		}
+
+		for (size_t i = 0; i < m_Rows * m_Columns; i++)
+			copy.m_pValues[i] /= sum;
+
+		return copy;
+	}
+
+	Matrix CrossEntropy(const Matrix& Target) const
+	{
+		if (m_Rows != Target.m_Rows || m_Columns != Target.m_Columns)
+			throw std::runtime_error("Matrix CrossEntropy size mismatch");
+
+		const float epsilon = 0.00001f;
+
+		float loss = 0.0f;
+
+		for (size_t i = 0; i < m_Rows * m_Columns; i++)
+			loss -= Target.m_pValues[i] * std::log(m_pValues[i] + epsilon);
+
+		Matrix ret(1, 1);
+		*ret.SetValue() = loss;
+		return ret;
 	}
 
 	[[nodiscard]]

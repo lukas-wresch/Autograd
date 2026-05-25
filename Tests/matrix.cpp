@@ -421,3 +421,110 @@ TEST(Matrix, MultiplicationSizeMismatchThrows)
         Matrix c = a * b;
     }, std::runtime_error);
 }
+
+
+
+TEST(Matrix, SoftmaxBasic)
+{
+    Matrix m(3, 1);
+
+    float* v = m.SetValue();
+
+    v[0] = 1.0f;
+    v[1] = 2.0f;
+    v[2] = 3.0f;
+
+    Matrix s = m.Softmax();
+
+    // Werte sollten zwischen 0 und 1 liegen
+    EXPECT_GT(s[0], 0.0f);
+    EXPECT_GT(s[1], 0.0f);
+    EXPECT_GT(s[2], 0.0f);
+
+    EXPECT_LT(s[0], 1.0f);
+    EXPECT_LT(s[1], 1.0f);
+    EXPECT_LT(s[2], 1.0f);
+
+    // Summe muss 1 sein
+    float sum = s[0] + s[1] + s[2];
+    EXPECT_NEAR(sum, 1.0f, 1e-5f);
+}
+
+
+
+TEST(Matrix, SoftmaxOrdering)
+{
+    Matrix m(3, 1);
+
+    float* v = m.SetValue();
+
+    v[0] = 0.0f;
+    v[1] = 1.0f;
+    v[2] = 2.0f;
+
+    Matrix s = m.Softmax();
+
+    EXPECT_TRUE(s[2] > s[1]);
+    EXPECT_TRUE(s[1] > s[0]);
+}
+
+
+
+TEST(Matrix, CrossEntropyBasic)
+{
+    Matrix pred({
+        { 0.7f, 0.2f, 0.1f }
+        });
+
+    Matrix target({
+        { 1.0f, 0.0f, 0.0f }
+        });
+
+    Matrix loss = pred.CrossEntropy(target);
+
+    // expected: -log(0.7)
+    float expected = -std::log(0.7f);
+
+    EXPECT_NEAR(loss.At(0, 0), expected, 0.001f);
+}
+
+
+
+TEST(Matrix, CrossEntropyOneHot)
+{
+    Matrix pred({
+        { 0.1f, 0.8f, 0.1f }
+        });
+
+    Matrix target({
+        { 0.0f, 1.0f, 0.0f }
+        });
+
+    Matrix loss = pred.CrossEntropy(target);
+
+    float expected = -std::log(0.8f);
+
+    EXPECT_NEAR(loss.At(0, 0), expected, 0.001f);
+}
+
+
+
+TEST(Matrix, CrossEntropyZeroClamp)
+{
+    Matrix pred({
+        { 0.0f, 1.0f, 0.0f }
+        });
+
+    Matrix target({
+        { 1.0f, 0.0f, 0.0f }
+        });
+
+    Matrix loss = pred.CrossEntropy(target);
+
+    // should not be -inf because of epsilon
+    EXPECT_FALSE(std::isinf(loss.At(0, 0)));
+    EXPECT_FALSE(std::isnan(loss.At(0, 0)));
+
+    // should be large but finite
+    EXPECT_GT(loss.At(0, 0), 0.0f);
+}

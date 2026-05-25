@@ -46,10 +46,12 @@ public:
 		m_Weights = Node<Matrix>::CreateWithSize(OutputLength, InputLength);
 		m_Biases  = Node<Matrix>::CreateWithSize(OutputLength, 1);
 
+		float scale = std::sqrt(1.0f / InputLength); // Xavier Initialization
+
 		for (size_t i = 0; i < m_Weights->GetValue().GetLength(); i++)
-			m_Weights->GetValue().SetValue()[i] = RandomFloatMinus1To1();
+			m_Weights->GetValue().SetValue()[i] = RandomFloatMinus1To1() * scale;
 		for (size_t i = 0; i < m_Biases->GetValue().GetLength(); i++)
-			m_Biases->GetValue().SetValue()[i]  = RandomFloatMinus1To1();
+			m_Biases->GetValue().SetValue()[i]  = RandomFloatMinus1To1() * scale;
 
 		m_Weights->SetAsTrainable();
 		m_Biases->SetAsTrainable();

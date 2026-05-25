@@ -10,14 +10,24 @@ class MNist
 public:
 	MNist()
 	{
-		m_NumImages = ReadImageData("datasets/mnist/train-images.idx3-ubyte",   &m_TrainImages);
-		int NumLabels = ReadLabelData("datasets/mnist/train-labels.idx1-ubyte", &m_TrainLabels);
+		m_TrainNumImages   = ReadImageData("datasets/mnist/train-images.idx3-ubyte", &m_TrainImages);
+		int TrainNumLabels = ReadLabelData("datasets/mnist/train-labels.idx1-ubyte", &m_TrainLabels);
 
-		if (m_NumImages < 0)
+		if (m_TrainNumImages < 0)
 			throw std::runtime_error("MNist: Failed to read training images");
-		if (NumLabels < 0)
+		if (TrainNumLabels < 0)
 			throw std::runtime_error("MNist: Failed to read training labels");
-		if (m_NumImages != NumLabels)
+		if (m_TrainNumImages != TrainNumLabels)
+			throw std::runtime_error("MNist: Number of images and labels does not match");
+
+		m_ValidNumImages   = ReadImageData("datasets/mnist/t10k-images.idx3-ubyte", &m_ValidationImages);
+		int ValidNumLabels = ReadLabelData("datasets/mnist/t10k-labels.idx1-ubyte", &m_ValidationLabels);
+
+		if (m_ValidNumImages < 0)
+			throw std::runtime_error("MNist: Failed to read training images");
+		if (ValidNumLabels < 0)
+			throw std::runtime_error("MNist: Failed to read training labels");
+		if (m_ValidNumImages != ValidNumLabels)
 			throw std::runtime_error("MNist: Number of images and labels does not match");
 	}
 	~MNist()
@@ -26,11 +36,13 @@ public:
 		delete[] m_TrainLabels;
 	}
 
-	int GetTrainingNumberOfImages() const { return m_NumImages; }
+	int GetTrainingNumberOfImages() const { return m_TrainNumImages; }
+	int GetValidationNumberOfImages() const { return m_ValidNumImages; }
 
 	std::vector<float> GetTrainingImageData(size_t Index) const;
-	std::vector<std::vector<float>> GetTrainingImageData2(size_t Index) const;
+	std::vector<float> GetValidationImageData(size_t Index) const;
 	int GetTrainingLabelData(size_t Index) const;
+	int GetValidationLabelData(size_t Index) const;
 
 	void PrintTrainImage(size_t Index);
 
@@ -41,8 +53,11 @@ private:
 
 	unsigned char* m_TrainImages;
 	unsigned char* m_TrainLabels;
+	unsigned char* m_ValidationImages;
+	unsigned char* m_ValidationLabels;
 
 	uint32_t m_Height = 0;
 	uint32_t m_Width  = 0;
-	uint32_t m_NumImages = 0;
+	uint32_t m_TrainNumImages = 0;
+	uint32_t m_ValidNumImages = 0;
 };
