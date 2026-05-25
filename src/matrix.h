@@ -37,18 +37,21 @@ public:
 		}
 	}
 
-	/*Matrix(const std::vector<float>& Vec)
-		: m_Length(Vec.size())
+	Matrix(const std::vector<float>& Vec)
+		: m_Rows(Vec.size()), m_Columns(1)
 	{
-		m_pValues = new float[m_Length];
+		m_pValues = new float[m_Rows * m_Columns];
 		std::copy(Vec.begin(), Vec.end(), m_pValues);
-	}*/
+	}
 
 	Matrix(size_t Rows, size_t Columns) : m_Rows(Rows), m_Columns(Columns)
 	{
 		m_pValues = new float[m_Rows * m_Columns];
 		std::fill(m_pValues, m_pValues + m_Rows * m_Columns, 0.0f);
 	}
+
+	Matrix(size_t Rows) : Matrix(Rows, 1)
+	{}
 
 	Matrix(const Matrix& other)
 		: m_Rows(other.m_Rows), m_Columns(other.m_Columns)

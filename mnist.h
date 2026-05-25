@@ -29,6 +29,7 @@ public:
 	int GetTrainingNumberOfImages() const { return m_NumImages; }
 
 	std::vector<float> GetTrainingImageData(size_t Index) const;
+	std::vector<std::vector<float>> GetTrainingImageData2(size_t Index) const;
 	int GetTrainingLabelData(size_t Index) const;
 
 	void PrintTrainImage(size_t Index);

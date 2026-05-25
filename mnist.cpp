@@ -106,6 +106,20 @@ std::vector<float> MNist::GetTrainingImageData(size_t Index) const
 
 
 
+std::vector<std::vector<float>> MNist::GetTrainingImageData2(size_t Index) const
+{
+    if (Index >= m_NumImages)
+        throw std::runtime_error("MNist: Index out of range");
+
+    std::vector<std::vector<float>> image_data;
+    for (uint32_t i = 0; i < m_Width * m_Height; i++)
+        image_data.push_back(std::vector({ (float)m_TrainImages[Index * m_Height * m_Width + i] / 255.0f }) );
+
+    return image_data;
+}
+
+
+
 int MNist::GetTrainingLabelData(size_t Index) const
 {
     if (Index >= m_NumImages)

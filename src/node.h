@@ -57,10 +57,8 @@ public:
 
     static NodePtr<T> Create(T Value, const std::string& Label = "") { return std::make_shared<Node<T>>(Value, Label); }
     static NodePtr<T> Create() { return std::make_shared<Node<T>>(); }
-    static NodePtr<T> CreateWithSize(size_t Length) { return std::make_shared<Node<T>>(Length); }
-    static NodePtr<T> CreateWithSize(size_t Length1, size_t Length2) { return std::make_shared<Node<T>>(Length1, Length2); }
-    static NodePtr<T> Create(std::initializer_list<float> init, const std::string& Label = "") { return std::make_shared<Node<T>>(init, Label); }
-    static NodePtr<T> Create(std::initializer_list<std::initializer_list<float>> init, const std::string& Label = "") { return std::make_shared<Node<T>>(init, Label); }
+    static NodePtr<T> CreateWithSize(size_t Length, const std::string& Label = "") { return std::make_shared<Node<T>>(Length, Label); }
+    static NodePtr<T> CreateWithSize(size_t Length1, size_t Length2, const std::string& Label = "") { return std::make_shared<Node<T>>(Length1, Length2, Label); }
 
     NodePtr<T> Sum();
 	NodePtr<T> ElementwiseAdd(const NodePtr<T>& other);

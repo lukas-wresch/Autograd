@@ -337,13 +337,21 @@ inline void TapeRecorder<T>::PrintTape() const
             op_text = "Multiply";
             op_sign = "*";
             break;
+        case Operator::ElementwiseMul:
+            op_text = "Elementwise-Multiply";
+            op_sign = "*";
+            break;
         case Operator::Tanh:
-            op_text = "tanh";
+            op_text = "Tanh";
             op_sign = "tanh";
+            break;
+        case Operator::Sum:
+            op_text = "Sum";
+            op_sign = "sum";
             break;
         }
 
-        std::string out_label = std::to_string(entry.out);
+        std::string out_label = "t" + std::to_string(entry.out);
         std::string a_label = std::to_string(entry.a);
         std::string b_label = std::to_string(entry.b);
 
@@ -359,18 +367,18 @@ inline void TapeRecorder<T>::PrintTape() const
 
 
         if (entry.a < 0)
-            printf("%.02d: %s %s [%dx%d] %s\n", ++i, op_text.c_str(),
+            printf("%.02d: %s: %s [%dx%d] %s\n", ++i, op_text.c_str(),
                 out_label.c_str(), (int)values[entry.out].GetRows(), (int)values[entry.out].GetColumns(),
                 op_sign.c_str());
 
         else if (entry.b < 0)
-            printf("%.02d: %s %s [%dx%d] = %s [%dx%d] %s\n", ++i, op_text.c_str(),
+            printf("%.02d: %s: %s [%dx%d] = %s(%s [%dx%d])\n", ++i, op_text.c_str(),
                 out_label.c_str(), (int)values[entry.out].GetRows(), (int)values[entry.out].GetColumns(),
-                a_label.c_str(), (int)values[entry.a].GetRows(), (int)values[entry.a].GetColumns(),
-                op_sign.c_str());
+                op_sign.c_str(),
+                a_label.c_str(), (int)values[entry.a].GetRows(), (int)values[entry.a].GetColumns());
         
         else
-            printf("%.02d: %s %s [%dx%d] = %s [%dx%d] %s %s [%dx%d]\n", ++i, op_text.c_str(),
+            printf("%.02d: %s: %s [%dx%d] = %s [%dx%d] %s %s [%dx%d]\n", ++i, op_text.c_str(),
                 out_label.c_str(), (int)values[entry.out].GetRows(), (int)values[entry.out].GetColumns(),
                 a_label.c_str(), (int)values[entry.a].GetRows(), (int)values[entry.a].GetColumns(),
                 op_sign.c_str(),

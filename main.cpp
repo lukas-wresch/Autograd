@@ -37,38 +37,38 @@ void MNist_Test()
 	mnist.PrintTrainImage(1);
 	mnist.PrintTrainImage(2);
 
-	std::vector<NodePtr<Vector>> xs;
-	std::vector<NodePtr<Vector>> labels;
+	std::vector<NodePtr<Matrix>> xs;
+	std::vector<NodePtr<Matrix>> labels;
 
 	for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
 	{
-		xs.push_back(Node<Vector>::Create(mnist.GetTrainingImageData(i)));
+		xs.push_back(Node<Matrix>::Create(mnist.GetTrainingImageData(i)));
 
 		int label = mnist.GetTrainingLabelData(i);
 		//Convert to one hot encoding
 		std::vector<float> one_hot(10, 0.0f);
 		one_hot[label] = 1.0f;
 
-		labels.push_back(Node<Vector>::Create(one_hot));
+		labels.push_back(Node<Matrix>::Create(one_hot));
 	}
 
 
-	auto tape = TapeRecorder<Vector>();
-	SGD<Vector> sgd(0.02f);
-	const int batch_size = 1;//!!!
+	auto tape = TapeRecorder<Matrix>();
+	SGD<Matrix> sgd(0.03f);
+	const int batch_size = 8;
 
 	{
-		auto x = Node<Vector>::Create(784, "input");
-		auto label = Node<Vector>::Create(10, "label");
+		auto x = Node<Matrix>::CreateWithSize(784, "input");
+		auto label = Node<Matrix>::CreateWithSize(10, "label");
 
-		Layer2D<Vector> L1(784, 128, Activation::Tanh);
-		Layer2D<Vector> L2(128, 10, Activation::Tanh);
+		Layer3D L1(784, 128, Activation::Tanh);
+		Layer3D L2(128,  10, Activation::Tanh);
 
 		auto h1 = L1.Forward(x);
 		auto pred = L2.Forward(h1);
 		pred->SetLabel("output");
 
-		auto loss = ( (pred - label) * (pred - label) )->Sum();
+		auto loss = (  (pred - label)->ElementwiseMul(pred - label)  )->Sum();
 		loss->SetLabel("loss");
 
 		tape.Compile(loss);
@@ -87,7 +87,7 @@ void MNist_Test()
 
 	float epoch_loss = 0.0f;
 
-	for (size_t epoch = 0; epoch < 30; epoch++)
+	for (size_t epoch = 0; epoch < 20; epoch++)
 	{
 		ShuffleDataset(xs, labels);
 
@@ -130,17 +130,17 @@ void MNist_Test()
 
 	int correct = 0;
 
-	/*for (size_t i = 0; i < xs.size(); i++)
+	for (size_t i = 0; i < xs.size(); i++)
 	{
 		//auto pred = L2.Forward(L1.Forward(xs[i]));
 
 		//Convert one hot to class index
 		int pred_class = 0;
-		float max_val = pred->GetValue()[0];
+		float max_val = output->GetValue()[0];
 		int target_class = -1;
 		for (int c = 1; c < 10; c++)
 		{
-			float val = pred->GetValue()[c];
+			float val = output->GetValue()[c];
 			if (val > max_val)
 			{
 				max_val = val;
@@ -153,7 +153,7 @@ void MNist_Test()
 		float target = labels[i]->GetValue()[0];
 
 		if (pred_class == target_class) correct++;
-	}*/
+	}
 
 	std::cout << "Final Accuracy: " << (float)correct / xs.size() << std::endl;
 }
@@ -529,136 +529,7 @@ int main()
 
 	//SpiralClassification_MSE();
 
-	//MNist_Test();
-
-
-
-	{
-
-		std::vector<NodePtr<Matrix>> xs;
-		std::vector<NodePtr<Matrix>> labels;
-
-		const int points_per_class = 50;
-		const float pi = 3.14159265f;
-
-		// generate 2-class spiral dataset
-		for (int class_id = 0; class_id < 2; class_id++)
-		{
-			for (int i = 0; i < points_per_class; i++)
-			{
-				float r = (float)i / points_per_class;
-
-				// spiral angle
-				float t = 4.0f * pi * r + class_id * pi;
-
-				float x = r * std::sin(t);
-				float y = r * std::cos(t);
-
-				xs.push_back(Node<Matrix>::Create({ {x}, {y} }));
-
-				// one-hot-ish target for MSE
-				if (class_id == 0)
-					labels.push_back(Node<Matrix>::Create({ { 0.0f } }));
-				else
-					labels.push_back(Node<Matrix>::Create({ { 1.0f } }));
-			}
-		}
-
-		// MLP: 2 -> 32 -> 32 -> 1
-		Layer3D L1( 2, 32, Activation::Tanh);
-		Layer3D L2(32, 32, Activation::Tanh);
-		Layer3D L3(32,  1, Activation::Tanh);
-
-		SGD<Matrix> sgd(0.05f);
-		const int batch_size = 8;
-
-		auto x_ = Node<Matrix>::Create({ {0.0f}, {0.0f} }, "input");
-		auto label_ = Node<Matrix>::Create({ { 0.0f } }, "label");
-
-		auto h1 = L1.Forward(x_);
-		auto h2 = L2.Forward(h1);
-		auto out_ = L3.Forward(h2);
-
-		auto loss_ = (out_ - label_) * (out_ - label_);
-		out_->SetLabel("output");
-		loss_->SetLabel("loss");
-
-		auto tape = TapeRecorder<Matrix>();
-		tape.Compile(loss_);
-		sgd.SetTrainableParams(tape);
-
-		auto input = tape.SetValue("input");
-		auto label = tape.SetValue("label");
-		auto output = tape.SetValue("output");
-		auto loss = tape.SetValue("loss");
-
-		tape.PrintTape();
-
-		//Training
-
-		float epoch_loss = 0.0f;
-
-		for (size_t epoch = 0; epoch < 1500; epoch++)
-		{
-			ShuffleDataset(xs, labels);
-
-			epoch_loss = 0.0f;
-
-			for (size_t i = 0; i < xs.size(); i += batch_size)
-			{
-				size_t end = std::min(i + batch_size, xs.size());
-
-				size_t actual_batch_size = end - i;
-
-				float batch_loss = 0.0f;
-
-				tape.ZeroGradients();
-
-				for (size_t j = i; j < end; j++)
-				{
-					*input = xs[j]->GetValue();
-					*label = labels[j]->GetValue();
-
-					tape.Forward();
-					tape.Backward();
-
-					epoch_loss += loss->GetValue()[0];
-					batch_loss += loss->GetValue()[0];
-				}
-
-				sgd.Step(1.0f / actual_batch_size);
-			}
-
-			epoch_loss /= xs.size();
-
-			if (epoch % 100 == 0)
-				std::cout << "Epoch " << epoch << " Loss: " << epoch_loss << std::endl;
-		}
-
-		// evaluate classification accuracy
-		int correct = 0;
-
-		for (size_t i = 0; i < xs.size(); i++)
-		{
-			*input = xs[i]->GetValue();
-
-			tape.Forward();
-
-			float pred = output->GetValue()[0];
-			float target = labels[i]->GetValue()[0];
-
-			int predicted_class = pred   > 0.5f ? 1 : 0;
-			int target_class    = target > 0.5f ? 1 : 0;
-
-			if (predicted_class == target_class)
-				correct++;
-		}
-
-		float accuracy = (float)correct / xs.size();
-
-		std::cout << "Final Accuracy: " << accuracy << std::endl;
-
-	}
+	MNist_Test();
 
 
 
