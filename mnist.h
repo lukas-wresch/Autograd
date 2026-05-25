@@ -8,10 +8,10 @@
 class MNist
 {
 public:
-	MNist()
+	MNist(const std::string& FolderName = "mnist")
 	{
-		m_TrainNumImages   = ReadImageData("datasets/mnist/train-images.idx3-ubyte", &m_TrainImages);
-		int TrainNumLabels = ReadLabelData("datasets/mnist/train-labels.idx1-ubyte", &m_TrainLabels);
+		m_TrainNumImages   = ReadImageData("datasets/" + FolderName + "/train-images.idx3-ubyte", &m_TrainImages);
+		int TrainNumLabels = ReadLabelData("datasets/" + FolderName + "/train-labels.idx1-ubyte", &m_TrainLabels);
 
 		if (m_TrainNumImages < 0)
 			throw std::runtime_error("MNist: Failed to read training images");
@@ -20,8 +20,8 @@ public:
 		if (m_TrainNumImages != TrainNumLabels)
 			throw std::runtime_error("MNist: Number of images and labels does not match");
 
-		m_ValidNumImages   = ReadImageData("datasets/mnist/t10k-images.idx3-ubyte", &m_ValidationImages);
-		int ValidNumLabels = ReadLabelData("datasets/mnist/t10k-labels.idx1-ubyte", &m_ValidationLabels);
+		m_ValidNumImages   = ReadImageData("datasets/" + FolderName + "/t10k-images.idx3-ubyte", &m_ValidationImages);
+		int ValidNumLabels = ReadLabelData("datasets/" + FolderName + "/t10k-labels.idx1-ubyte", &m_ValidationLabels);
 
 		if (m_ValidNumImages < 0)
 			throw std::runtime_error("MNist: Failed to read training images");
@@ -34,6 +34,8 @@ public:
 	{
 		delete[] m_TrainImages;
 		delete[] m_TrainLabels;
+		delete[] m_ValidationImages;
+		delete[] m_ValidationLabels;
 	}
 
 	int GetTrainingNumberOfImages() const { return m_TrainNumImages; }

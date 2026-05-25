@@ -63,6 +63,8 @@ public:
     static NodePtr<T> Create() { return std::make_shared<Node<T>>(); }
     static NodePtr<T> CreateWithSize(size_t Length, const std::string& Label = "") { return std::make_shared<Node<T>>(Length, Label); }
     static NodePtr<T> CreateWithSize(size_t Length1, size_t Length2, const std::string& Label = "") { return std::make_shared<Node<T>>(Length1, Length2, Label); }
+    static NodePtr<T> Create(std::initializer_list<float> init, const std::string& Label = "") { return std::make_shared<Node<T>>(init, Label); }
+    static NodePtr<T> Create(std::initializer_list<std::initializer_list<float>> init, const std::string& Label = "") { return std::make_shared<Node<T>>(init, Label); }
 
     NodePtr<T> Sum();
 	NodePtr<T> ElementwiseAdd(const NodePtr<T>& other);
@@ -131,15 +133,15 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
     switch (op)
     {
     case Operator::Add:
-        left->grad  += grad;
+        left->grad += grad;
         right->grad += grad;
         break;
     case Operator::Subtract:
-        left->grad  += grad;
+        left->grad += grad;
         right->grad -= grad;
         break;
     case Operator::Multiply:
-        left->grad  += grad * right->value.Transpose();
+        left->grad += grad * right->value.Transpose();
         right->grad += left->value.Transpose() * grad;
         break;
     case Operator::Sum:
@@ -147,11 +149,11 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
         left->grad += grad;
         break;
     case Operator::ElementwiseAdd:
-        left->grad  += grad;
+        left->grad += grad;
         right->grad += grad.Sum();
         break;
     case Operator::ElementwiseMul:
-        left->grad  += right->value.ElementwiseMul(grad);
+        left->grad += right->value.ElementwiseMul(grad);
         right->grad += left->value.ElementwiseMul(grad);
         break;
     case Operator::Pack:
@@ -162,8 +164,44 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
         left->grad += (1.0f - value.ElementwiseMul(value)).ElementwiseMul(grad);//tanh' = 1 - tanh^2
         break;
     case Operator::ReLU:
-		left->grad += value.Heaviside().ElementwiseMul(grad);//ReLU' = 1 if x > 0 else 0
+        left->grad += value.Heaviside().ElementwiseMul(grad);//ReLU' = 1 if x > 0 else 0
         break;
+    case Operator::Softmax_CrossEntropy:
+    {
+        // logits are stored in "left"
+        T& logits = left->value;
+        T& grad_logits = left->grad;
+
+        const int target = (int)right->value.GetValue()[0];
+
+        // -----------------------------------
+        // forward softmax recomputation
+        // (oder cached probabilities!)
+        // -----------------------------------
+        float max_val = logits.Max(); // numerical stability
+
+        float sum = 0.0f;
+        std::vector<float> probs(logits.GetLength());
+
+        for (size_t i = 0; i < logits.GetLength(); i++)
+        {
+            probs[i] = std::exp(logits[i] - max_val);
+            sum += probs[i];
+        }
+
+        for (float& p : probs)
+            p /= sum;
+
+        // -----------------------------------
+        // backward: dL/dlogits = p - y
+        // -----------------------------------
+        for (size_t i = 0; i < logits.GetLength(); i++)
+        {
+            float y = (i == (size_t)target) ? 1.0f : 0.0f;
+            grad_logits.SetValue()[i] += (probs[i] - y) * grad[0];
+        }
+        break;
+    }
     default:
         throw std::runtime_error("Unsupported Operation");
         break;
@@ -380,10 +418,10 @@ NodePtr<T> Node<T>::Softmax()
 template<typename T>
 NodePtr<T> Node<T>::Softmax_CrossEntropy(NodePtr<T> Target)
 {
-    auto out = std::make_shared<Node<T>>(this->value.Softmax().Crossentropy(Target->GetValue));
+    auto out = std::make_shared<Node<T>>(this->value.Softmax().CrossEntropy(Target->GetValue()));
 
-    out->op = Operator::Softmax_Crossentropy;
+    out->op = Operator::Softmax_CrossEntropy;
     out->left = this->shared_from_this();
-    out->right = nullptr;
+    out->right = Target;
     return out;
 }

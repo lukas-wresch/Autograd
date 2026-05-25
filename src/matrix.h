@@ -152,7 +152,8 @@ public:
 		m_Columns = 0;
 	}
 
-	size_t GetLength() const { return m_Rows * m_Columns; }
+	size_t GetLength() const { return m_Rows * m_Columns; }//DEPRECATED
+	size_t GetSize() const { return m_Rows * m_Columns; }
 
 	const float* GetValue() const { return m_pValues; }
 	float* SetValue() { return m_pValues; }
@@ -188,8 +189,34 @@ public:
 		float sum = 0.0f;
 		for (size_t i = 0; i < m_Rows * m_Columns; i++)
 			sum += m_pValues[i];
-		Matrix result({ { sum } });
+		Matrix result({ sum });
 		return result;
+	}
+
+	float Max() const
+	{
+		float max = m_pValues[0];
+		for (size_t i = 1; i < m_Rows * m_Columns; i++)
+		{
+			if (m_pValues[i] > max)
+				max = m_pValues[i];
+		}
+		return max;
+	}
+
+	size_t ArgMax() const
+	{
+		size_t index = 0;
+		float max = m_pValues[0];
+		for (size_t i = 1; i < m_Rows * m_Columns; i++)
+		{
+			if (m_pValues[i] > max)
+			{
+				max = m_pValues[i];
+				index = i;
+			}
+		}
+		return index;
 	}
 
 	Matrix Tanh() const
@@ -243,10 +270,24 @@ public:
 
 	Matrix CrossEntropy(const Matrix& Target) const
 	{
+		const float epsilon = 0.00001f;
+
+		//Target only contains the label
+		if (Target.m_Rows == 1 && Target.m_Columns == 1)
+		{
+			int label = (int)(Target.m_pValues[0]);
+
+			if (label < 0 || label >= (int)(m_Rows * m_Columns))
+				throw std::runtime_error("Matrix CrossEntropy invalid label index");
+
+			Matrix ret(1, 1);
+			*ret.SetValue() = -std::log(m_pValues[label] + epsilon);
+			return ret;
+		}
+
+		//Target is ont-hot vector
 		if (m_Rows != Target.m_Rows || m_Columns != Target.m_Columns)
 			throw std::runtime_error("Matrix CrossEntropy size mismatch");
-
-		const float epsilon = 0.00001f;
 
 		float loss = 0.0f;
 
@@ -449,7 +490,7 @@ inline Matrix operator-(float lhs, const Matrix& rhs)
 {
 	Matrix result = rhs;
 	float* out = result.SetValue();
-	for (size_t i = 0; i < rhs.GetLength(); i++)
+	for (size_t i = 0; i < rhs.GetSize(); i++)
 		out[i] = lhs - out[i];
 	return result;
 }
@@ -460,7 +501,7 @@ inline Matrix operator*(float lhs, const Matrix& rhs)
 {
 	Matrix result = rhs;
 	float* out = result.SetValue();
-	for (size_t i = 0; i < rhs.GetLength(); i++)
+	for (size_t i = 0; i < rhs.GetSize(); i++)
 		out[i] = lhs * rhs[i];
 	return result;
 }

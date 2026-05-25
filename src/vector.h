@@ -93,6 +93,17 @@ public:
 		return result;
 	}
 
+	float Max() const
+	{
+		float max = m_pValues[0];
+		for (size_t i = 1; i < m_Length; i++)
+		{
+			if (m_pValues[i] > max)
+				max = m_pValues[i];
+		}
+		return max;
+	}
+
 	Vector& operator=(const Vector& other)
 	{
 		if (this == &other) return *this;
@@ -145,6 +156,58 @@ public:
 		for (size_t i = 0; i < m_Length; i++)
 			out.m_pValues[i] = (m_pValues[i] > 0.0f ? 1.0f : 0.0f);
 		return out;
+	}
+
+	Vector Softmax() const
+	{
+		float max_value = m_pValues[0];
+		for (size_t i = 1; i < m_Length; i++)
+			if (m_pValues[i] > max_value)
+				max_value = m_pValues[i];
+
+		Vector copy = *this;
+		float sum = 0.0f;
+		for (size_t i = 0; i < m_Length; i++)
+		{
+			copy.m_pValues[i] = std::exp(m_pValues[i] - max_value);
+			sum += copy.m_pValues[i];
+		}
+
+		for (size_t i = 0; i < m_Length; i++)
+			copy.m_pValues[i] /= sum;
+
+		return copy;
+	}
+
+	Vector CrossEntropy(const Vector& Target) const
+	{
+		const float epsilon = 0.00001f;
+
+		//Target only contains the label
+		if (Target.m_Length == 1)
+		{
+			int label = (int)(Target.m_pValues[0]);
+
+			if (label < 0 || label >= (int)(m_Length))
+				throw std::runtime_error("Vector CrossEntropy invalid label index");
+
+			Vector ret(1);
+			*ret.SetValue() = -std::log(m_pValues[label] + epsilon);
+			return ret;
+		}
+
+		//Target is ont-hot vector
+		if (m_Length != Target.m_Length)
+			throw std::runtime_error("Vector CrossEntropy size mismatch");
+
+		float loss = 0.0f;
+
+		for (size_t i = 0; i < m_Length; i++)
+			loss -= Target.m_pValues[i] * std::log(m_pValues[i] + epsilon);
+
+		Vector ret(1);
+		*ret.SetValue() = loss;
+		return ret;
 	}
 
 	[[nodiscard]]

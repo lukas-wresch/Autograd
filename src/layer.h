@@ -71,10 +71,11 @@ public:
 			throw std::runtime_error("Layer: Unknown InitType");
 		}
 
-		for (size_t i = 0; i < m_Weights->GetValue().GetLength(); i++)
+		for (size_t i = 0; i < m_Weights->GetValue().GetSize(); i++)
 			m_Weights->GetValue().SetValue()[i] = RandomFloatMinus1To1() * scale;
-		for (size_t i = 0; i < m_Biases->GetValue().GetLength(); i++)
-			m_Biases->GetValue().SetValue()[i]  = RandomFloatMinus1To1() * scale;
+		for (size_t i = 0; i < m_Biases->GetValue().GetSize(); i++)
+			//m_Biases->GetValue().SetValue()[i]  = RandomFloatMinus1To1() * scale;
+			m_Biases->GetValue().SetValue()[i] = 0.0f;
 
 		m_Weights->SetAsTrainable();
 		m_Biases->SetAsTrainable();
@@ -134,12 +135,12 @@ NodePtr<Matrix> Layer3D::Forward(const NodePtr<Matrix>& Input) const
 	case Activation::Identity:
 		return pre_activation;
 		break;
-		/*case Activation::ReLU:
-			z.SetValue(std::max(0.0f, z.GetValue()));
-			break;
-		case Activation::Sigmoid:
-			z.SetValue(1.0f / (1.0f + std::exp(-z.GetValue())));
-			break;*/
+	case Activation::ReLU:
+		return pre_activation->ReLU();
+		break;
+		//case Activation::Sigmoid:
+			//z.SetValue(1.0f / (1.0f + std::exp(-z.GetValue())));
+			//break;
 	case Activation::Tanh:
 		return pre_activation->Tanh();
 		break;

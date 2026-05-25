@@ -161,6 +161,8 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
     case Operator::Multiply:
     case Operator::ElementwiseAdd:
     case Operator::ElementwiseMul:
+    case Operator::CrossEntropy:
+    case Operator::Softmax_CrossEntropy:
         AddOpEntry(node->op, GetID(node->left), GetID(node->right), node_id);
         break;
 
@@ -168,6 +170,7 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
 	case Operator::Sum:
     case Operator::Tanh:
     case Operator::ReLU:
+    case Operator::Softmax:
         AddOpEntry(node->op, GetID(node->left), -1, node_id);
         break;
 
@@ -230,6 +233,12 @@ void TapeRecorder<T>::Forward()
 
         case Operator::Tanh:
             values[entry.out] = values[entry.a].Tanh();
+            break;
+        case Operator::ReLU:
+            values[entry.out] = values[entry.a].ReLU();
+            break;
+        case Operator::Softmax_CrossEntropy:
+            values[entry.out] = values[entry.a].Softmax().CrossEntropy(values[entry.b]);
             break;
 
         default:
@@ -305,6 +314,43 @@ inline void TapeRecorder<T>::Backward()
             grads[entry.a] += values[entry.out].Heaviside().ElementwiseMul(outer_grad);//ReLU' = 1 if x > 0 else 0
             break;
 
+        case Operator::Softmax_CrossEntropy:
+        {
+            // logits are stored in "left"
+            T& logits = values[entry.a];
+            T& grad_logits = grads[entry.a];
+
+            const int target = (int)values[entry.b].GetValue()[0];
+
+            // -----------------------------------
+            // forward softmax recomputation
+            // (oder cached probabilities!)
+            // -----------------------------------
+            float max_val = logits.Max(); // numerical stability
+
+            float sum = 0.0f;
+            std::vector<float> probs(logits.GetLength());
+
+            for (size_t i = 0; i < logits.GetLength(); i++)
+            {
+                probs[i] = std::exp(logits[i] - max_val);
+                sum += probs[i];
+            }
+
+            for (float& p : probs)
+                p /= sum;
+
+            // -----------------------------------
+            // backward: dL/dlogits = p - y
+            // -----------------------------------
+            for (size_t i = 0; i < logits.GetLength(); i++)
+            {
+                float y = (i == (size_t)target) ? 1.0f : 0.0f;
+                grad_logits.SetValue()[i] += (probs[i] - y) * outer_grad[0];
+            }
+            break;
+        }
+
         default:
             throw std::runtime_error("Unsupported Operation");
         }
@@ -337,6 +383,10 @@ inline void TapeRecorder<T>::PrintTape() const
             op_text = "Multiply";
             op_sign = "*";
             break;
+        case Operator::ElementwiseAdd:
+            op_text = "Elementwise-Add";
+            op_sign = "+";
+            break;
         case Operator::ElementwiseMul:
             op_text = "Elementwise-Multiply";
             op_sign = "*";
@@ -345,9 +395,25 @@ inline void TapeRecorder<T>::PrintTape() const
             op_text = "Tanh";
             op_sign = "tanh";
             break;
+        case Operator::ReLU:
+            op_text = "ReLU";
+            op_sign = "relu";
+            break;
         case Operator::Sum:
             op_text = "Sum";
             op_sign = "sum";
+            break;
+        case Operator::Softmax:
+            op_text = "Softmax";
+            op_sign = "softmax";
+            break;
+        case Operator::CrossEntropy:
+            op_text = "CrossEntropy";
+            op_sign = "crossentropy";
+            break;
+        case Operator::Softmax_CrossEntropy:
+            op_text = "Softmax_CrossEntropy";
+            op_sign = "smce";
             break;
         }
 

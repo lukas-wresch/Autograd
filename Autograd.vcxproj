@@ -127,10 +127,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="cifar.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="mnist.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="cifar.h" />
     <ClInclude Include="mnist.h" />
     <ClInclude Include="src\layer.h" />
     <ClInclude Include="src\matrix.h" />

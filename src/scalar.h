@@ -70,10 +70,26 @@ public:
 		return std::fmax(0.0f, value);
 	}
 
+	float Max() const
+	{
+		return value;
+	}
+
 	//Derivate of ReLU
 	Scalar Heaviside() const
 	{
 		return Scalar(value > 0.0f ? 1.0f : 0.0f);
+	}
+
+	Scalar Softmax() const
+	{
+		return Scalar(1);
+	}
+
+	Scalar CrossEntropy(const Scalar& Target) const
+	{
+		throw std::runtime_error("Scalar CrossEntropy not implemented");
+		return Scalar(0.0f);
 	}
 	
 	void operator+=(const Scalar& rhs)

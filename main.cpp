@@ -8,6 +8,8 @@
 #include "src/layer.h"
 #include "src/sgd.h"
 #include "mnist.h"
+#include "cifar.h"
+
 
 
 template<typename T>
@@ -28,10 +30,10 @@ void ShuffleDataset(std::vector<NodePtr<T>>& xs, std::vector<NodePtr<T>>& labels
 
 
 
-
 void MNist_Test()
 {
-	MNist mnist = MNist();
+	//MNist mnist = MNist();
+	MNist mnist = MNist("mnist-fashion");
 
 	mnist.PrintTrainImage(0);
 	mnist.PrintTrainImage(1);
@@ -52,7 +54,8 @@ void MNist_Test()
 		std::vector<float> one_hot(10, 0.0f);
 		one_hot[label] = 1.0f;
 
-		labels.push_back(Node<Matrix>::Create(one_hot));
+		//labels.push_back(Node<Matrix>::Create(one_hot));
+		labels.push_back(Node<Matrix>::Create({ (float)label }));
 	}
 
 	for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
@@ -64,30 +67,189 @@ void MNist_Test()
 		std::vector<float> one_hot(10, 0.0f);
 		one_hot[label] = 1.0f;
 
-		val_labels.push_back(Node<Matrix>::Create(one_hot));
+		//val_labels.push_back(Node<Matrix>::Create(one_hot));
+		val_labels.push_back(Node<Matrix>::Create({ (float)label }));
 	}
 
 
 	auto tape = TapeRecorder<Matrix>();
-	SGD<Matrix> sgd(0.05f);
+	SGD<Matrix> sgd(0.03f, 0.7f);
 	const int batch_size = 8;
 
 	{
 		auto x = Node<Matrix>::CreateWithSize(784, "input");
-		auto label = Node<Matrix>::CreateWithSize(10, "label");
+		auto label = Node<Matrix>::CreateWithSize(1, "label");
 
-		Layer3D L1(784, 128, Activation::Tanh);
-		Layer3D L2(128,  10, Activation::Identity);
+		Layer3D L1(784, 128, Activation::ReLU, InitType::Xavier);
+		Layer3D L2(128, 10, Activation::Identity, InitType::Xavier);
 
 		auto h1 = L1.Forward(x);
 		auto pred = L2.Forward(h1);
 		pred->SetLabel("output");
 
-		auto loss = (  (pred - label)->ElementwiseMul(pred - label)  )->Sum();
+		//auto loss = (  (pred - label)->ElementwiseMul(pred - label)  )->Sum();
+		auto loss = pred->Softmax_CrossEntropy(label);
 		loss->SetLabel("loss");
 
 		tape.Compile(loss);
 		sgd.SetTrainableParams(tape);
+		std::cout << "Number of parameters: " << sgd.GetNumberOfParameters() << std::endl;
+	}
+
+	auto input = tape.SetValue("input");
+	auto label = tape.SetValue("label");
+	auto output = tape.SetValue("output");
+	auto loss = tape.SetValue("loss");
+
+	tape.PrintTape();
+
+
+	// Forward pass
+	auto calculate_acc = [&]() {
+		int correct = 0;
+		int val_correct = 0;
+
+		for (size_t i = 0; i < xs.size(); i++)
+		{
+			*input = xs[i]->GetValue();
+
+			tape.Forward();
+
+			//Convert one hot to class index
+			int pred_class = (int)output->ArgMax();
+			int target_class = (int)labels[i]->GetValue()[0];
+
+			if (pred_class == target_class) correct++;
+		}
+
+		for (size_t i = 0; i < val_xs.size(); i++)
+		{
+			*input = val_xs[i]->GetValue();
+
+			tape.Forward();
+
+			//Convert one hot to class index
+			int pred_class = (int)output->ArgMax();
+			int target_class = (int)val_labels[i]->GetValue()[0];
+
+			if (pred_class == target_class) val_correct++;
+		}
+
+		return std::tuple{ (float)correct * 100.0f / xs.size(), (float)val_correct * 100.0f / val_xs.size() };
+		};
+
+
+	//Training loop
+
+	float epoch_loss = 0.0f;
+
+	for (size_t epoch = 0; epoch < 10; epoch++)
+	{
+		ShuffleDataset(xs, labels);
+
+
+		epoch_loss = 0.0f;
+
+		for (size_t i = 0; i < xs.size(); i += batch_size)
+		{
+			//if (i / batch_size % 500 == 0)
+				//std::cout << "Batch " << i / batch_size << " of " << xs.size() / batch_size << std::endl;
+
+			size_t end = std::min(i + batch_size, xs.size());
+
+			size_t actual_batch_size = end - i;
+
+			float batch_loss = 0.0f;
+
+			tape.ZeroGradients();
+
+			for (size_t j = i; j < end; j++)
+			{
+				*input = xs[j]->GetValue();
+				*label = labels[j]->GetValue();
+
+				tape.Forward();
+				tape.Backward();
+
+				epoch_loss += loss->GetValue()[0];
+				batch_loss += loss->GetValue()[0];
+			}
+
+			sgd.Step(1.0f / actual_batch_size);
+		}
+
+		epoch_loss /= xs.size();
+
+		//if (epoch % 2 == 0)
+		std::cout << "Epoch " << epoch + 1 << " Loss: " << epoch_loss << std::endl;
+		auto [train_acc, val_acc] = calculate_acc();
+		std::cout << "Train Accuracy: " << train_acc << "%" << std::endl;
+		std::cout << "Valid Accuracy: " << val_acc << "%" << std::endl;
+
+		sgd.SetLearningRate(0.95f * sgd.GetLearningRate());
+	}
+
+	/*auto [train_acc, val_acc] = calculate_acc();
+	std::cout << "Final Train Accuracy: " << train_acc << "%" << std::endl;
+	std::cout << "Final Valid Accuracy: " << val_acc   << "%" << std::endl;*/
+}
+
+
+
+void Cifar_Test()
+{
+	Cifar mnist = Cifar();
+
+	mnist.PrintTrainImage(0);
+	mnist.PrintTrainImage(1);
+	mnist.PrintTrainImage(2);
+
+	std::vector<NodePtr<Matrix>> xs;
+	std::vector<NodePtr<Matrix>> labels;
+
+	std::vector<NodePtr<Matrix>> val_xs;
+	std::vector<NodePtr<Matrix>> val_labels;
+
+	for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
+	{
+		xs.push_back(Node<Matrix>::Create(mnist.GetTrainingImageData(i)));
+
+		int label = mnist.GetTrainingLabelData(i);
+
+		labels.push_back(Node<Matrix>::Create({ (float)label }));
+	}
+
+	for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
+	{
+		val_xs.push_back(Node<Matrix>::Create(mnist.GetValidationImageData(i)));
+
+		int label = mnist.GetValidationLabelData(i);
+
+		val_labels.push_back(Node<Matrix>::Create({ (float)label }));
+	}
+
+
+	auto tape = TapeRecorder<Matrix>();
+	SGD<Matrix> sgd(0.03f, 0.7f);
+	const int batch_size = 8;
+
+	{
+		auto x = Node<Matrix>::CreateWithSize(32*32 * 3, "input");
+		auto label = Node<Matrix>::CreateWithSize(1, "label");
+
+		Layer3D L1(32*32*3, 128, Activation::ReLU, InitType::Xavier);
+		Layer3D L2(128,  10, Activation::Identity, InitType::Xavier);
+
+		auto h1 = L1.Forward(x);
+		auto pred = L2.Forward(h1);
+		pred->SetLabel("output");
+
+		auto loss = pred->Softmax_CrossEntropy(label);
+		loss->SetLabel("loss");
+
+		tape.Compile(loss);
+		sgd.SetTrainableParams(tape);
+		std::cout << "Number of parameters: " << sgd.GetNumberOfParameters() << std::endl;
 	}
 
 	auto input  = tape.SetValue("input");
@@ -110,20 +272,8 @@ void MNist_Test()
 			tape.Forward();
 
 			//Convert one hot to class index
-			int pred_class = 0;
-			float max_val = output->GetValue()[0];
-			int target_class = 0;
-			for (int c = 1; c < 10; c++)
-			{
-				float val = output->GetValue()[c];
-				if (val > max_val)
-				{
-					max_val = val;
-					pred_class = c;
-				}
-				if (labels[i]->GetValue()[c] == 1.0f)
-					target_class = c;
-			}
+			int pred_class = (int)output->ArgMax();
+			int target_class = (int)labels[i]->GetValue()[0];
 
 			if (pred_class == target_class) correct++;
 		}
@@ -135,20 +285,8 @@ void MNist_Test()
 			tape.Forward();
 
 			//Convert one hot to class index
-			int pred_class = 0;
-			float max_val = output->GetValue()[0];
-			int target_class = 0;
-			for (int c = 1; c < 10; c++)
-			{
-				float val = output->GetValue()[c];
-				if (val > max_val)
-				{
-					max_val = val;
-					pred_class = c;
-				}
-				if (val_labels[i]->GetValue()[c] == 1.0f)
-					target_class = c;
-			}
+			int pred_class = (int)output->ArgMax();
+			int target_class = (int)val_labels[i]->GetValue()[0];
 
 			if (pred_class == target_class) val_correct++;
 		}
@@ -203,6 +341,8 @@ void MNist_Test()
 		auto [train_acc, val_acc] = calculate_acc();
 		std::cout << "Train Accuracy: " << train_acc << "%" << std::endl;
 		std::cout << "Valid Accuracy: " << val_acc << "%" << std::endl;
+
+		sgd.SetLearningRate(0.95f * sgd.GetLearningRate());
 	}
 
 	/*auto [train_acc, val_acc] = calculate_acc();
@@ -581,7 +721,9 @@ int main()
 
 	//SpiralClassification_MSE();
 
-	MNist_Test();
+	//MNist_Test();
+
+	Cifar_Test();
 
 
 

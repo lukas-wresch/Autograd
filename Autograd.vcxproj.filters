@@ -21,6 +21,9 @@
     <ClCompile Include="mnist.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="cifar.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\layer.h">
@@ -51,6 +54,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\tensor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cifar.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
