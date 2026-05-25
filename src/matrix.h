@@ -201,20 +201,19 @@ public:
 		return out;
 	}
 
-	/*[[nodiscard]]
+	[[nodiscard]]
 	Matrix ElementwiseAdd(const Matrix& other) const
 	{
-		return *this + other;
-		/*if (m_Rows != other.m_Rows)
-			throw std::runtime_error("Vector size mismatch");
+		if (m_Rows != other.m_Rows || m_Columns != other.m_Columns)
+			throw std::runtime_error("Matrix size mismatch");
 
-		Matrix result(1, 1);
+		Matrix result(m_Rows, m_Columns);
 
-		//for (size_t i = 0; i < m_Length; i++)
-			//result.m_pValues[i] = m_pValues[i] + other.m_pValues[0];
+		for (size_t i = 0; i < m_Rows * m_Columns; i++)
+			result.m_pValues[i] = m_pValues[i] + other.m_pValues[0];
 
 		return result;
-	}*/
+	}
 
 	void operator+=(const Matrix& rhs)
 	{

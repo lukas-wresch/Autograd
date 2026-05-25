@@ -83,8 +83,8 @@ public:
     {
         values.push_back(v);
 
-        T new_grad{};
-        new_grad.SetLength(v.GetLength());//initialize gradient with same length
+        T new_grad(v);//initialize gradient with same length
+        new_grad.SetZero();
 		grads.push_back(new_grad);
 
         trainable.push_back(Trainable);
@@ -114,6 +114,7 @@ private:
     std::vector<bool> trainable;
 
     std::unordered_map<std::string, int> label_to_id;
+    std::unordered_map<int, std::string> id_to_label;
 };
 
 
@@ -141,7 +142,11 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
 
 
     auto node_id = AddDataEntry(node->GetValue(), node->IsTrainable());
-    label_to_id.insert({ node->GetLabel(), node_id });
+    if (!node->GetLabel().empty())
+    {
+        label_to_id.insert({ node->GetLabel(), node_id });
+        id_to_label.insert({ node_id, node->GetLabel() });
+    }
 	node_to_id.insert({ node, node_id });
     std::vector<int> input_ids;
 
@@ -316,17 +321,59 @@ inline void TapeRecorder<T>::PrintTape() const
     for (const auto& entry : tape)
     {
         std::string op_text = "???";
+        std::string op_sign = "";
 
         switch (entry.op)
         {
         case Operator::Add:
             op_text = "Add";
+            op_sign = "+";
             break;
         case Operator::Subtract:
-            op_text = "Add";
+            op_text = "Subtract";
+            op_sign = "-";
+            break;
+        case Operator::Multiply:
+            op_text = "Multiply";
+            op_sign = "*";
+            break;
+        case Operator::Tanh:
+            op_text = "tanh";
+            op_sign = "tanh";
             break;
         }
 
-        printf("%.02d: %s %d = %d x %d\n", ++i, op_text.c_str(), entry.out, entry.a, entry.b);
+        std::string out_label = std::to_string(entry.out);
+        std::string a_label = std::to_string(entry.a);
+        std::string b_label = std::to_string(entry.b);
+
+        auto it = id_to_label.find(entry.out);
+        if (it != id_to_label.end())
+            out_label = it->second;
+        it = id_to_label.find(entry.a);
+        if (it != id_to_label.end())
+            a_label = it->second;
+        it = id_to_label.find(entry.b);
+        if (it != id_to_label.end())
+            b_label = it->second;
+
+
+        if (entry.a < 0)
+            printf("%.02d: %s %s [%dx%d] %s\n", ++i, op_text.c_str(),
+                out_label.c_str(), (int)values[entry.out].GetRows(), (int)values[entry.out].GetColumns(),
+                op_sign.c_str());
+
+        else if (entry.b < 0)
+            printf("%.02d: %s %s [%dx%d] = %s [%dx%d] %s\n", ++i, op_text.c_str(),
+                out_label.c_str(), (int)values[entry.out].GetRows(), (int)values[entry.out].GetColumns(),
+                a_label.c_str(), (int)values[entry.a].GetRows(), (int)values[entry.a].GetColumns(),
+                op_sign.c_str());
+        
+        else
+            printf("%.02d: %s %s [%dx%d] = %s [%dx%d] %s %s [%dx%d]\n", ++i, op_text.c_str(),
+                out_label.c_str(), (int)values[entry.out].GetRows(), (int)values[entry.out].GetColumns(),
+                a_label.c_str(), (int)values[entry.a].GetRows(), (int)values[entry.a].GetColumns(),
+                op_sign.c_str(),
+                b_label.c_str(), (int)values[entry.b].GetRows(), (int)values[entry.b].GetColumns());
     }
 }

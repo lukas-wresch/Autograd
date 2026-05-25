@@ -10,8 +10,8 @@
 #include "mnist.h"
 
 
-
-void ShuffleDataset(std::vector<NodePtr<Vector>>& xs, std::vector<NodePtr<Vector>>& labels)
+template<typename T>
+void ShuffleDataset(std::vector<NodePtr<T>>& xs, std::vector<NodePtr<T>>& labels)
 {
 	static std::random_device rd;
 	static std::mt19937 rng(rd());
@@ -535,64 +535,118 @@ int main()
 
 	{
 
-		std::vector<NodePtr<Matrix>> xs = {
-			Node<Matrix>::Create({ {0.0f}, {0.0f} }),
-			Node<Matrix>::Create({ {0.0f}, {1.0f} }),
-			Node<Matrix>::Create({ {1.0f}, {0.0f} }),
-			Node<Matrix>::Create({ {1.0f}, {1.0f} }),
-		};
+		std::vector<NodePtr<Matrix>> xs;
+		std::vector<NodePtr<Matrix>> labels;
 
-		std::vector<NodePtr<Matrix>> label = {
-			Node<Matrix>::Create({{ 0.0f }}),
-			Node<Matrix>::Create({{ 1.0f }}),
-			Node<Matrix>::Create({{ 1.0f }}),
-			Node<Matrix>::Create({{ 0.0f }})
-		};
+		const int points_per_class = 50;
+		const float pi = 3.14159265f;
 
-		Layer3D L1(2, 3, Activation::Tanh);
-		Layer3D L2(3, 1, Activation::Tanh);
+		// generate 2-class spiral dataset
+		for (int class_id = 0; class_id < 2; class_id++)
+		{
+			for (int i = 0; i < points_per_class; i++)
+			{
+				float r = (float)i / points_per_class;
 
-		float lr = 0.1f;
+				// spiral angle
+				float t = 4.0f * pi * r + class_id * pi;
+
+				float x = r * std::sin(t);
+				float y = r * std::cos(t);
+
+				xs.push_back(Node<Matrix>::Create({ {x}, {y} }));
+
+				// one-hot-ish target for MSE
+				if (class_id == 0)
+					labels.push_back(Node<Matrix>::Create({ { 0.0f } }));
+				else
+					labels.push_back(Node<Matrix>::Create({ { 1.0f } }));
+			}
+		}
+
+		// MLP: 2 -> 32 -> 32 -> 1
+		Layer3D L1( 2, 32, Activation::Tanh);
+		Layer3D L2(32, 32, Activation::Tanh);
+		Layer3D L3(32,  1, Activation::Tanh);
+
+		SGD<Matrix> sgd(0.01f);
+		const int batch_size = 8;
+
+		auto x_ = Node<Matrix>::Create({ {0.0f}, {0.0f} }, "input");
+		auto label_ = Node<Matrix>::Create({ { 0.0f } }, "label");
+
+		auto h1 = L1.Forward(x_);
+		auto h2 = L2.Forward(h1);
+		auto out_ = L3.Forward(h2);
+
+		auto loss_ = (out_ - label_) * (out_ - label_);
+		out_->SetLabel("output");
+		loss_->SetLabel("loss");
+
+		auto tape = TapeRecorder<Matrix>();
+		tape.Compile(loss_);
+		sgd.SetTrainableParams(tape);
+
+		auto input = tape.SetValue("input");
+		auto label = tape.SetValue("label");
+		auto output = tape.SetValue("output");
+		auto loss = tape.SetValue("loss");
+
+		tape.PrintTape();
+
+		//Training
+
 		float epoch_loss = 0.0f;
 
-		for (size_t epoch = 0; epoch < 200; epoch++)
+		for (size_t epoch = 0; epoch < 1250; epoch++)
 		{
+			ShuffleDataset(xs, labels);
+
 			epoch_loss = 0.0f;
 
 			for (size_t i = 0; i < xs.size(); i++)
 			{
-				auto x = xs[i];
+				*input = xs[i]->GetValue();
+				*label = labels[i]->GetValue();
 
-				auto l1_out = L1.Forward(x);
-				auto out = L2.Forward(l1_out);
+				tape.Forward();
 
-				auto diff = out - label[i];
-				auto loss = diff * diff;
+				tape.ZeroGradients();
+				tape.Backward();
 
-				auto params = loss->CollectParams();
-
-				L2.GetWeights()->GetGradient().Print();
-
-				loss->Backwards();
-
-				x->GetGradient().Print();
-				L2.GetWeights()->GetGradient().Print();
-				L1.GetWeights()->GetGradient().Print();
-
-				for (size_t i = 0; i < L1.GetOutputLength(); i++)
-				{
-					L1.GetWeights()->GetValue() -= lr * L1.GetWeights()->GetGradient();
-					L1.GetBiases()->GetValue() -= lr * L1.GetBiases()->GetGradient();
-				}
-				for (size_t i = 0; i < L2.GetOutputLength(); i++)
-				{
-					L2.GetWeights()->GetValue() -= lr * L2.GetWeights()->GetGradient();
-					L2.GetBiases()->GetValue() -= lr * L2.GetBiases()->GetGradient();
-				}
+				sgd.Step();
 
 				epoch_loss += loss->GetValue()[0];
 			}
+
+			epoch_loss /= xs.size();
+
+			if (epoch % 100 == 0)
+				std::cout << "Epoch " << epoch << " Loss: " << epoch_loss << std::endl;
 		}
+
+		// evaluate classification accuracy
+		int correct = 0;
+
+		for (size_t i = 0; i < xs.size(); i++)
+		{
+			*input = xs[i]->GetValue();
+
+			tape.Forward();
+
+			float pred = output->GetValue()[0];
+			float target = labels[i]->GetValue()[0];
+
+			int predicted_class = pred   > 0.5f ? 1 : 0;
+			int target_class    = target > 0.5f ? 1 : 0;
+
+			if (predicted_class == target_class)
+				correct++;
+		}
+
+		float accuracy = (float)correct / xs.size();
+
+		std::cout << "Final Accuracy: " << accuracy << std::endl;
 
 	}
 

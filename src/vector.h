@@ -73,6 +73,8 @@ public:
 	}
 
 	size_t GetLength() const { return m_Length; }
+	size_t GetRows() const { return m_Length; }
+	size_t GetColumns() const { return 1; }
 
 	const float* GetValue() const { return m_pValues; }
 	float* SetValue() { return m_pValues; }

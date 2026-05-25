@@ -42,6 +42,8 @@ public:
 	}
 
 	size_t GetLength() const { return 1; }
+	size_t GetRows() const { return 1; }
+	size_t GetColumns() const { return 1; }
 
 	Scalar ElementwiseAdd(const Scalar& rhs) const
 	{

@@ -8,7 +8,8 @@
 
 
 
-void ShuffleDataset(std::vector<NodePtr<Vector>>& xs, std::vector<NodePtr<Vector>>& labels)
+template<typename T>
+void ShuffleDataset(std::vector<NodePtr<T>>& xs, std::vector<NodePtr<T>>& labels)
 {
 	static std::random_device rd;
 	static std::mt19937 rng(rd());
@@ -355,6 +356,69 @@ TEST(MatrixBackprop, MatrixMultiplicationGraph)
 
 	EXPECT_NEAR(B->GetGradient().At(2, 0), 9.0f, 1e-5f);
 	EXPECT_NEAR(B->GetGradient().At(2, 1), 9.0f, 1e-5f);
+}
+
+
+
+TEST(MatrixBackprop, RowVectorColumnVectorOuterProduct)
+{
+	// A = row vector (1x3)
+	auto A = Node<Matrix>::Create({
+		{1.0f, 2.0f, 3.0f}
+		}, "A");
+
+	// B = column vector (3x1)
+	auto B = Node<Matrix>::Create({
+		{4.0f},
+		{5.0f},
+		{6.0f}
+		}, "B");
+
+	// Y = A * B = scalar (1x1)
+	auto Y = A * B;
+	Y->SetLabel("Y");
+
+	// backward
+	Y->Backwards();
+
+	// -----------------------------------
+	// Forward
+	// -----------------------------------
+
+	// 1*4 + 2*5 + 3*6 = 32
+	EXPECT_NEAR(Y->GetValue().At(0, 0), 32.0f, 1e-5f);
+
+	// -----------------------------------
+	// Shape checks
+	// -----------------------------------
+
+	EXPECT_EQ(A->GetGradient().GetRows(), 1);
+	EXPECT_EQ(A->GetGradient().GetColumns(), 3);
+
+	EXPECT_EQ(B->GetGradient().GetRows(), 3);
+	EXPECT_EQ(B->GetGradient().GetColumns(), 1);
+
+	// -----------------------------------
+	// Backward
+	// -----------------------------------
+
+	// dY/dA = B^T
+	//
+	// [4 5 6]
+
+	EXPECT_NEAR(A->GetGradient().At(0, 0), 4.0f, 1e-5f);
+	EXPECT_NEAR(A->GetGradient().At(0, 1), 5.0f, 1e-5f);
+	EXPECT_NEAR(A->GetGradient().At(0, 2), 6.0f, 1e-5f);
+
+	// dY/dB = A^T
+	//
+	// [1]
+	// [2]
+	// [3]
+
+	EXPECT_NEAR(B->GetGradient().At(0, 0), 1.0f, 1e-5f);
+	EXPECT_NEAR(B->GetGradient().At(1, 0), 2.0f, 1e-5f);
+	EXPECT_NEAR(B->GetGradient().At(2, 0), 3.0f, 1e-5f);
 }
 
 
@@ -1369,9 +1433,9 @@ TEST(SGD, SpiralClassification_MSE)
 	}
 
 	// MLP: 2 -> 32 -> 32 -> 1
-	Layer2D<Vector> L1(2, 32, Activation::Tanh);
+	Layer2D<Vector> L1( 2, 32, Activation::Tanh);
 	Layer2D<Vector> L2(32, 32, Activation::Tanh);
-	Layer2D<Vector> L3(32, 1, Activation::Tanh);
+	Layer2D<Vector> L3(32,  1, Activation::Tanh);
 
 	SGD<Vector> sgd(0.01f);
 	const int batch_size = 8;
@@ -1391,7 +1455,7 @@ TEST(SGD, SpiralClassification_MSE)
 
 	float epoch_loss = 0.0f;
 
-	for (size_t epoch = 0; epoch < 1250; epoch++)
+	for (size_t epoch = 0; epoch < 1300; epoch++)
 	{
 		ShuffleDataset(xs, labels);
 
@@ -2019,6 +2083,126 @@ TEST(TapeRecorder, SpiralClassification_MSE_Batching)
 
 		int predicted_class = pred   > 0.5f ? 1 : 0;
 		int target_class    = target > 0.5f ? 1 : 0;
+
+		if (predicted_class == target_class)
+			correct++;
+	}
+
+	float accuracy = (float)correct / xs.size();
+
+	std::cout << "Final Accuracy: " << accuracy << std::endl;
+
+	EXPECT_GT(accuracy, 0.90f);
+}
+
+
+
+TEST(TapeRecorder, SpiralClassification_MSE_Layer3D)
+{
+	std::vector<NodePtr<Matrix>> xs;
+	std::vector<NodePtr<Matrix>> labels;
+
+	const int points_per_class = 50;
+	const float pi = 3.14159265f;
+
+	// generate 2-class spiral dataset
+	for (int class_id = 0; class_id < 2; class_id++)
+	{
+		for (int i = 0; i < points_per_class; i++)
+		{
+			float r = (float)i / points_per_class;
+
+			// spiral angle
+			float t = 4.0f * pi * r + class_id * pi;
+
+			float x = r * std::sin(t);
+			float y = r * std::cos(t);
+
+			xs.push_back(Node<Matrix>::Create({ {x}, {y} }));
+
+			// one-hot-ish target for MSE
+			if (class_id == 0)
+				labels.push_back(Node<Matrix>::Create({{ 0.0f }}));
+			else
+				labels.push_back(Node<Matrix>::Create({{ 1.0f }}));
+		}
+	}
+
+	// MLP: 2 -> 32 -> 32 -> 1
+	Layer3D L1( 2,  32, Activation::Tanh);
+	Layer3D L2(32,  32, Activation::Tanh);
+	Layer3D L3(32,   1, Activation::Tanh);
+
+	SGD<Matrix> sgd(0.01f);
+	const int batch_size = 8;
+
+	auto x_ = Node<Matrix>::Create({ {0.0f}, {0.0f} }, "input");
+	auto label_ = Node<Matrix>::Create({{ 0.0f }}, "label");
+
+	auto h1 = L1.Forward(x_);
+	auto h2 = L2.Forward(h1);
+	auto out_ = L3.Forward(h2);
+
+	auto loss_ = (out_ - label_) * (out_ - label_);
+	out_->SetLabel("output");
+	loss_->SetLabel("loss");
+
+	auto tape = TapeRecorder<Matrix>();
+	tape.Compile(loss_);
+	sgd.SetTrainableParams(tape);
+
+	auto input = tape.SetValue("input");
+	auto label = tape.SetValue("label");
+	auto output = tape.SetValue("output");
+	auto loss = tape.SetValue("loss");
+
+	tape.PrintTape();
+
+	//Training
+
+	float epoch_loss = 0.0f;
+
+	for (size_t epoch = 0; epoch < 1250; epoch++)
+	{
+		ShuffleDataset(xs, labels);
+
+		epoch_loss = 0.0f;
+
+		for (size_t i = 0; i < xs.size(); i++)
+		{
+			*input = xs[i]->GetValue();
+			*label = labels[i]->GetValue();
+
+			tape.Forward();
+
+			tape.ZeroGradients();
+			tape.Backward();
+
+			sgd.Step();
+
+			epoch_loss += loss->GetValue()[0];
+		}
+
+		epoch_loss /= xs.size();
+
+		if (epoch % 100 == 0)
+			std::cout << "Epoch " << epoch << " Loss: " << epoch_loss << std::endl;
+	}
+
+	// evaluate classification accuracy
+	int correct = 0;
+
+	for (size_t i = 0; i < xs.size(); i++)
+	{
+		*input = xs[i]->GetValue();
+
+		tape.Forward();
+
+		float pred = output->GetValue()[0];
+		float target = labels[i]->GetValue()[0];
+
+		int predicted_class = pred > 0.5f ? 1 : 0;
+		int target_class = target > 0.5f ? 1 : 0;
 
 		if (predicted_class == target_class)
 			correct++;
