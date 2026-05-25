@@ -569,7 +569,7 @@ int main()
 		Layer3D L2(32, 32, Activation::Tanh);
 		Layer3D L3(32,  1, Activation::Tanh);
 
-		SGD<Matrix> sgd(0.01f);
+		SGD<Matrix> sgd(0.05f);
 		const int batch_size = 8;
 
 		auto x_ = Node<Matrix>::Create({ {0.0f}, {0.0f} }, "input");
@@ -598,25 +598,35 @@ int main()
 
 		float epoch_loss = 0.0f;
 
-		for (size_t epoch = 0; epoch < 1250; epoch++)
+		for (size_t epoch = 0; epoch < 1500; epoch++)
 		{
 			ShuffleDataset(xs, labels);
 
 			epoch_loss = 0.0f;
 
-			for (size_t i = 0; i < xs.size(); i++)
+			for (size_t i = 0; i < xs.size(); i += batch_size)
 			{
-				*input = xs[i]->GetValue();
-				*label = labels[i]->GetValue();
+				size_t end = std::min(i + batch_size, xs.size());
 
-				tape.Forward();
+				size_t actual_batch_size = end - i;
+
+				float batch_loss = 0.0f;
 
 				tape.ZeroGradients();
-				tape.Backward();
 
-				sgd.Step();
+				for (size_t j = i; j < end; j++)
+				{
+					*input = xs[j]->GetValue();
+					*label = labels[j]->GetValue();
 
-				epoch_loss += loss->GetValue()[0];
+					tape.Forward();
+					tape.Backward();
+
+					epoch_loss += loss->GetValue()[0];
+					batch_loss += loss->GetValue()[0];
+				}
+
+				sgd.Step(1.0f / actual_batch_size);
 			}
 
 			epoch_loss /= xs.size();

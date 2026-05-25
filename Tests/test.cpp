@@ -1999,11 +1999,11 @@ TEST(TapeRecorder, SpiralClassification_MSE_Batching)
 	}
 
 	// MLP: 2 -> 32 -> 32 -> 1
-	Layer2D<Vector> L1(2, 32,  Activation::Tanh);
+	Layer2D<Vector> L1(2,  32, Activation::Tanh);
 	Layer2D<Vector> L2(32, 32, Activation::Tanh);
-	Layer2D<Vector> L3(32, 1,  Activation::Tanh);
+	Layer2D<Vector> L3(32,  1, Activation::Tanh);
 
-	SGD<Vector> sgd(0.01f);
+	SGD<Vector> sgd(0.03f);
 	int batch_size = 16;
 
 	auto x_ = Node<Vector>::Create({ 0.0f, 0.0f }, "input");
