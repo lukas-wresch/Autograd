@@ -37,6 +37,19 @@ public:
 		}
 	}
 
+	Matrix(std::initializer_list<float> init)
+		: m_Rows(init.size()), m_Columns(1)
+	{
+		m_pValues = new float[m_Rows * m_Columns];
+
+		size_t rows = 0;
+		for (const auto& row : init)
+		{
+			m_pValues[rows * m_Columns] = row;
+			rows++;
+		}
+	}
+
 	Matrix(const std::vector<float>& Vec)
 		: m_Rows(Vec.size()), m_Columns(1)
 	{

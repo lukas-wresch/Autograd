@@ -978,8 +978,8 @@ TEST(Training, MNist)
 		auto x = Node<Matrix>::CreateWithSize(784, "input");
 		auto label = Node<Matrix>::CreateWithSize(10, "label");
 
-		Layer3D L1(784, 128, Activation::Tanh);
-		Layer3D L2(128, 10, Activation::Identity);
+		Layer3D L1(784, 128, Activation::Tanh, InitType::Xavier);
+		Layer3D L2(128,  10, Activation::Identity, InitType::Xavier);
 
 		auto h1 = L1.Forward(x);
 		auto pred = L2.Forward(h1);
@@ -1274,7 +1274,7 @@ TEST(Training, XOR)
 	float lr = 0.1f;
 	float epoch_loss = 0.0f;
 
-	for (size_t epoch = 0; epoch < 200; epoch++)
+	for (size_t epoch = 0; epoch < 250; epoch++)
 	{
 		epoch_loss = 0.0f;
 
@@ -2132,12 +2132,11 @@ TEST(TapeRecorder, SpiralClassification_MSE)
 	}
 
 	// MLP: 2 -> 32 -> 32 -> 1
-	Layer2D<Vector> L1(2, 32, Activation::Tanh);
+	Layer2D<Vector> L1( 2, 32, Activation::Tanh);
 	Layer2D<Vector> L2(32, 32, Activation::Tanh);
 	Layer2D<Vector> L3(32, 1, Activation::Tanh);
 
 	SGD<Vector> sgd(0.01f);
-	const int batch_size = 8;
 
 	auto x_ = Node<Vector>::Create({ 0.0f, 0.0f }, "input");
 	auto label_ = Node<Vector>::Create({ 0.0f }, "label");
@@ -2204,8 +2203,8 @@ TEST(TapeRecorder, SpiralClassification_MSE)
 		float pred = output->GetValue()[0];
 		float target = labels[i]->GetValue()[0];
 
-		int predicted_class = pred > 0.5f ? 1 : 0;
-		int target_class = target > 0.5f ? 1 : 0;
+		int predicted_class = pred   > 0.5f ? 1 : 0;
+		int target_class    = target > 0.5f ? 1 : 0;
 
 		if (predicted_class == target_class)
 			correct++;
@@ -2371,13 +2370,13 @@ TEST(TapeRecorder, SpiralClassification_MSE_Layer3D)
 			float x = r * std::sin(t);
 			float y = r * std::cos(t);
 
-			xs.push_back(Node<Matrix>::Create({ {x}, {y} }));
+			xs.push_back(Node<Matrix>::Create(Matrix({ x, y }), "input"));
 
 			// one-hot-ish target for MSE
 			if (class_id == 0)
-				labels.push_back(Node<Matrix>::Create({{ 0.0f }}));
+				labels.push_back(Node<Matrix>::Create(Matrix({ 0.0f }), "label"));
 			else
-				labels.push_back(Node<Matrix>::Create({{ 1.0f }}));
+				labels.push_back(Node<Matrix>::Create(Matrix({ 1.0f }), "label"));
 		}
 	}
 
@@ -2387,10 +2386,9 @@ TEST(TapeRecorder, SpiralClassification_MSE_Layer3D)
 	Layer3D L3(32,   1, Activation::Tanh);
 
 	SGD<Matrix> sgd(0.01f);
-	const int batch_size = 8;
 
-	auto x_ = Node<Matrix>::Create({ {0.0f}, {0.0f} }, "input");
-	auto label_ = Node<Matrix>::Create({{ 0.0f }}, "label");
+	auto x_ = Node<Matrix>::Create(Matrix({ {0.0f}, {0.0f} }), "input");
+	auto label_ = Node<Matrix>::Create(Matrix({{ 0.0f }}), "label");
 
 	auto h1 = L1.Forward(x_);
 	auto h2 = L2.Forward(h1);
@@ -2454,8 +2452,8 @@ TEST(TapeRecorder, SpiralClassification_MSE_Layer3D)
 		float pred = output->GetValue()[0];
 		float target = labels[i]->GetValue()[0];
 
-		int predicted_class = pred > 0.5f ? 1 : 0;
-		int target_class = target > 0.5f ? 1 : 0;
+		int predicted_class = pred   > 0.5f ? 1 : 0;
+		int target_class    = target > 0.5f ? 1 : 0;
 
 		if (predicted_class == target_class)
 			correct++;

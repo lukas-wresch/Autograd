@@ -24,6 +24,8 @@ enum class Operator
     ReLU,
 
     Softmax,
+    CrossEntropy,
+    Softmax_CrossEntropy,
 };
 
 
@@ -69,6 +71,8 @@ public:
     NodePtr<T> Tanh();
     NodePtr<T> ReLU();
     NodePtr<T> Softmax();
+    NodePtr<T> CrossEntropy(NodePtr<T> Target);
+    NodePtr<T> Softmax_CrossEntropy(NodePtr<T> Target);
 
     void Backwards();
 
@@ -366,6 +370,19 @@ NodePtr<T> Node<T>::Softmax()
     auto out = std::make_shared<Node<T>>(this->value.Softmax());
 
     out->op = Operator::Softmax;
+    out->left = this->shared_from_this();
+    out->right = nullptr;
+    return out;
+}
+
+
+
+template<typename T>
+NodePtr<T> Node<T>::Softmax_CrossEntropy(NodePtr<T> Target)
+{
+    auto out = std::make_shared<Node<T>>(this->value.Softmax().Crossentropy(Target->GetValue));
+
+    out->op = Operator::Softmax_Crossentropy;
     out->left = this->shared_from_this();
     out->right = nullptr;
     return out;

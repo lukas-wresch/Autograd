@@ -5,6 +5,15 @@
 
 
 
+enum class InitType
+{
+	UniformSmall,
+	Xavier,
+	He
+};
+
+
+
 template<typename T>
 class Layer2D
 {
@@ -41,12 +50,26 @@ private:
 class Layer3D
 {
 public:
-	Layer3D(size_t InputLength, size_t OutputLength, Activation Activation) : m_Activation(Activation), m_OutputLength(OutputLength)
+	Layer3D(size_t InputLength, size_t OutputLength, Activation Activation, InitType init = InitType::UniformSmall) : m_Activation(Activation), m_OutputLength(OutputLength)
 	{
 		m_Weights = Node<Matrix>::CreateWithSize(OutputLength, InputLength);
 		m_Biases  = Node<Matrix>::CreateWithSize(OutputLength, 1);
 
-		float scale = std::sqrt(1.0f / InputLength); // Xavier Initialization
+		float scale = 1.0f;
+		switch (init)
+		{
+		case InitType::UniformSmall:
+			scale = 1.0f;
+			break;
+		case InitType::Xavier:
+			scale = std::sqrt(1.0f / InputLength);
+			break;
+		case InitType::He:
+			scale = std::sqrt(2.0f / InputLength);
+			break;
+		default:
+			throw std::runtime_error("Layer: Unknown InitType");
+		}
 
 		for (size_t i = 0; i < m_Weights->GetValue().GetLength(); i++)
 			m_Weights->GetValue().SetValue()[i] = RandomFloatMinus1To1() * scale;
