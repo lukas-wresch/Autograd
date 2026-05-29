@@ -299,7 +299,7 @@ void Cifar_Test()
 
 	float epoch_loss = 0.0f;
 
-	for (size_t epoch = 0; epoch < 10; epoch++)
+	for (size_t epoch = 0; epoch < 20; epoch++)
 	{
 		ShuffleDataset(xs, labels);
 

@@ -244,9 +244,7 @@ TEST(MatrixBackprop, MatrixMultiplicationGraph)
 		}, "B");
 
 	// bias: scalar matrix
-	auto bias = Node<Matrix>::Create({
-		{ 1.0f }
-		}, "bias");
+	auto bias = Node<Matrix>::Create(Matrix({{ 1.0f }}), "bias");
 
 	// Matrix multiplication
 	auto C = A * B;
@@ -1671,10 +1669,10 @@ TEST(Training, XOR)
 TEST(Training, XOR_Layer3D)
 {
 	std::vector<NodePtr<Matrix>> xs = {
-		Node<Matrix>::Create({ {0.0f}, {0.0f} }),
-		Node<Matrix>::Create({ {0.0f}, {1.0f} }),
-		Node<Matrix>::Create({ {1.0f}, {0.0f} }),
-		Node<Matrix>::Create({ {1.0f}, {1.0f} }),
+		Node<Matrix>::Create(Matrix({ {0.0f}, {0.0f} })),
+		Node<Matrix>::Create(Matrix({ {0.0f}, {1.0f} })),
+		Node<Matrix>::Create(Matrix({ {1.0f}, {0.0f} })),
+		Node<Matrix>::Create(Matrix({ {1.0f}, {1.0f} })),
 	};
 
 	std::vector<NodePtr<Matrix>> label = {
@@ -2455,21 +2453,21 @@ TEST(TapeRecorder, XOR_Tensor)
 	Tensor data_labels({ 4 }, { 0, 1, 1, 0 });
 
 
-	NodePtr<Tensor> xs = Node<Tensor>::Create(data);
+	NodePtr<Tensor> xs     = Node<Tensor>::Create(data);
 	NodePtr<Tensor> labels = Node<Tensor>::Create(data_labels);
 
-	Layer2D<Tensor> L1(2, 3, Activation::Tanh);
-	Layer2D<Tensor> L2(3, 1, Activation::Tanh);
+	Layer4D L1(2, 3, Activation::Tanh);
+	Layer4D L2(3, 1, Activation::Tanh);
 
 	SGD<Tensor> sgd(0.1f);
 
-	auto x_ = Node<Tensor>::Create({ 2, 4 }, "x");
-	auto label_ = Node<Tensor>::Create({ 4 }, "label");
+	auto x_ = Node<Tensor>::Create(Tensor({ 2, 4 }), "x");
+	auto label_ = Node<Tensor>::Create(Tensor({ 4 }), "label");
 	auto l1_out = L1.Forward(x_);
 	auto out_ = L2.Forward(l1_out);
 
 	auto diff  = out_ - label_;
-	auto loss_ = diff * diff;
+	auto loss_ = diff->ElementwiseMul(diff);
 	out_->SetLabel("output");
 	loss_->SetLabel("loss");
 
@@ -2511,7 +2509,7 @@ TEST(TapeRecorder, XOR_Tensor)
 
 		tape.Forward();
 
-		EXPECT_NEAR(*output->Data(), *labels->GetValue().Data(), 0.1f);
+		EXPECT_NEAR(*output->Data(), labels->GetValue().Data()[i], 0.1f);
 	}
 }
 

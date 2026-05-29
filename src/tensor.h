@@ -48,8 +48,8 @@ public:
 
 
 
-	//Tensor(const Tensor& T) : m_Storage(new Storage(T.m_Storage->GetSize(), T.m_Storage->GetData())), m_Shape(T.m_Shape), m_Strides(T.m_Strides), m_Offset(T.m_Offset)
-	//{}
+	Tensor(const Tensor& T) : m_Storage(new Storage(T.m_Storage->GetSize(), T.m_Storage->GetData())), m_Shape(T.m_Shape), m_Strides(T.m_Strides), m_Offset(T.m_Offset)
+	{}
 
 	void operator=(const Tensor& T)
 	{
@@ -60,7 +60,7 @@ public:
 	}
 
 
-	Tensor(Tensor&& T) : m_Storage(T.m_Storage), m_Shape(T.m_Shape), m_Strides(T.m_Strides), m_Offset(T.m_Offset)
+	Tensor(Tensor&& T) noexcept : m_Storage(T.m_Storage), m_Shape(T.m_Shape), m_Strides(T.m_Strides), m_Offset(T.m_Offset)
 	{
 		T.m_Storage = nullptr;
 		T.m_Shape   = {};
@@ -202,7 +202,7 @@ public:
 		return m_Storage->GetData()[offset];
 	}
 
-	float* At(const std::vector<size_t>& idx)
+	float& At(const std::vector<size_t>& idx)
 	{
 		if (idx.size() != m_Shape.size())
 			throw std::runtime_error("dimension mismatch");
@@ -218,7 +218,7 @@ public:
 			offset += (*it) * m_Strides[i];
 		}
 
-		return &m_Storage->SetData()[offset];
+		return m_Storage->SetData()[offset];
 	}
 
 	void Transpose()
@@ -328,6 +328,8 @@ public:
 		return out;
 	}
 
+	inline Tensor ElementwiseMul(const Tensor& rhs) const;
+
 
 private:
 	Tensor(Storage* Storage, const std::vector<size_t>& Shape) : m_Storage(Storage), m_Shape(Shape)
@@ -384,16 +386,84 @@ inline void ForEachIndex(const Tensor& t, std::function<void(const std::vector<s
 
 
 
+inline std::vector<size_t> BroadcastShape(const std::vector<size_t>& a, const std::vector<size_t>& b)
+{
+	size_t maxDim = std::max(a.size(), b.size());
+
+	std::vector<size_t> result(maxDim);
+
+	for (size_t i = 0; i < maxDim; i++)
+	{
+		size_t ad =
+			(i < a.size()) ? a[a.size() - 1 - i] : 1;
+
+		size_t bd =
+			(i < b.size()) ? b[b.size() - 1 - i] : 1;
+
+		result[maxDim - 1 - i] = std::max(ad, bd);
+	}
+
+	return result;
+}
+
+
+
+inline bool IsBroadcastCompatible(const std::vector<size_t>& ShapeA, const std::vector<size_t>& ShapeB)
+{
+	size_t aDim = ShapeA.size();
+	size_t bDim = ShapeB.size();
+	size_t maxDim = std::max(aDim, bDim);
+
+	for (size_t i = 0; i < maxDim; i++)
+	{
+		size_t ad = (i < aDim) ? ShapeA[aDim - 1 - i] : 1;
+		size_t bd = (i < bDim) ? ShapeB[bDim - 1 - i] : 1;
+
+		if (ad != bd && ad != 1 && bd != 1)
+			return false;
+	}
+
+	return true;
+}
+
+
+
 inline Tensor operator+(const Tensor& left, const Tensor& right)
 {
-	if (left.Shape() != right.Shape())
-		throw std::runtime_error("Tensor operator + shape mismatch");
+	if (!IsBroadcastCompatible(left.Shape(), right.Shape()))
+		throw std::runtime_error("broadcast mismatch");
 
-	Tensor result(left.Shape());
+	auto outShape = BroadcastShape(left.Shape(), right.Shape());
 
-	ForEachIndex(left, [&](const std::vector<size_t>& idx)
+	Tensor result(outShape);
+
+	ForEachIndex(result, [&](const std::vector<size_t>& idx)
 	{
-		*result.At(idx) = left.At(idx) + right.At(idx);
+		std::vector<size_t> lidx(left.Shape().size());
+		std::vector<size_t> ridx(right.Shape().size());
+
+		// map output index -> left/right broadcast index
+
+		int offsetL = (int)outShape.size() - (int)left.Shape().size();
+		int offsetR = (int)outShape.size() - (int)right.Shape().size();
+
+		for (size_t d = 0; d < left.Shape().size(); d++)
+		{
+			if (left.Shape()[d] == 1)
+				lidx[d] = 0;
+			else
+				lidx[d] = idx[d + offsetL];
+		}
+
+		for (size_t d = 0; d < right.Shape().size(); d++)
+		{
+			if (right.Shape()[d] == 1)
+				ridx[d] = 0;
+			else
+				ridx[d] = idx[d + offsetR];
+		}
+
+		result.At(idx) = left.At(lidx) + right.At(ridx);
 	});
 
 	return result;
@@ -401,17 +471,227 @@ inline Tensor operator+(const Tensor& left, const Tensor& right)
 
 
 
-inline Tensor operator-(const Tensor& left, const Tensor& right)
+inline void operator+=(Tensor& left, const Tensor& right)
 {
-	if (left.Shape() != right.Shape())
-		throw std::runtime_error("Tensor operator - shape mismatch");
+	if (!IsBroadcastCompatible(left.Shape(), right.Shape()))
+		throw std::runtime_error("broadcast mismatch");
 
-	Tensor result(left.Shape());
+	auto outShape = BroadcastShape(left.Shape(), right.Shape());
 
 	ForEachIndex(left, [&](const std::vector<size_t>& idx)
+	{
+		std::vector<size_t> lidx(left.Shape().size());
+		std::vector<size_t> ridx(right.Shape().size());
+
+		// map output index -> left/right broadcast index
+
+		int offsetL = (int)outShape.size() - (int)left.Shape().size();
+		int offsetR = (int)outShape.size() - (int)right.Shape().size();
+
+		for (size_t d = 0; d < left.Shape().size(); d++)
 		{
-			*result.At(idx) = left.At(idx) - right.At(idx);
+			if (left.Shape()[d] == 1)
+				lidx[d] = 0;
+			else
+				lidx[d] = idx[d + offsetL];
+		}
+
+		for (size_t d = 0; d < right.Shape().size(); d++)
+		{
+			if (right.Shape()[d] == 1)
+				ridx[d] = 0;
+			else
+				ridx[d] = idx[d + offsetR];
+		}
+
+		left.At(lidx) += right.At(ridx);
+	});
+}
+
+
+
+inline Tensor operator-(const Tensor& left, const Tensor& right)
+{
+	if (!IsBroadcastCompatible(left.Shape(), right.Shape()))
+		throw std::runtime_error("broadcast mismatch");
+
+	auto outShape = BroadcastShape(left.Shape(), right.Shape());
+
+	Tensor result(outShape);
+
+	ForEachIndex(result, [&](const std::vector<size_t>& idx)
+	{
+		std::vector<size_t> lidx(left.Shape().size());
+		std::vector<size_t> ridx(right.Shape().size());
+
+		// map output index -> left/right broadcast index
+
+		int offsetL = (int)outShape.size() - (int)left.Shape().size();
+		int offsetR = (int)outShape.size() - (int)right.Shape().size();
+
+		for (size_t d = 0; d < left.Shape().size(); d++)
+		{
+			if (left.Shape()[d] == 1)
+				lidx[d] = 0;
+			else
+				lidx[d] = idx[d + offsetL];
+		}
+
+		for (size_t d = 0; d < right.Shape().size(); d++)
+		{
+			if (right.Shape()[d] == 1)
+				ridx[d] = 0;
+			else
+				ridx[d] = idx[d + offsetR];
+		}
+
+		result.At(idx) = left.At(lidx) - right.At(ridx);
+	});
+
+	return result;
+}
+
+
+
+inline void operator-=(Tensor& left, const Tensor& right)
+{
+	if (!IsBroadcastCompatible(left.Shape(), right.Shape()))
+		throw std::runtime_error("broadcast mismatch");
+
+	auto outShape = BroadcastShape(left.Shape(), right.Shape());
+
+	ForEachIndex(left, [&](const std::vector<size_t>& idx)
+	{
+		std::vector<size_t> lidx(left.Shape().size());
+		std::vector<size_t> ridx(right.Shape().size());
+
+		// map output index -> left/right broadcast index
+
+		int offsetL = (int)outShape.size() - (int)left.Shape().size();
+		int offsetR = (int)outShape.size() - (int)right.Shape().size();
+
+		for (size_t d = 0; d < left.Shape().size(); d++)
+		{
+			if (left.Shape()[d] == 1)
+				lidx[d] = 0;
+			else
+				lidx[d] = idx[d + offsetL];
+		}
+
+		for (size_t d = 0; d < right.Shape().size(); d++)
+		{
+			if (right.Shape()[d] == 1)
+				ridx[d] = 0;
+			else
+				ridx[d] = idx[d + offsetR];
+		}
+
+		left.At(lidx) -= right.At(ridx);
+	});
+}
+
+
+
+inline Tensor Tensor::ElementwiseMul(const Tensor& rhs) const
+{
+	if (Shape() != rhs.Shape())
+		throw std::runtime_error("Tensor elementwise multiplication shape mismatch");
+
+	Tensor result(Shape());
+
+	ForEachIndex(rhs, [&](const std::vector<size_t>& idx)
+	{
+		result.At(idx) = At(idx) * rhs.At(idx);
+	});
+
+	return result;
+}
+
+
+
+inline Tensor operator*(const Tensor& left, const Tensor& right)
+{
+	//if (left.Shape() != right.Shape())
+		//throw std::runtime_error("Tensor operator * shape mismatch");
+
+	if (left.Shape() == right.Shape())
+	{
+		Tensor result(left.Shape());
+
+		ForEachIndex(left, [&](const std::vector<size_t>& idx)
+		{
+			result.At(idx) = left.At(idx) * right.At(idx);
 		});
+
+		return result;
+	}
+
+
+
+	if (left.Shape().size() < 2 || right.Shape().size() < 2)
+		throw std::runtime_error("matmul requires tensors with dim >= 2");
+
+	size_t M = left.Shape()[left.Shape().size() - 2];
+	size_t K = left.Shape()[left.Shape().size() - 1];
+
+	size_t K2 = right.Shape()[right.Shape().size() - 2];
+	size_t N  = right.Shape()[right.Shape().size() - 1];
+
+	if (K != K2)
+		throw std::runtime_error("matmul inner dimension mismatch");
+
+	// batch dimensions must match
+
+	if (left.Shape().size() != right.Shape().size())
+		throw std::runtime_error("batched matmul dims mismatch");
+
+	for (size_t i = 0; i < left.Shape().size() - 2; i++)
+	{
+		if (left.Shape()[i] != right.Shape()[i])
+			throw std::runtime_error("batch dimensions mismatch");
+	}
+
+	// output shape
+
+	std::vector<size_t> outShape = left.Shape();
+	outShape[outShape.size() - 1] = N;
+
+	Tensor result(outShape);
+
+	// iterate batches
+
+	ForEachIndex(result, [&](const std::vector<size_t>& outIdx)
+	{
+		float sum = 0.0f;
+
+		for (size_t k = 0; k < K; k++)
+		{
+			auto lidx = outIdx;
+			auto ridx = outIdx;
+
+			lidx.back() = k;
+
+			ridx[ridx.size() - 2] = k;
+
+			sum += left.At(lidx) * right.At(ridx);
+		}
+
+		result.At(outIdx) = sum;
+	});
+
+	return result;
+}
+
+
+
+inline Tensor operator*(float lhs, const Tensor& rhs)
+{
+	Tensor result(rhs.Shape());
+
+	ForEachIndex(rhs, [&](const std::vector<size_t>& idx)
+	{
+		result.At(idx) = lhs * rhs.At(idx);
+	});
 
 	return result;
 }

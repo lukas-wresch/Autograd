@@ -433,3 +433,409 @@ TEST(Kernels, MatMul_Forward_OutputShapeCorrect)
     EXPECT_EQ(out.Shape()[0], 5);
     EXPECT_EQ(out.Shape()[1], 7);
 }
+
+
+
+TEST(Kernels, Multiply_Forward_Elementwise2D)
+{
+    Tensor a({ 2, 2 });
+    Tensor b({ 2, 2 });
+    Tensor out({ 2, 2 });
+
+    a.Data()[0] = 1; a.Data()[1] = 2;
+    a.Data()[2] = 3; a.Data()[3] = 4;
+
+    b.Data()[0] = 10; b.Data()[1] = 20;
+    b.Data()[2] = 30; b.Data()[3] = 40;
+
+    Kernels::Multiply_Forward(out, a, b);
+
+    EXPECT_FLOAT_EQ(out.Data()[0], 10);
+    EXPECT_FLOAT_EQ(out.Data()[1], 40);
+    EXPECT_FLOAT_EQ(out.Data()[2], 90);
+    EXPECT_FLOAT_EQ(out.Data()[3], 160);
+}
+
+
+
+TEST(Kernels, Multiply_Forward_ScalarBroadcast_Stress)
+{
+    Tensor a({ 3, 3 });
+    Tensor b({ 1 });
+    Tensor out({ 3, 3 });
+
+    for (size_t i = 0; i < a.Size(); i++)
+        a.Data()[i] = (float)(i + 1);
+
+    b.Data()[0] = 2.0f;
+
+    Kernels::Multiply_Forward(out, a, b);
+
+    for (size_t i = 0; i < out.Size(); i++)
+        EXPECT_FLOAT_EQ(out.Data()[i], a.Data()[i] * 2.0f);
+}
+
+
+
+TEST(Kernels, Multiply_Forward_Broadcast_VectorRow)
+{
+    Tensor a({ 2, 3 });
+    Tensor b({ 3 });
+    Tensor out({ 2, 3 });
+
+    for (size_t i = 0; i < 6; i++)
+        a.Data()[i] = 1.0f;
+
+    b.Data()[0] = 1;
+    b.Data()[1] = 2;
+    b.Data()[2] = 3;
+
+    Kernels::Multiply_Forward(out, a, b);
+
+    EXPECT_FLOAT_EQ(out.Data()[0], 1);
+    EXPECT_FLOAT_EQ(out.Data()[1], 2);
+    EXPECT_FLOAT_EQ(out.Data()[2], 3);
+
+    EXPECT_FLOAT_EQ(out.Data()[3], 1);
+    EXPECT_FLOAT_EQ(out.Data()[4], 2);
+    EXPECT_FLOAT_EQ(out.Data()[5], 3);
+}
+
+
+
+TEST(Kernels, Multiply_Forward_InvalidBroadcast)
+{
+    Tensor a({ 2, 3 });
+    Tensor b({ 2, 2 });
+    Tensor out({ 2, 3 });
+
+    EXPECT_THROW(
+        Kernels::Multiply_Forward(out, a, b),
+        std::runtime_error
+    );
+}
+
+
+
+TEST(Kernels, MatMul_Forward_KnownResult)
+{
+    Tensor a({ 2, 3 });
+    Tensor b({ 3, 2 });
+    Tensor out({ 2, 2 });
+
+    a.Data()[0] = 1; a.Data()[1] = 2; a.Data()[2] = 3;
+    a.Data()[3] = 4; a.Data()[4] = 5; a.Data()[5] = 6;
+
+    b.Data()[0] = 7;  b.Data()[1] = 8;
+    b.Data()[2] = 9;  b.Data()[3] = 10;
+    b.Data()[4] = 11; b.Data()[5] = 12;
+
+    Kernels::MatMul_Forward(out, a, b);
+
+    EXPECT_FLOAT_EQ(out.Data()[0], 58);
+    EXPECT_FLOAT_EQ(out.Data()[1], 64);
+    EXPECT_FLOAT_EQ(out.Data()[2], 139);
+    EXPECT_FLOAT_EQ(out.Data()[3], 154);
+}
+
+
+
+TEST(Kernels, MatMul_Forward_ShapeMismatch)
+{
+    Tensor a({ 2, 3 });
+    Tensor b({ 4, 2 });
+    Tensor out({ 2, 2 });
+
+    EXPECT_THROW(
+        Kernels::MatMul_Forward(out, a, b),
+        std::runtime_error
+    );
+}
+
+
+
+TEST(Kernels, MatMul_Forward_BatchConsistency)
+{
+    Tensor a({ 2, 2, 2 });
+    Tensor b({ 2, 2, 2 });
+    Tensor out({ 2, 2, 2 });
+
+    for (size_t i = 0; i < a.Size(); i++)
+    {
+        a.Data()[i] = 1.0f;
+        b.Data()[i] = 1.0f;
+    }
+
+    Kernels::MatMul_Forward(out, a, b);
+
+    for (size_t i = 0; i < out.Size(); i++)
+        EXPECT_GT(out.Data()[i], 0.0f);
+}
+
+
+
+TEST(Kernels, Multiply_Forward_3D_VectorBroadcast_Stress)
+{
+    Tensor a({ 2, 2, 3 });
+    Tensor b({ 3 });
+    Tensor out({ 2, 2, 3 });
+
+    for (size_t i = 0; i < a.Size(); i++)
+        a.Data()[i] = (float)(i + 1);
+
+    b.Data()[0] = 1;
+    b.Data()[1] = 10;
+    b.Data()[2] = 100;
+
+    Kernels::Multiply_Forward(out, a, b);
+
+    for (size_t i = 0; i < out.Size(); i += 3)
+    {
+        EXPECT_FLOAT_EQ(out.Data()[i + 0], a.Data()[i + 0] * 1);
+        EXPECT_FLOAT_EQ(out.Data()[i + 1], a.Data()[i + 1] * 10);
+        EXPECT_FLOAT_EQ(out.Data()[i + 2], a.Data()[i + 2] * 100);
+    }
+}
+
+
+
+TEST(Kernels, Tanh_Backward_Sanity)
+{
+    Tensor out({ 2, 2 });
+    Tensor grad({ 2, 2 });
+    Tensor grad_in({ 2, 2 });
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        out.Data()[i] = std::tanh((float)i);
+        grad.Data()[i] = 1.0f;
+    }
+
+    Kernels::Tanh_Backward(grad_in, out, grad);
+
+    for (size_t i = 0; i < 4; i++)
+        EXPECT_GE(grad_in.Data()[i], 0.0f);
+}
+
+
+
+TEST(Kernels, Multiply_Backward_Basic)
+{
+    Tensor a({ 2, 2 });
+    Tensor b({ 2, 2 });
+    Tensor gradA({ 2, 2 });
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        a.Data()[i] = (float)(i + 1);
+        b.Data()[i] = 2.0f;
+        gradA.Data()[i] = 0.0f;
+    }
+
+    Kernels::Multiply_Backward(gradA, a, b);
+
+    for (size_t i = 0; i < 4; i++)
+        EXPECT_FLOAT_EQ(gradA.Data()[i], b.Data()[i]);
+}
+
+
+
+TEST(Kernels, Multiply_Backward_ScalarBroadcast)
+{
+    Tensor a({ 2, 3 });
+    Tensor b({ 1 });
+    Tensor gradA({ 2, 3 });
+
+    for (size_t i = 0; i < 6; i++)
+    {
+        a.Data()[i] = 1.0f;
+        gradA.Data()[i] = 0.0f;
+    }
+
+    b.Data()[0] = 5.0f;
+
+    Kernels::Multiply_Backward(gradA, a, b);
+
+    for (size_t i = 0; i < 6; i++)
+        EXPECT_FLOAT_EQ(gradA.Data()[i], 5.0f);
+}
+
+
+
+TEST(Kernels, Multiply_Backward_Accumulation)
+{
+    Tensor a({ 2, 2 });
+    Tensor b({ 2, 2 });
+    Tensor gradA({ 2, 2 });
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        a.Data()[i] = 1.0f;
+        b.Data()[i] = 2.0f;
+        gradA.Data()[i] = 1.0f;
+    }
+
+    Kernels::Multiply_Backward(gradA, a, b);
+    Kernels::Multiply_Backward(gradA, a, b);
+
+    for (size_t i = 0; i < 4; i++)
+        EXPECT_FLOAT_EQ(gradA.Data()[i], 1.0f + 2.0f + 2.0f);
+}
+
+
+
+TEST(Kernels, Tanh_Backward_ChainRule)
+{
+    Tensor out({ 3 });
+    Tensor outer_grad({ 3 });
+    Tensor grad_in({ 3 });
+
+    for (int i = 0; i < 3; i++)
+    {
+        float x = (float)i;
+        out.Data()[i] = std::tanh(x);
+        outer_grad.Data()[i] = 1.0f;
+        grad_in.Data()[i] = 0.0f;
+    }
+
+    Kernels::Tanh_Backward(grad_in, out, outer_grad);
+
+    for (int i = 0; i < 3; i++)
+    {
+        float expected = 1.0f - out.Data()[i] * out.Data()[i];
+        EXPECT_NEAR(grad_in.Data()[i], expected, 1e-5);
+    }
+}
+
+
+
+TEST(Kernels, Tanh_Backward_BroadcastScalar)
+{
+    Tensor out({ 2, 2 });
+    Tensor outer_grad({ 1 });
+    Tensor grad_in({ 2, 2 });
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        out.Data()[i] = 0.5f;
+        grad_in.Data()[i] = 0.0f;
+    }
+
+    outer_grad.Data()[0] = 2.0f;
+
+    Kernels::Tanh_Backward(grad_in, out, outer_grad);
+
+    for (size_t i = 0; i < 4; i++)
+        EXPECT_GT(grad_in.Data()[i], 0.0f);
+}
+
+
+
+TEST(Kernels, MatMul_Backward_A_Shape)
+{
+    Tensor a({ 2, 3 });
+    Tensor b({ 3, 2 });
+    Tensor dOut({ 2, 2 });
+    Tensor gradA({ 2, 3 });
+
+    for (size_t i = 0; i < gradA.Size(); i++)
+        gradA.Data()[i] = 0.0f;
+
+    Kernels::MatMul_Backward_A(gradA, dOut, b);
+
+    EXPECT_EQ(gradA.Shape()[0], 2);
+    EXPECT_EQ(gradA.Shape()[1], 3);
+}
+
+
+
+TEST(Kernels, MatMul_Backward_B_Shape)
+{
+    Tensor a({ 2, 3 });
+    Tensor b({ 3, 2 });
+    Tensor dOut({ 2, 2 });
+    Tensor gradB({ 3, 2 });
+
+    for (size_t i = 0; i < gradB.Size(); i++)
+        gradB.Data()[i] = 0.0f;
+
+    Kernels::MatMul_Backward_B(gradB, a, dOut);
+
+    EXPECT_EQ(gradB.Shape()[0], 3);
+    EXPECT_EQ(gradB.Shape()[1], 2);
+}
+
+
+
+TEST(Kernels, MatMul_Backward_IdentityGradient)
+{
+    Tensor a({ 2, 2 });
+    Tensor b({ 2, 2 });
+    Tensor dOut({ 2, 2 });
+    Tensor gradA({ 2, 2 });
+    Tensor gradB({ 2, 2 });
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        a.Data()[i] = 1.0f;
+        b.Data()[i] = 1.0f;
+        dOut.Data()[i] = 1.0f;
+        gradA.Data()[i] = 0.0f;
+        gradB.Data()[i] = 0.0f;
+    }
+
+    Kernels::MatMul_Backward_A(gradA, dOut, b);
+    Kernels::MatMul_Backward_B(gradB, a, dOut);
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        EXPECT_GT(gradA.Data()[i], 0.0f);
+        EXPECT_GT(gradB.Data()[i], 0.0f);
+    }
+}
+
+
+
+TEST(Kernels, MatMul_Backward_ZeroDOut)
+{
+    Tensor a({ 2, 3 });
+    Tensor b({ 3, 2 });
+    Tensor dOut({ 2, 2 });
+    Tensor gradA({ 2, 3 });
+
+    for (size_t i = 0; i < dOut.Size(); i++)
+        dOut.Data()[i] = 0.0f;
+
+    Kernels::MatMul_Backward_A(gradA, dOut, b);
+
+    for (size_t i = 0; i < gradA.Size(); i++)
+        EXPECT_FLOAT_EQ(gradA.Data()[i], 0.0f);
+}
+
+
+
+TEST(Kernels, Backward_Overall_Sanity)
+{
+    Tensor a({ 2, 2 });
+    Tensor b({ 2, 2 });
+    Tensor out({ 2, 2 });
+
+    Tensor gradA({ 2, 2 });
+    Tensor gradB({ 2, 2 });
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        a.Data()[i] = 1.0f;
+        b.Data()[i] = 2.0f;
+    }
+
+    Kernels::MatMul_Forward(out, a, b);
+
+    for (size_t i = 0; i < 4; i++)
+        gradA.Data()[i] = 1.0f;
+
+    Kernels::MatMul_Backward_A(gradA, out, b);
+
+    for (size_t i = 0; i < gradA.Size(); i++)
+        EXPECT_GT(gradA.Data()[i], 0.0f);
+}
