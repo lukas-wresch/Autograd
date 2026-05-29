@@ -16,21 +16,16 @@ public:
 
 
 
-inline bool IsBroadcastCompatible(const std::vector<size_t>& a, const std::vector<size_t>& b)
+inline bool IsBroadcastCompatible(const std::vector<size_t>& ShapeA, const std::vector<size_t>& ShapeB)
 {
-    size_t aDim = a.size();
-    size_t bDim = b.size();
+    size_t aDim = ShapeA.size();
+    size_t bDim = ShapeB.size();
     size_t maxDim = std::max(aDim, bDim);
 
     for (size_t i = 0; i < maxDim; i++)
     {
-        size_t ad = (i < aDim)
-            ? a[aDim - 1 - i]
-            : 1;
-
-        size_t bd = (i < bDim)
-            ? b[bDim - 1 - i]
-            : 1;
+        size_t ad = (i < aDim) ? ShapeA[aDim - 1 - i] : 1;
+        size_t bd = (i < bDim) ? ShapeB[bDim - 1 - i] : 1;
 
         if (ad != bd && ad != 1 && bd != 1)
             return false;
@@ -41,13 +36,10 @@ inline bool IsBroadcastCompatible(const std::vector<size_t>& a, const std::vecto
 
 
 
-inline void Kernels::Multiply_Forward(
-    Tensor& out,
-    const Tensor& a,
-    const Tensor& b)
+inline void Kernels::Multiply_Forward(Tensor& out, const Tensor& a, const Tensor& b)
 {
     if (!IsBroadcastCompatible(a.Shape(), b.Shape()))
-        throw std::runtime_error("Broadcast mismatch");
+        throw std::runtime_error("Kernels::Multiply_Forward() Broadcast mismatch");
 
     const auto& shape = out.Shape();
     size_t total = out.Size();
@@ -82,10 +74,7 @@ inline void Kernels::Multiply_Forward(
 
 
 
-inline void Kernels::MatMul_Forward(
-    Tensor& out,
-    const Tensor& a,
-    const Tensor& b)
+inline void Kernels::MatMul_Forward(Tensor& out, const Tensor& a, const Tensor& b)
 {
     const auto& ashape = a.Shape();
     const auto& bshape = b.Shape();
@@ -94,14 +83,14 @@ inline void Kernels::MatMul_Forward(
     const size_t ndim = oshape.size();
 
     if (ndim < 2)
-        throw std::runtime_error("MatMul requires at least 2D tensors");
+        throw std::runtime_error("Kernels::MatMul_Forward() requires at least 2D tensors");
 
     size_t M = oshape[ndim - 2];
     size_t N = oshape[ndim - 1];
     size_t K = ashape[ndim - 1];
 
     if (bshape[ndim - 2] != K)
-        throw std::runtime_error("MatMul shape mismatch");
+        throw std::runtime_error("Kernels::MatMul_Forward() shape mismatch");
 
     const float* A = a.Data();
     const float* B = b.Data();

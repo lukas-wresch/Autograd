@@ -94,9 +94,26 @@ NodePtr<T> Neuron::Forward(const NodePtr<T>& Input) const
 
 
 
+inline std::mt19937& GlobalRNG()
+{
+	static thread_local std::mt19937 gen(42);
+	return gen;
+}
+
+
+
 inline float RandomFloatMinus1To1()
 {
-	return (std::rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+	static thread_local std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+	return dist(GlobalRNG());
+}
+
+
+
+inline float RandNormal(float stddev = 1.0f)
+{
+	static thread_local std::normal_distribution<float> dist(0.0f, stddev);
+	return dist(GlobalRNG());
 }
 
 

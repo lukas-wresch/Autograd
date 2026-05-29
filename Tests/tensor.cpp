@@ -23,7 +23,7 @@ TEST(Tensor, ConstructorFromDataAndShape)
 {
     std::vector<float> data = { 1, 2, 3, 4, 5, 6 };
 
-    Tensor t(data, { 2, 3 });
+    Tensor t({ 2, 3 }, data);
 
     EXPECT_EQ(t.Shape()[0], 2);
     EXPECT_EQ(t.Shape()[1], 3);

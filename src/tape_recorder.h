@@ -223,7 +223,11 @@ void TapeRecorder<T>::Forward()
             values[entry.out] = values[entry.a].Sum();
             break;
         case Operator::ElementwiseAdd:
-            values[entry.out] = values[entry.a].ElementwiseAdd(values[entry.b]);
+            if constexpr (std::is_same_v<T, Tensor>)
+            {
+            }
+            else
+                values[entry.out] = values[entry.a].ElementwiseAdd(values[entry.b]);
             break;
         case Operator::ElementwiseMul:
             if constexpr (std::is_same_v<T, Tensor>)
@@ -233,9 +237,15 @@ void TapeRecorder<T>::Forward()
             break;
 
         case Operator::Pack:
-            values[entry.out].SetLength(entry.inputs.size());//Neccessary???
-            for (size_t j = 0; j < entry.inputs.size(); j++)
-                values[entry.out].SetValue()[j] = values[entry.inputs[j]].GetValue()[0];
+            if constexpr (std::is_same_v<T, Tensor>)
+            {
+            }
+            else
+            {
+                values[entry.out].SetLength(entry.inputs.size());//Neccessary???
+                for (size_t j = 0; j < entry.inputs.size(); j++)
+                    values[entry.out].SetValue()[j] = values[entry.inputs[j]].GetValue()[0];
+            }
             break;
 
         case Operator::Tanh:
@@ -245,7 +255,10 @@ void TapeRecorder<T>::Forward()
             values[entry.out] = values[entry.a].ReLU();
             break;
         case Operator::Softmax_CrossEntropy:
-            values[entry.out] = values[entry.a].Softmax().CrossEntropy(values[entry.b]);
+            if constexpr (std::is_same_v<T, Tensor>)
+            { }
+            else
+                values[entry.out] = values[entry.a].Softmax().CrossEntropy(values[entry.b]);
             break;
 
         default:
@@ -285,71 +298,131 @@ inline void TapeRecorder<T>::Backward()
         switch (entry.op)
         {
         case Operator::Add:
-            grads[entry.a] += outer_grad;
-            grads[entry.b] += outer_grad;
+            if constexpr (std::is_same_v<T, Tensor>)
+            {
+            }
+            else
+            {
+                grads[entry.a] += outer_grad;
+                grads[entry.b] += outer_grad;
+            }
             break;
         case Operator::Subtract:
-            grads[entry.a] += outer_grad;
-            grads[entry.b] -= outer_grad;
+            if constexpr (std::is_same_v<T, Tensor>)
+            {
+            }
+            else
+            {
+                grads[entry.a] += outer_grad;
+                grads[entry.b] -= outer_grad;
+            }
             break;
         case Operator::Multiply:
-            grads[entry.a] += outer_grad * values[entry.b].Transpose();
-            grads[entry.b] += values[entry.a].Transpose() * outer_grad;
+            if constexpr (std::is_same_v<T, Tensor>)
+            {
+            }
+            else
+            {
+                grads[entry.a] += outer_grad * values[entry.b].Transpose();
+                grads[entry.b] += values[entry.a].Transpose() * outer_grad;
+            }
             break;
         case Operator::Sum:
-            //grads[entry.a] = grads[entry.a].ElementwiseAdd(outer_grad);
-            grads[entry.a] += outer_grad;
+            if constexpr (std::is_same_v<T, Tensor>)
+            {
+            }
+            else
+            {
+                //grads[entry.a] = grads[entry.a].ElementwiseAdd(outer_grad);
+                grads[entry.a] += outer_grad;
+            }
             break;
 
         case Operator::ElementwiseAdd:
-            grads[entry.a] += outer_grad;
-            grads[entry.b] += outer_grad.Sum();
+            if constexpr (std::is_same_v<T, Tensor>)
+            {
+            }
+            else
+            {
+                grads[entry.a] += outer_grad;
+                grads[entry.b] += outer_grad.Sum();
+            }
             break;
         case Operator::ElementwiseMul:
-            grads[entry.a] += values[entry.b].ElementwiseMul(outer_grad);
-            grads[entry.b] += values[entry.a].ElementwiseMul(outer_grad);
+            if constexpr (std::is_same_v<T, Tensor>)
+            {
+            }
+            else
+            {
+                grads[entry.a] += values[entry.b].ElementwiseMul(outer_grad);
+                grads[entry.b] += values[entry.a].ElementwiseMul(outer_grad);
+            }
             break;
         case Operator::Pack:
-            for (size_t j = 0; j < entry.inputs.size(); j++)
-                grads[entry.inputs[j]] += outer_grad.GetValue()[j];
+            if constexpr (std::is_same_v<T, Tensor>)
+            {
+            }
+            else
+            {
+                for (size_t j = 0; j < entry.inputs.size(); j++)
+                    grads[entry.inputs[j]] += outer_grad.GetValue()[j];
+            }
             break;
 
         case Operator::Tanh:
-            grads[entry.a] += (1.0f - values[entry.out].ElementwiseMul(values[entry.out])).ElementwiseMul(outer_grad);//tanh' = 1 - tanh^2
+            if constexpr (std::is_same_v<T, Tensor>)
+            {
+            }
+            else
+            {
+                grads[entry.a] += (1.0f - values[entry.out].ElementwiseMul(values[entry.out])).ElementwiseMul(outer_grad);//tanh' = 1 - tanh^2
+            }
             break;
         case Operator::ReLU:
-            grads[entry.a] += values[entry.out].Heaviside().ElementwiseMul(outer_grad);//ReLU' = 1 if x > 0 else 0
+            if constexpr (std::is_same_v<T, Tensor>)
+            {
+            }
+            else
+            {
+                grads[entry.a] += values[entry.out].Heaviside().ElementwiseMul(outer_grad);//ReLU' = 1 if x > 0 else 0
+            }
             break;
 
         case Operator::Softmax_CrossEntropy:
         {
-            // logits are stored in "left"
-            T& logits = values[entry.a];
-            T& grad_logits = grads[entry.a];
-
-            const int target = (int)values[entry.b].GetValue()[0];
-
-            // forward softmax recomputation
-            // (oder cached probabilities!)
-            float max_val = logits.Max(); // numerical stability
-
-            float sum = 0.0f;
-            std::vector<float> probs(logits.GetLength());
-
-            for (size_t i = 0; i < logits.GetLength(); i++)
+            if constexpr (std::is_same_v<T, Tensor>)
             {
-                probs[i] = std::exp(logits[i] - max_val);
-                sum += probs[i];
             }
-
-            for (float& p : probs)
-                p /= sum;
-
-            // backward: dL/dlogits = p - y
-            for (size_t i = 0; i < logits.GetLength(); i++)
+            else
             {
-                float y = (i == (size_t)target) ? 1.0f : 0.0f;
-                grad_logits.SetValue()[i] += (probs[i] - y) * outer_grad[0];
+                // logits are stored in "left"
+                T& logits = values[entry.a];
+                T& grad_logits = grads[entry.a];
+
+                const int target = (int)values[entry.b].GetValue()[0];
+
+                // forward softmax recomputation
+                // (oder cached probabilities!)
+                float max_val = logits.Max(); // numerical stability
+
+                float sum = 0.0f;
+                std::vector<float> probs(logits.GetSize());
+
+                for (size_t i = 0; i < logits.GetSize(); i++)
+                {
+                    probs[i] = std::exp(logits[i] - max_val);
+                    sum += probs[i];
+                }
+
+                for (float& p : probs)
+                    p /= sum;
+
+                // backward: dL/dlogits = p - y
+                for (size_t i = 0; i < logits.GetSize(); i++)
+                {
+                    float y = (i == (size_t)target) ? 1.0f : 0.0f;
+                    grad_logits.SetValue()[i] += (probs[i] - y) * outer_grad[0];
+                }
             }
             break;
         }

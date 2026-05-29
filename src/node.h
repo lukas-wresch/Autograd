@@ -59,7 +59,7 @@ public:
     bool IsTrainable() const { return trainable; }
     void SetAsTrainable(bool Trainable = true) { trainable = Trainable; }
 
-    static NodePtr<T> Create(T Value, const std::string& Label = "") { return std::make_shared<Node<T>>(Value, Label); }
+    static NodePtr<T> Create(const T& Value, const std::string& Label = "") { return std::make_shared<Node<T>>(Value, Label); }
     static NodePtr<T> Create() { return std::make_shared<Node<T>>(); }
     static NodePtr<T> CreateWithSize(size_t Length, const std::string& Label = "") { return std::make_shared<Node<T>>(Length, Label); }
     static NodePtr<T> CreateWithSize(size_t Length1, size_t Length2, const std::string& Label = "") { return std::make_shared<Node<T>>(Length1, Length2, Label); }
@@ -299,7 +299,7 @@ NodePtr<T> operator+(const NodePtr<T>& left, const NodePtr<T>& right)
 {
     auto out = std::make_shared<Node<T>>(left->value + right->value);
 
-    out->op = Operator::Add;
+    out->op    = Operator::Add;
     out->left  = left;
     out->right = right;
 
@@ -313,7 +313,7 @@ NodePtr<T> operator-(const NodePtr<T>& left, const NodePtr<T>& right)
 {
     auto out = std::make_shared<Node<T>>(left->value - right->value);
 
-    out->op = Operator::Subtract;
+    out->op    = Operator::Subtract;
     out->left  = left;
     out->right = right;
 
@@ -327,7 +327,7 @@ NodePtr<T> operator*(const NodePtr<T>& left, const NodePtr<T>& right)
 {
     auto out = std::make_shared<Node<T>>(left->value * right->value);
 
-    out->op = Operator::Multiply;
+    out->op    = Operator::Multiply;
     out->left  = left;
     out->right = right;
 

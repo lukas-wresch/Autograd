@@ -2444,6 +2444,79 @@ TEST(TapeRecorder, XOR)
 
 
 
+TEST(TapeRecorder, XOR_Tensor)
+{
+	Tensor data({ 2, 4 });
+	data.SetColumn(0, { 0,0 });
+	data.SetColumn(1, { 0,1 });
+	data.SetColumn(2, { 1,0 });
+	data.SetColumn(3, { 1,1 });
+
+	Tensor data_labels({ 4 }, { 0, 1, 1, 0 });
+
+
+	NodePtr<Tensor> xs = Node<Tensor>::Create(data);
+	NodePtr<Tensor> labels = Node<Tensor>::Create(data_labels);
+
+	Layer2D<Tensor> L1(2, 3, Activation::Tanh);
+	Layer2D<Tensor> L2(3, 1, Activation::Tanh);
+
+	SGD<Tensor> sgd(0.1f);
+
+	auto x_ = Node<Tensor>::Create({ 2, 4 }, "x");
+	auto label_ = Node<Tensor>::Create({ 4 }, "label");
+	auto l1_out = L1.Forward(x_);
+	auto out_ = L2.Forward(l1_out);
+
+	auto diff  = out_ - label_;
+	auto loss_ = diff * diff;
+	out_->SetLabel("output");
+	loss_->SetLabel("loss");
+
+	auto tape = TapeRecorder<Tensor>();
+	tape.Compile(loss_);
+
+	sgd.SetTrainableParams(tape);
+
+	auto input  = tape.SetValue("x");
+	auto label  = tape.SetValue("label");
+	auto output = tape.SetValue("output");
+	auto loss   = tape.SetValue("loss");
+
+	float lr = 0.1f;
+	float epoch_loss = 0.0f;
+
+	for (size_t epoch = 0; epoch < 350; epoch++)
+	{
+		epoch_loss = 0.0f;
+
+		*input = xs->GetValue();
+		*label = labels->GetValue();
+
+		tape.Forward();
+
+		tape.ZeroGradients();
+		tape.Backward();
+
+		sgd.Step();
+
+		epoch_loss += loss->Data()[0];
+	}
+
+	EXPECT_NEAR(epoch_loss, 0.0f, 0.1f);
+
+	for (size_t i = 0; i < xs->GetValue().GetColumns(); i++)
+	{
+		*input = xs->GetValue().ViewColumn(i);
+
+		tape.Forward();
+
+		EXPECT_NEAR(*output->Data(), *labels->GetValue().Data(), 0.1f);
+	}
+}
+
+
+
 TEST(TapeRecorder, SpiralClassification_MSE)
 {
 	std::vector<NodePtr<Vector>> xs;

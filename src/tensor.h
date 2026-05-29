@@ -1,9 +1,9 @@
 #pragma once
-#include <cmath>
 #include <initializer_list>
-#include <stdexcept>
 #include <algorithm>
+#include <stdexcept>
 #include <vector>
+#include <functional>
 #include "matrix.h"
 
 
@@ -17,6 +17,11 @@ public:
 		Storage(size_t Size) : m_Size(Size), m_Data(new float[Size])
 		{
 			std::fill(m_Data, m_Data + m_Size, 0.0f);
+		}
+
+		Storage(size_t Size, const float* Data) : m_Size(Size), m_Data(new float[Size])
+		{
+			std::copy(Data, Data + Size, m_Data);
 		}
 
 		Storage(const std::vector<float>& Data) : m_Size(Data.size()), m_Data(new float[Data.size()])
@@ -43,33 +48,45 @@ public:
 
 
 
-	Tensor(Tensor&& T) : storage_(T.storage_), shape_(T.shape_), strides_(T.strides_), offset_(T.offset_)
+	//Tensor(const Tensor& T) : m_Storage(new Storage(T.m_Storage->GetSize(), T.m_Storage->GetData())), m_Shape(T.m_Shape), m_Strides(T.m_Strides), m_Offset(T.m_Offset)
+	//{}
+
+	void operator=(const Tensor& T)
 	{
-		T.storage_ = nullptr;
-		T.shape_   = {};
-		T.strides_ = {};
-		T.offset_  = 0;
+		m_Storage = T.m_Storage;
+		m_Shape   = T.m_Shape;
+		m_Strides = T.m_Strides;
+		m_Offset  = T.m_Offset;
 	}
 
-	Tensor(std::vector<size_t> Shape) : shape_(Shape)
+
+	Tensor(Tensor&& T) : m_Storage(T.m_Storage), m_Shape(T.m_Shape), m_Strides(T.m_Strides), m_Offset(T.m_Offset)
+	{
+		T.m_Storage = nullptr;
+		T.m_Shape   = {};
+		T.m_Strides = {};
+		T.m_Offset  = 0;
+	}
+
+	Tensor(std::vector<size_t> Shape) : m_Shape(Shape)
 	{
 		size_t size = 1;
 		for (auto s : Shape)
 			size *= s;
-		storage_ = new Storage(size);
 
-		strides_ = ComputeStrides(Shape);
+		m_Storage = new Storage(size);
+		m_Strides = ComputeStrides(Shape);
 	}
 
-	Tensor(const std::vector<float>& Data, const std::vector<size_t>& Shape): storage_(new Storage(Data)), shape_(Shape)
+	Tensor(const std::vector<size_t>& Shape, const std::vector<float>& Data): m_Storage(new Storage(Data)), m_Shape(Shape)
 	{
 		size_t expected = 1;
-		for (auto s : shape_) expected *= s;
+		for (auto s : m_Shape) expected *= s;
 
 		if (expected != Data.size())
 			throw std::runtime_error("Shape does not match data size");
 
-		strides_ = ComputeStrides(shape_);
+		m_Strides = ComputeStrides(m_Shape);
 	}
 
 	/*Tensor(const Matrix& Mat)
@@ -91,43 +108,60 @@ public:
 
 	Tensor View(const std::vector<size_t>& new_shape) const
 	{
-		return Tensor(storage_, new_shape, strides_);
+		return Tensor(m_Storage, new_shape, m_Strides);
 	}
 
-	const std::vector<size_t>& Shape() const { return shape_; }
-	const std::vector<size_t>& Strides() const { return strides_; }
-	size_t Offset() const { return offset_; }
+	Tensor ViewColumn(size_t col) const
+	{
+		if (m_Shape.size() != 2)
+			throw std::runtime_error("ViewColumn only valid for 2D tensors");
+		return Tensor(m_Storage, { m_Shape[0], 1 }, { m_Strides[0], 0 }, m_Offset + col);
+	}
+
+	const std::vector<size_t>& Shape() const { return m_Shape; }
+	const std::vector<size_t>& Strides() const { return m_Strides; }
+	size_t Offset() const { return m_Offset; }
 
 	size_t Size() const
 	{
 		size_t s = 1;
 
-		for (size_t v : shape_)
+		for (size_t v : m_Shape)
 			s *= v;
 
 		return s;
 	}
 
+	void SetZero()
+	{
+		std::fill(Data(), Data() + Size(), 0.0f);
+	}
+
+	void SetOne()
+	{
+		std::fill(Data(), Data() + Size(), 1.0f);
+	}
+
 	float* Data()
 	{
-		if (storage_)
-			return storage_->SetData() + offset_;
+		if (m_Storage)
+			return m_Storage->SetData() + m_Offset;
 		return nullptr;
 	}
 
 	const float* Data() const
 	{
-		if (storage_)
-			return storage_->GetData() + offset_;
+		if (m_Storage)
+			return m_Storage->GetData() + m_Offset;
 		return nullptr;
 	}
 
 	inline size_t Offset(const std::vector<size_t>& idx) const
 	{
-		size_t offset = offset_;
+		size_t offset = m_Offset;
 
-		for (size_t i = 0; i < shape_.size(); i++)
-			offset += idx[i] * strides_[i];
+		for (size_t i = 0; i < m_Shape.size(); i++)
+			offset += idx[i] * m_Strides[i];
 
 		return offset;
 	}
@@ -136,26 +170,173 @@ public:
 	{
 		std::vector<size_t> result(outShape.size(), 0);
 
-		size_t ndimDiff = outShape.size() - shape_.size();
+		size_t ndimDiff = outShape.size() - m_Shape.size();
 
-		for (size_t i = 0; i < shape_.size(); i++)
+		for (size_t i = 0; i < m_Shape.size(); i++)
 		{
-			if (shape_[i] == 1)
+			if (m_Shape[i] == 1)
 				result[i + ndimDiff] = 0;
 			else
-				result[i + ndimDiff] = strides_[i];
+				result[i + ndimDiff] = m_Strides[i];
 		}
 
 		return result;
 	}
 
-private:
-	Tensor(Storage* Storage, const std::vector<size_t>& Shape) : storage_(Storage), shape_(Shape)
+	float At(const std::vector<size_t>& idx) const
 	{
-		strides_ = ComputeStrides(Shape);
+		if (idx.size() != m_Shape.size())
+			throw std::runtime_error("dimension mismatch");
+
+		size_t offset = m_Offset;
+
+		size_t i = 0;
+		for (auto it = idx.begin(); it != idx.end(); ++it, ++i)
+		{
+			if (*it >= m_Shape[i])
+				throw std::out_of_range("index out of bounds");
+
+			offset += (*it) * m_Strides[i];
+		}
+
+		return m_Storage->GetData()[offset];
 	}
 
-	Tensor(Storage* Storage, const std::vector<size_t>& Shape, const std::vector<size_t>& Strides) : storage_(Storage), shape_(Shape), strides_(Strides)
+	float* At(const std::vector<size_t>& idx)
+	{
+		if (idx.size() != m_Shape.size())
+			throw std::runtime_error("dimension mismatch");
+
+		size_t offset = m_Offset;
+
+		size_t i = 0;
+		for (auto it = idx.begin(); it != idx.end(); ++it, ++i)
+		{
+			if (*it >= m_Shape[i])
+				throw std::out_of_range("index out of bounds");
+
+			offset += (*it) * m_Strides[i];
+		}
+
+		return &m_Storage->SetData()[offset];
+	}
+
+	void Transpose()
+	{
+		if (m_Shape.size() != 2)
+			throw std::runtime_error("Transpose only valid for 2D tensors");
+
+		std::swap(m_Shape[0], m_Shape[1]);
+		std::swap(m_Strides[0], m_Strides[1]);
+	}
+
+	size_t GetRows() const
+	{
+		if (m_Shape.size() != 2)
+			throw std::runtime_error("SetRow only valid for 2D tensors");
+		return m_Shape[0];
+	}
+
+	size_t GetColumns() const
+	{
+		if (m_Shape.size() != 2)
+			throw std::runtime_error("SetRow only valid for 2D tensors");
+		return m_Shape[1];
+	}
+
+	void SetRow(size_t row, std::initializer_list<float> vec)
+	{
+		if (m_Shape.size() != 2)
+			throw std::runtime_error("SetRow only valid for 2D tensors");
+
+		size_t cols = m_Shape[1];
+
+		if (vec.size() != cols)
+			throw std::runtime_error("Row size mismatch");
+
+		float* data = m_Storage->SetData();
+
+		for (size_t col = 0; col < cols; col++)
+		{
+			size_t idx = m_Offset + row * m_Strides[0] + col * m_Strides[1];
+			data[idx] = *(vec.begin() + col);
+		}
+	}
+
+	void SetColumn(size_t col, std::initializer_list<float> vec)
+	{
+		if (m_Shape.size() != 2)
+			throw std::runtime_error("SetRow only valid for 2D tensors");
+
+		size_t rows = m_Shape[0];
+
+		if (vec.size() != rows)
+			throw std::runtime_error("Column size mismatch");
+
+		float* data = m_Storage->SetData();
+
+		for (size_t row = 0; row < rows; row++)
+		{
+			size_t idx = m_Offset + row * m_Strides[0] + col * m_Strides[1];
+			data[idx] = *(vec.begin() + col);
+		}
+	}
+
+
+
+	Tensor Sum() const
+	{
+		float sum = 0.0f;
+		for (size_t i = 0; i < Size(); i++)
+			sum += Data()[i];
+		return Tensor({ 1 }, { sum });
+	}
+
+	float Max() const
+	{
+		float max = Data()[0];
+		for (size_t i = 1; i < Size(); i++)
+		{
+			if (Data()[i] > max)
+				max = Data()[i];
+		}
+		return max;
+	}
+
+	Tensor Tanh() const
+	{
+		Tensor out(m_Shape);
+		for (size_t i = 0; i < Size(); i++)
+			out.Data()[i] = std::tanh(Data()[i]);
+		return out;
+	}
+
+	Tensor ReLU() const
+	{
+		Tensor out(m_Shape);
+		for (size_t i = 0; i < Size(); i++)
+			out.Data()[i] = std::fmax(0.0f, Data()[i]);
+		return out;
+	}
+
+	//Derivate of ReLU
+	Tensor Heaviside() const
+	{
+		Tensor out(m_Shape);
+		for (size_t i = 0; i < Size(); i++)
+			out.Data()[i] = (Data()[i] > 0.0f ? 1.0f : 0.0f);
+		return out;
+	}
+
+
+private:
+	Tensor(Storage* Storage, const std::vector<size_t>& Shape) : m_Storage(Storage), m_Shape(Shape)
+	{
+		m_Strides = ComputeStrides(Shape);
+	}
+
+	Tensor(Storage* Storage, const std::vector<size_t>& Shape, const std::vector<size_t>& Strides, size_t Offset = 0)
+		: m_Storage(Storage), m_Shape(Shape), m_Strides(Strides), m_Offset(Offset)
 	{}
 
 
@@ -172,8 +353,65 @@ private:
 	}
 
 
-	Storage* storage_ = nullptr;
-	std::vector<size_t> shape_;
-	std::vector<size_t> strides_;
-	size_t offset_ = 0;
+
+	Storage* m_Storage = nullptr;
+	std::vector<size_t> m_Shape;
+	std::vector<size_t> m_Strides;
+	size_t m_Offset = 0;
 };
+
+
+
+inline void ForEachIndex(const Tensor& t, std::function<void(const std::vector<size_t>&)> fn)
+{
+	std::vector<size_t> idx(t.Shape().size(), 0);
+
+	size_t total = t.Size();
+
+	for (size_t i = 0; i < total; i++)
+	{
+		size_t tmp = i;
+
+		for (int d = (int)t.Shape().size() - 1; d >= 0; d--)
+		{
+			idx[d] = tmp % t.Shape()[d];
+			tmp /= t.Shape()[d];
+		}
+
+		fn(idx);
+	}
+}
+
+
+
+inline Tensor operator+(const Tensor& left, const Tensor& right)
+{
+	if (left.Shape() != right.Shape())
+		throw std::runtime_error("Tensor operator + shape mismatch");
+
+	Tensor result(left.Shape());
+
+	ForEachIndex(left, [&](const std::vector<size_t>& idx)
+	{
+		*result.At(idx) = left.At(idx) + right.At(idx);
+	});
+
+	return result;
+}
+
+
+
+inline Tensor operator-(const Tensor& left, const Tensor& right)
+{
+	if (left.Shape() != right.Shape())
+		throw std::runtime_error("Tensor operator - shape mismatch");
+
+	Tensor result(left.Shape());
+
+	ForEachIndex(left, [&](const std::vector<size_t>& idx)
+		{
+			*result.At(idx) = left.At(idx) - right.At(idx);
+		});
+
+	return result;
+}
