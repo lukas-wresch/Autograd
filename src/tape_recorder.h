@@ -3,6 +3,7 @@
 #include <string>
 #include <stdio.h>
 #include "node.h"
+#include "kernels.h"
 
 
 
@@ -212,7 +213,10 @@ void TapeRecorder<T>::Forward()
             values[entry.out] = values[entry.a] - values[entry.b];
             break;
         case Operator::Multiply:
-            values[entry.out] = values[entry.a] * values[entry.b];
+            if constexpr (std::is_same_v<T, Tensor>)
+                Kernels::MatMul_Forward(values[entry.out], values[entry.a], values[entry.b]);
+            else
+                values[entry.out] = values[entry.a] * values[entry.b];
             break;
 
         case Operator::Sum:
@@ -222,7 +226,10 @@ void TapeRecorder<T>::Forward()
             values[entry.out] = values[entry.a].ElementwiseAdd(values[entry.b]);
             break;
         case Operator::ElementwiseMul:
-            values[entry.out] = values[entry.a].ElementwiseMul(values[entry.b]);
+            if constexpr (std::is_same_v<T, Tensor>)
+                Kernels::Multiply_Forward(values[entry.out], values[entry.a], values[entry.b]);
+            else
+                values[entry.out] = values[entry.a].ElementwiseMul(values[entry.b]);
             break;
 
         case Operator::Pack:
