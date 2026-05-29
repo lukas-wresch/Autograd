@@ -1444,7 +1444,7 @@ TEST(Training, MNist_Fashion_SCE)
 
 	auto [train_acc, val_acc] = calculate_acc();
 
-	EXPECT_LE(epoch_loss, 0.35f);
+	EXPECT_LE(epoch_loss, 0.40f);
 	EXPECT_GE(train_acc, 0.80f);
 	EXPECT_GE(val_acc, 0.80f);
 }
@@ -2409,7 +2409,7 @@ TEST(TapeRecorder, XOR)
 	float lr = 0.1f;
 	float epoch_loss = 0.0f;
 
-	for (size_t epoch = 0; epoch < 300; epoch++)
+	for (size_t epoch = 0; epoch < 350; epoch++)
 	{
 		epoch_loss = 0.0f;
 

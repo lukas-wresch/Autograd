@@ -73,6 +73,7 @@ public:
 	}
 
 	size_t GetLength() const { return m_Length; }
+	size_t GetSize() const { return m_Length; }
 	size_t GetRows() const { return m_Length; }
 	size_t GetColumns() const { return 1; }
 

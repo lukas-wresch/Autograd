@@ -166,6 +166,27 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
     case Operator::ReLU:
         left->grad += value.Heaviside().ElementwiseMul(grad);//ReLU' = 1 if x > 0 else 0
         break;
+    case Operator::Softmax:
+    {
+        float dot = 0.0f;
+
+        for (size_t i = 0; i < grad.GetSize(); i++)
+            dot += grad[i] * value[i];
+
+        for (size_t i = 0; i < grad.GetSize(); i++)
+            left->grad.SetValue()[i] += value[i] * (grad[i] - dot);
+        break;
+    }
+    case Operator::CrossEntropy:
+    {
+        T& probs = left->value;
+        T& grad_probs = left->grad;
+
+        const int target = (int)right->value.GetValue()[0];
+
+        grad_probs.SetValue()[target] += (-1.0f / probs[target]) * grad[0];
+        break;
+    }
     case Operator::Softmax_CrossEntropy:
     {
         // logits are stored in "left"
@@ -174,10 +195,8 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
 
         const int target = (int)right->value.GetValue()[0];
 
-        // -----------------------------------
         // forward softmax recomputation
         // (oder cached probabilities!)
-        // -----------------------------------
         float max_val = logits.Max(); // numerical stability
 
         float sum = 0.0f;
@@ -192,9 +211,7 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
         for (float& p : probs)
             p /= sum;
 
-        // -----------------------------------
         // backward: dL/dlogits = p - y
-        // -----------------------------------
         for (size_t i = 0; i < logits.GetLength(); i++)
         {
             float y = (i == (size_t)target) ? 1.0f : 0.0f;

@@ -322,10 +322,8 @@ inline void TapeRecorder<T>::Backward()
 
             const int target = (int)values[entry.b].GetValue()[0];
 
-            // -----------------------------------
             // forward softmax recomputation
             // (oder cached probabilities!)
-            // -----------------------------------
             float max_val = logits.Max(); // numerical stability
 
             float sum = 0.0f;
@@ -340,9 +338,7 @@ inline void TapeRecorder<T>::Backward()
             for (float& p : probs)
                 p /= sum;
 
-            // -----------------------------------
             // backward: dL/dlogits = p - y
-            // -----------------------------------
             for (size_t i = 0; i < logits.GetLength(); i++)
             {
                 float y = (i == (size_t)target) ? 1.0f : 0.0f;
