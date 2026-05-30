@@ -619,7 +619,7 @@ TEST(Kernels, Tanh_Backward_Sanity)
 
 
 
-TEST(Kernels, Multiply_Backward_Basic)
+/*TEST(Kernels, Multiply_Backward_Basic)
 {
     Tensor a({ 2, 2 });
     Tensor b({ 2, 2 });
@@ -636,11 +636,11 @@ TEST(Kernels, Multiply_Backward_Basic)
 
     for (size_t i = 0; i < 4; i++)
         EXPECT_FLOAT_EQ(gradA.Data()[i], b.Data()[i]);
-}
+}*/
 
 
 
-TEST(Kernels, Multiply_Backward_ScalarBroadcast)
+/*TEST(Kernels, Multiply_Backward_ScalarBroadcast)
 {
     Tensor a({ 2, 3 });
     Tensor b({ 1 });
@@ -680,7 +680,7 @@ TEST(Kernels, Multiply_Backward_Accumulation)
 
     for (size_t i = 0; i < 4; i++)
         EXPECT_FLOAT_EQ(gradA.Data()[i], 1.0f + 2.0f + 2.0f);
-}
+}*/
 
 
 

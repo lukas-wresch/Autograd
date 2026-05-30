@@ -478,7 +478,7 @@ inline void operator+=(Tensor& left, const Tensor& right)
 
 	auto outShape = BroadcastShape(left.Shape(), right.Shape());
 
-	ForEachIndex(left, [&](const std::vector<size_t>& idx)
+	ForEachIndex(outShape, [&](const std::vector<size_t>& idx)
 	{
 		std::vector<size_t> lidx(left.Shape().size());
 		std::vector<size_t> ridx(right.Shape().size());
@@ -560,7 +560,7 @@ inline void operator-=(Tensor& left, const Tensor& right)
 
 	auto outShape = BroadcastShape(left.Shape(), right.Shape());
 
-	ForEachIndex(left, [&](const std::vector<size_t>& idx)
+	ForEachIndex(outShape, [&](const std::vector<size_t>& idx)
 	{
 		std::vector<size_t> lidx(left.Shape().size());
 		std::vector<size_t> ridx(right.Shape().size());

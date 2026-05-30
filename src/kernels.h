@@ -89,8 +89,7 @@ inline void Kernels::MatMul_Forward(Tensor& out, const Tensor& A, const Tensor& 
     const size_t ndim = ashape.size();
 
     if (ndim < 2 || bshape.size() != ndim)
-        throw std::runtime_error(
-            "Kernels::MatMul_Forward() invalid dimensions");
+        throw std::runtime_error("Kernels::MatMul_Forward() invalid dimensions");
 
     size_t M = ashape[ndim - 2];
     size_t K = ashape[ndim - 1];
@@ -99,15 +98,13 @@ inline void Kernels::MatMul_Forward(Tensor& out, const Tensor& A, const Tensor& 
     size_t N = bshape[ndim - 1];
 
     if (K != K2)
-        throw std::runtime_error(
-            "Kernels::MatMul_Forward() K mismatch");
+        throw std::runtime_error("Kernels::MatMul_Forward() K mismatch");
 
     std::vector<size_t> expected = ashape;
     expected[ndim - 1] = N;
 
     if (oshape != expected)
-        throw std::runtime_error(
-            "Kernels::MatMul_Forward() output shape mismatch");
+        throw std::runtime_error("Kernels::MatMul_Forward() output shape mismatch");
 
     const auto& aStr = A.Strides();
     const auto& bStr = B.Strides();
