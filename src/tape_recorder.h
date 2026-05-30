@@ -348,7 +348,8 @@ inline void TapeRecorder<T>::Backward()
         case Operator::Sum:
             if constexpr (std::is_same_v<T, Tensor>)
             {
-                throw std::runtime_error("Unsupported Operation");
+                grads[entry.a] += outer_grad;
+                //throw std::runtime_error("Unsupported Operation");
             }
             else
             {
@@ -531,21 +532,21 @@ inline void TapeRecorder<T>::PrintTape() const
 
 
         if (entry.a < 0)
-            printf("%.02d: %s: %s [%dx%d] %s\n", ++i, op_text.c_str(),
-                out_label.c_str(), (int)values[entry.out].GetRows(), (int)values[entry.out].GetColumns(),
+            printf("%.02d: %s: %s [%s] %s\n", ++i, op_text.c_str(),
+                out_label.c_str(), values[entry.out].Shape2String().c_str(),
                 op_sign.c_str());
 
         else if (entry.b < 0)
-            printf("%.02d: %s: %s [%dx%d] = %s(%s [%dx%d])\n", ++i, op_text.c_str(),
-                out_label.c_str(), (int)values[entry.out].GetRows(), (int)values[entry.out].GetColumns(),
+            printf("%.02d: %s: %s [%s] = %s(%s [%s])\n", ++i, op_text.c_str(),
+                out_label.c_str(), values[entry.out].Shape2String().c_str(),
                 op_sign.c_str(),
-                a_label.c_str(), (int)values[entry.a].GetRows(), (int)values[entry.a].GetColumns());
+                a_label.c_str(), values[entry.a].Shape2String().c_str());
         
         else
-            printf("%.02d: %s: %s [%dx%d] = %s [%dx%d] %s %s [%dx%d]\n", ++i, op_text.c_str(),
-                out_label.c_str(), (int)values[entry.out].GetRows(), (int)values[entry.out].GetColumns(),
-                a_label.c_str(), (int)values[entry.a].GetRows(), (int)values[entry.a].GetColumns(),
+            printf("%.02d: %s: %s [%s] = %s [%s] %s %s [%s]\n", ++i, op_text.c_str(),
+                out_label.c_str(), values[entry.out].Shape2String().c_str(),
+                a_label.c_str(), values[entry.a].Shape2String().c_str(),
                 op_sign.c_str(),
-                b_label.c_str(), (int)values[entry.b].GetRows(), (int)values[entry.b].GetColumns());
+                b_label.c_str(), values[entry.b].Shape2String().c_str());
     }
 }

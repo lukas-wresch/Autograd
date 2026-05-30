@@ -2,6 +2,7 @@
 #include <cmath>
 #include <initializer_list>
 #include <stdexcept>
+#include <string>
 #include <algorithm>
 #include <vector>
 
@@ -160,6 +161,10 @@ public:
 
 	size_t GetRows() const { return m_Rows; }
 	size_t GetColumns() const { return m_Columns; }
+	std::string Shape2String() const
+	{
+		return std::to_string(m_Rows) + "x" + std::to_string(m_Columns);
+	}
 
 	float& At(size_t row, size_t col)
 	{

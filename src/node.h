@@ -341,7 +341,7 @@ NodePtr<T> Node<T>::Sum()
 {
     auto out = Node<T>::Create(value.Sum());
 
-    out->grad.SetLength(1);
+    //out->grad.SetLength(1);
 
     out->op    = Operator::Sum;
     out->left  = this->shared_from_this();

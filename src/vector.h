@@ -2,6 +2,7 @@
 #include <initializer_list>
 #include <stdexcept>
 #include <algorithm>
+#include <string>
 #include <vector>
 
 
@@ -76,6 +77,7 @@ public:
 	size_t GetSize() const { return m_Length; }
 	size_t GetRows() const { return m_Length; }
 	size_t GetColumns() const { return 1; }
+	std::string Shape2String() const { return std::to_string(m_Length); }
 
 	const float* GetValue() const { return m_pValues; }
 	float* SetValue() { return m_pValues; }

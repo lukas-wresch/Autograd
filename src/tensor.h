@@ -2,8 +2,11 @@
 #include <initializer_list>
 #include <algorithm>
 #include <stdexcept>
+#include <string>
 #include <vector>
 #include <functional>
+#include <iostream>
+#include <iomanip>
 #include "matrix.h"
 
 
@@ -240,8 +243,69 @@ public:
 	size_t GetColumns() const
 	{
 		if (m_Shape.size() != 2)
-			throw std::runtime_error("SetRow only valid for 2D tensors");
+			throw std::runtime_error("GetColumns only valid for 2D tensors");
 		return m_Shape[1];
+	}
+
+	std::string Shape2String() const
+	{
+		std::string out;
+		for (auto s : m_Shape)
+		{
+			if (!out.empty())
+				out += "x";
+			out += std::to_string(s);
+		}			
+		return out;
+	}
+
+	void Print() const
+	{
+		std::cout << "Tensor(" << Shape2String() << ")\n";
+		std::cout << "Offset: " << m_Offset << "\n";
+		std::cout << "Strides: ";
+
+		for (size_t i = 0; i < m_Strides.size(); i++)
+		{
+			std::cout << m_Strides[i];
+			if (i + 1 < m_Strides.size()) std::cout << ", ";
+		}
+		std::cout << "\nValues:\n";
+
+		// 1D Tensor
+		if (m_Shape.size() == 1)
+		{
+			std::cout << "[ ";
+			for (size_t i = 0; i < m_Shape[0]; i++)
+			{
+				std::cout << std::fixed << std::setprecision(4) << At({ i }) << " ";
+			}
+			std::cout << "]\n";
+			return;
+		}
+
+		// 2D Tensor
+		if (m_Shape.size() == 2)
+		{
+			for (size_t i = 0; i < m_Shape[0]; i++)
+			{
+				std::cout << "[ ";
+				for (size_t j = 0; j < m_Shape[1]; j++)
+				{
+					std::cout << std::fixed << std::setprecision(4) << At({ i, j }) << " ";
+				}
+				std::cout << "]\n";
+			}
+			return;
+		}
+
+		// ND fallback (flattened view)
+		std::cout << "[flattened]\n[ ";
+		for (size_t i = 0; i < Size(); i++)
+		{
+			std::cout << std::fixed << std::setprecision(4) << Data()[i] << " ";
+		}
+		std::cout << "]\n";
 	}
 
 	void SetRow(size_t row, std::initializer_list<float> vec)
@@ -259,7 +323,7 @@ public:
 		for (size_t col = 0; col < cols; col++)
 		{
 			size_t idx = m_Offset + row * m_Strides[0] + col * m_Strides[1];
-			data[idx] = *(vec.begin() + col);
+			data[idx] = *(vec.begin() + row);
 		}
 	}
 
@@ -275,10 +339,12 @@ public:
 
 		float* data = m_Storage->SetData();
 
-		for (size_t row = 0; row < rows; row++)
+		size_t i = 0;
+		for (auto v : vec)
 		{
-			size_t idx = m_Offset + row * m_Strides[0] + col * m_Strides[1];
-			data[idx] = *(vec.begin() + col);
+			size_t idx = m_Offset + i * m_Strides[0] + col * m_Strides[1];
+			data[idx] = v;
+			i++;
 		}
 	}
 

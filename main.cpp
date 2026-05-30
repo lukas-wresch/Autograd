@@ -736,6 +736,7 @@ int main()
 
 	Tensor data_labels({ 4 }, { 0, 1, 1, 0 });
 
+	data.Print();
 
 	NodePtr<Tensor> xs = Node<Tensor>::Create(data);
 	NodePtr<Tensor> labels = Node<Tensor>::Create(data_labels);
@@ -745,13 +746,13 @@ int main()
 
 	SGD<Tensor> sgd(0.1f);
 
-	auto x_ = Node<Tensor>::Create(Tensor({ 2, 4 }), "x");
+	auto x_     = Node<Tensor>::Create(Tensor({ 2, 4 }), "x");
 	auto label_ = Node<Tensor>::Create(Tensor({ 4 }), "label");
 	auto l1_out = L1.Forward(x_);
-	auto out_ = L2.Forward(l1_out);
+	auto out_   = L2.Forward(l1_out);
 
 	auto diff = out_ - label_;
-	auto loss_ = diff->ElementwiseMul(diff);
+	auto loss_ = diff->ElementwiseMul(diff)->Sum();
 	out_->SetLabel("output");
 	loss_->SetLabel("loss");
 
@@ -761,15 +762,15 @@ int main()
 
 	sgd.SetTrainableParams(tape);
 
-	auto input = tape.SetValue("x");
-	auto label = tape.SetValue("label");
+	auto input  = tape.SetValue("x");
+	auto label  = tape.SetValue("label");
 	auto output = tape.SetValue("output");
-	auto loss = tape.SetValue("loss");
+	auto loss   = tape.SetValue("loss");
 
 	float lr = 0.1f;
 	float epoch_loss = 0.0f;
 
-	for (size_t epoch = 0; epoch < 350; epoch++)
+	for (size_t epoch = 0; epoch < 1; epoch++)
 	{
 		epoch_loss = 0.0f;
 
@@ -777,6 +778,9 @@ int main()
 		*label = labels->GetValue();
 
 		tape.Forward();
+
+		input->Print();
+		label->Print();
 
 		tape.ZeroGradients();
 		tape.Backward();
@@ -786,15 +790,21 @@ int main()
 		epoch_loss += loss->Data()[0];
 	}
 
+	printf("%f\n", epoch_loss);
 	//EXPECT_NEAR(epoch_loss, 0.0f, 0.1f);
+
+	*input = xs->GetValue();
+	tape.Forward();
+
+	printf("%f\n%f\n%f\n%f\n", output->Data()[0], output->Data()[1], output->Data()[2], output->Data()[3]);
 
 	for (size_t i = 0; i < xs->GetValue().GetColumns(); i++)
 	{
-		*input = xs->GetValue().ViewColumn(i);
+		//*input = xs->GetValue().ViewColumn(i);
 
-		tape.Forward();
+		//tape.Forward();
 
-		//EXPECT_NEAR(*output->Data(), labels->GetValue().Data()[i], 0.1f);
+		printf("%.2f vs %.2f\n", output->Data()[i], labels->GetValue().Data()[i]);
 	}
 
 

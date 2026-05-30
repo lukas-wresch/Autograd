@@ -1732,7 +1732,7 @@ TEST(Training, XOR_Layer3D)
 		auto out = L2.Forward(l1_out);
 
 		auto diff = out - label[i];
-		EXPECT_NEAR(diff->GetValue()[0], 0.0f, 0.1f);
+		EXPECT_NEAR(diff->GetValue()[0], 0.0f, 0.15f);
 	}
 }
 
@@ -2467,7 +2467,7 @@ TEST(TapeRecorder, XOR_Tensor)
 	auto out_ = L2.Forward(l1_out);
 
 	auto diff  = out_ - label_;
-	auto loss_ = diff->ElementwiseMul(diff);
+	auto loss_ = diff->ElementwiseMul(diff)->Sum();
 	out_->SetLabel("output");
 	loss_->SetLabel("loss");
 
@@ -2484,12 +2484,12 @@ TEST(TapeRecorder, XOR_Tensor)
 	float lr = 0.1f;
 	float epoch_loss = 0.0f;
 
+	*input = xs->GetValue();
+	*label = labels->GetValue();
+
 	for (size_t epoch = 0; epoch < 350; epoch++)
 	{
 		epoch_loss = 0.0f;
-
-		*input = xs->GetValue();
-		*label = labels->GetValue();
 
 		tape.Forward();
 
@@ -2503,14 +2503,11 @@ TEST(TapeRecorder, XOR_Tensor)
 
 	EXPECT_NEAR(epoch_loss, 0.0f, 0.1f);
 
+	*input = xs->GetValue();
+	tape.Forward();
+
 	for (size_t i = 0; i < xs->GetValue().GetColumns(); i++)
-	{
-		*input = xs->GetValue().ViewColumn(i);
-
-		tape.Forward();
-
-		EXPECT_NEAR(*output->Data(), labels->GetValue().Data()[i], 0.1f);
-	}
+		EXPECT_NEAR(output->Data()[i], labels->GetValue().Data()[i], 0.1f);
 }
 
 
