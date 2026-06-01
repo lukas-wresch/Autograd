@@ -30,6 +30,158 @@ void ShuffleDataset(std::vector<NodePtr<T>>& xs, std::vector<NodePtr<T>>& labels
 
 
 
+void MNist_Tensor()
+{
+	MNist mnist = MNist();
+	//MNist mnist = MNist("mnist-fashion");
+
+	mnist.PrintTrainImage(0);
+	mnist.PrintTrainImage(1);
+	mnist.PrintTrainImage(2);
+
+	std::vector<NodePtr<Tensor>> xs;
+	std::vector<NodePtr<Tensor>> labels;
+
+	std::vector<NodePtr<Tensor>> val_xs;
+	std::vector<NodePtr<Tensor>> val_labels;
+
+	for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
+	{
+		xs.push_back(Node<Tensor>::Create(Tensor({ 28*28, 1 }, mnist.GetTrainingImageData(i))));
+		labels.push_back(Node<Tensor>::Create(Tensor({1,1},  { (float)mnist.GetTrainingLabelData(i) })));
+	}
+
+	for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
+	{
+		val_xs.push_back(Node<Tensor>::Create(Tensor({ 28*28, 1 }, mnist.GetValidationImageData(i))));
+		val_labels.push_back(Node<Tensor>::Create(Tensor({ 1,1 }, { (float)mnist.GetValidationLabelData(i) })));
+	}
+
+
+	auto tape = TapeRecorder<Tensor>();
+	SGD<Tensor> sgd(0.03f, 0.7f);
+	const int batch_size = 8;
+
+	{
+		auto x = Node<Tensor>::CreateWithSize(784, "input");
+		auto label = Node<Tensor>::CreateWithSize(1, "label");
+
+		Layer4D L1(784, 128, Activation::ReLU, InitType::Xavier);
+		Layer4D L2(128,  10, Activation::Identity, InitType::Xavier);
+
+		auto h1 = L1.Forward(x);
+		auto pred = L2.Forward(h1);
+		pred->SetLabel("output");
+
+		//auto loss = (  (pred - label)->ElementwiseMul(pred - label)  )->Sum();
+		auto loss = pred->Softmax_CrossEntropy(label);
+		loss->SetLabel("loss");
+
+		tape.Compile(loss);
+		sgd.SetTrainableParams(tape);
+		std::cout << "Number of parameters: " << sgd.GetNumberOfParameters() << std::endl;
+	}
+
+	auto input  = tape.SetValue("input");
+	auto label  = tape.SetValue("label");
+	auto output = tape.SetValue("output");
+	auto loss   = tape.SetValue("loss");
+
+	tape.PrintTape();
+
+
+	// Forward pass
+	auto calculate_acc = [&]() {
+		int correct = 0;
+		int val_correct = 0;
+
+		for (size_t i = 0; i < xs.size(); i++)
+		{
+			*input = xs[i]->GetValue();
+
+			tape.Forward();
+
+			//Convert one hot to class index
+			int pred_class = (int)output->ArgMax();
+			int target_class = (int)labels[i]->GetValue().At({ 0, 0 });
+
+			if (pred_class == target_class) correct++;
+		}
+
+		for (size_t i = 0; i < val_xs.size(); i++)
+		{
+			*input = val_xs[i]->GetValue();
+
+			tape.Forward();
+
+			//Convert one hot to class index
+			int pred_class = (int)output->ArgMax();
+			int target_class = (int)val_labels[i]->GetValue().At({ 0, 0 });
+
+			if (pred_class == target_class) val_correct++;
+		}
+
+		return std::tuple{ (float)correct * 100.0f / xs.size(), (float)val_correct * 100.0f / val_xs.size() };
+	};
+
+
+	//Training loop
+
+	float epoch_loss = 0.0f;
+
+	for (size_t epoch = 0; epoch < 10; epoch++)
+	{
+		ShuffleDataset(xs, labels);
+
+
+		epoch_loss = 0.0f;
+
+		for (size_t i = 0; i < xs.size(); i += batch_size)
+		{
+			//if (i / batch_size % 500 == 0)
+				//std::cout << "Batch " << i / batch_size << " of " << xs.size() / batch_size << std::endl;
+
+			size_t end = std::min(i + batch_size, xs.size());
+
+			size_t actual_batch_size = end - i;
+
+			float batch_loss = 0.0f;
+
+			tape.ZeroGradients();
+
+			for (size_t j = i; j < end; j++)
+			{
+				*input = xs[j]->GetValue();
+				*label = labels[j]->GetValue();
+
+				tape.Forward();
+				tape.Backward();
+
+				epoch_loss += loss->At({ 0, 0 });;
+				batch_loss += loss->At({ 0, 0 });;
+			}
+
+			sgd.Step(1.0f / actual_batch_size);
+		}
+
+		epoch_loss /= xs.size();
+
+		//if (epoch % 2 == 0)
+		std::cout << "Epoch " << epoch + 1 << " Loss: " << epoch_loss << std::endl;
+		auto [train_acc, val_acc] = calculate_acc();
+		std::cout << "Train Accuracy: " << train_acc << "%" << std::endl;
+		std::cout << "Valid Accuracy: " << val_acc << "%" << std::endl;
+
+		sgd.SetLearningRate(0.95f * sgd.GetLearningRate());
+	}
+
+	/*auto [train_acc, val_acc] = calculate_acc();
+	std::cout << "Final Train Accuracy: " << train_acc << "%" << std::endl;
+	std::cout << "Final Valid Accuracy: " << val_acc   << "%" << std::endl;*/
+}
+
+
+
 void MNist_Test()
 {
 	//MNist mnist = MNist();
@@ -726,87 +878,7 @@ int main()
 	//Cifar_Test();
 
 
-
-
-	Tensor data({ 2, 4 });
-	data.SetColumn(0, { 0,0 });
-	data.SetColumn(1, { 0,1 });
-	data.SetColumn(2, { 1,0 });
-	data.SetColumn(3, { 1,1 });
-
-	Tensor data_labels({ 4 }, { 0, 1, 1, 0 });
-
-	data.Print();
-
-	NodePtr<Tensor> xs = Node<Tensor>::Create(data);
-	NodePtr<Tensor> labels = Node<Tensor>::Create(data_labels);
-
-	Layer4D L1(2, 3, Activation::Tanh);
-	Layer4D L2(3, 1, Activation::Tanh);
-
-	SGD<Tensor> sgd(0.1f);
-
-	auto x_     = Node<Tensor>::Create(Tensor({ 2, 4 }), "x");
-	auto label_ = Node<Tensor>::Create(Tensor({ 4 }), "label");
-	auto l1_out = L1.Forward(x_);
-	auto out_   = L2.Forward(l1_out);
-
-	auto diff = out_ - label_;
-	auto loss_ = diff->ElementwiseMul(diff)->Sum();
-	out_->SetLabel("output");
-	loss_->SetLabel("loss");
-
-	auto tape = TapeRecorder<Tensor>();
-	tape.Compile(loss_);
-	tape.PrintTape();
-
-	sgd.SetTrainableParams(tape);
-
-	auto input  = tape.SetValue("x");
-	auto label  = tape.SetValue("label");
-	auto output = tape.SetValue("output");
-	auto loss   = tape.SetValue("loss");
-
-	float lr = 0.1f;
-	float epoch_loss = 0.0f;
-
-	for (size_t epoch = 0; epoch < 1; epoch++)
-	{
-		epoch_loss = 0.0f;
-
-		*input = xs->GetValue();
-		*label = labels->GetValue();
-
-		tape.Forward();
-
-		input->Print();
-		label->Print();
-
-		tape.ZeroGradients();
-		tape.Backward();
-
-		sgd.Step();
-
-		epoch_loss += loss->Data()[0];
-	}
-
-	printf("%f\n", epoch_loss);
-	//EXPECT_NEAR(epoch_loss, 0.0f, 0.1f);
-
-	*input = xs->GetValue();
-	tape.Forward();
-
-	printf("%f\n%f\n%f\n%f\n", output->Data()[0], output->Data()[1], output->Data()[2], output->Data()[3]);
-
-	for (size_t i = 0; i < xs->GetValue().GetColumns(); i++)
-	{
-		//*input = xs->GetValue().ViewColumn(i);
-
-		//tape.Forward();
-
-		printf("%.2f vs %.2f\n", output->Data()[i], labels->GetValue().Data()[i]);
-	}
-
+	MNist_Tensor();
 
 
 	return 0;

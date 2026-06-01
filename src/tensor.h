@@ -84,10 +84,22 @@ public:
 	Tensor(const std::vector<size_t>& Shape, const std::vector<float>& Data): m_Storage(new Storage(Data)), m_Shape(Shape)
 	{
 		size_t expected = 1;
-		for (auto s : m_Shape) expected *= s;
+		for (auto s : m_Shape)
+			expected *= s;
 
 		if (expected != Data.size())
 			throw std::runtime_error("Shape does not match data size");
+
+		m_Strides = ComputeStrides(m_Shape);
+	}
+
+	Tensor(const std::vector<size_t>& Shape, const float* Data) : m_Shape(Shape)
+	{
+		size_t size = 1;
+		for (auto s : m_Shape)
+			size *= s;
+
+		m_Storage = new Storage(size, Data);
 
 		m_Strides = ComputeStrides(m_Shape);
 	}
@@ -126,6 +138,16 @@ public:
 	size_t Offset() const { return m_Offset; }
 
 	size_t Size() const
+	{
+		size_t s = 1;
+
+		for (size_t v : m_Shape)
+			s *= v;
+
+		return s;
+	}
+
+	size_t GetSize() const
 	{
 		size_t s = 1;
 
@@ -222,6 +244,28 @@ public:
 		}
 
 		return m_Storage->SetData()[offset];
+	}
+
+	float At(size_t Row, size_t Column) const
+	{
+		if (m_Shape.size() == 1 && Row == 0 && Column == 0)
+			return At({ 0 });
+
+		if (m_Shape.size() != 2)
+			throw std::runtime_error("Only matrix type supported");
+
+		return At({ Row, Column });
+	}
+
+	float& At(size_t Row, size_t Column)
+	{
+		if (m_Shape.size() == 1 && Row == 0 && Column == 0)
+			return At({ 0 });
+
+		if (m_Shape.size() != 2)
+			throw std::runtime_error("Only matrix type supported");
+
+		return At({ Row, Column });
 	}
 
 	void Transpose()
@@ -369,6 +413,24 @@ public:
 		return max;
 	}
 
+	size_t ArgMax() const
+	{
+		if (m_Shape.size() != 1)
+			throw std::runtime_error("Only vector type supported");
+
+		size_t index = 0;
+		float max = m_Storage->GetData()[0];
+		for (size_t i = 1; i < m_Storage->GetSize(); i++)
+		{
+			if (m_Storage->GetData()[i] > max)
+			{
+				max = m_Storage->GetData()[i];
+				index = i;
+			}
+		}
+		return index;
+	}
+
 	Tensor Tanh() const
 	{
 		Tensor out(m_Shape);
@@ -395,6 +457,57 @@ public:
 	}
 
 	inline Tensor ElementwiseMul(const Tensor& rhs) const;
+
+	Tensor Softmax() const
+	{
+		if (m_Shape.size() != 1)
+			throw std::runtime_error("Only vector type supported");
+
+		float max_value = Max();
+
+		Tensor copy(Shape());
+		float sum = 0.0f;
+		for (size_t i = 0; i < Size(); i++)
+		{
+			copy.At({ i }) = std::exp(At({ i }) - max_value);
+			sum += copy.At({ i });
+		}
+
+		for (size_t i = 0; i < Size(); i++)
+			copy.At({ i }) /= sum;
+
+		return copy;
+	}
+
+	Tensor CrossEntropy(const Tensor& Target) const
+	{
+		if (m_Shape.size() != 1)
+			throw std::runtime_error("Only vector type supported");
+
+		const float epsilon = 0.00001f;
+
+		//Target only contains the label
+		if (Target.Size() == 1)
+		{
+			int label = (int)(Target.At({ 0 }));
+
+			if (label < 0 || label >= (int)Size())
+				throw std::runtime_error("Matrix CrossEntropy invalid label index");
+
+			return Tensor({ 1 }, { -std::log(At({ (size_t)label }) + epsilon) });
+		}
+
+		//Target is on-hot vector
+		if (GetRows() != Target.GetRows() || GetColumns() != Target.GetColumns())
+			throw std::runtime_error("Matrix CrossEntropy size mismatch");
+
+		float loss = 0.0f;
+
+		for (size_t i = 0; i < Size(); i++)
+			loss -= Target.At({ i }) * std::log(At({ i }) + epsilon);
+
+		return Tensor({ 1 }, { loss });
+	}
 
 
 private:
@@ -460,11 +573,8 @@ inline std::vector<size_t> BroadcastShape(const std::vector<size_t>& a, const st
 
 	for (size_t i = 0; i < maxDim; i++)
 	{
-		size_t ad =
-			(i < a.size()) ? a[a.size() - 1 - i] : 1;
-
-		size_t bd =
-			(i < b.size()) ? b[b.size() - 1 - i] : 1;
+		size_t ad = (i < a.size()) ? a[a.size() - 1 - i] : 1;
+		size_t bd = (i < b.size()) ? b[b.size() - 1 - i] : 1;
 
 		result[maxDim - 1 - i] = std::max(ad, bd);
 	}
@@ -760,4 +870,21 @@ inline Tensor operator*(float lhs, const Tensor& rhs)
 	});
 
 	return result;
+}
+
+
+
+inline Tensor Matrix2Tensor(const Matrix& In)
+{
+	Tensor out({ In.GetRows(), In.GetColumns() }, In.GetValue());
+	return out;
+}
+
+
+
+inline Matrix Tensor2Matrix(const Tensor& In)
+{
+	Matrix out(In.Shape()[0], In.Shape()[1]);	
+	std::copy(In.Data(), In.Data() + In.Size(), out.SetValue());
+	return out;
 }

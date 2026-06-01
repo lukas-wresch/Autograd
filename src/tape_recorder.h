@@ -25,7 +25,7 @@ class TapeRecorder
 {
 public:
     TapeRecorder() = default;
-    TapeRecorder(const NodePtr<T>& root) { Compile(root); }
+    TapeRecorder(const NodePtr<T>& root) { Compile(root); ZeroGradients(); }
 
     void Compile(const NodePtr<T>& root);
 

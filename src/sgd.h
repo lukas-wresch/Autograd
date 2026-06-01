@@ -24,7 +24,7 @@ public:
     {
         size_t size = 0;
         for (auto g : grads)
-            size += g->GetLength();
+            size += g->GetSize();
         return size;
     }
 

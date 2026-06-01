@@ -290,7 +290,7 @@ public:
 			return ret;
 		}
 
-		//Target is ont-hot vector
+		//Target is on-hot vector
 		if (m_Rows != Target.m_Rows || m_Columns != Target.m_Columns)
 			throw std::runtime_error("Matrix CrossEntropy size mismatch");
 
