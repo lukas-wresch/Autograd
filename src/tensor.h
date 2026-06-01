@@ -51,6 +51,9 @@ public:
 
 
 
+	Tensor(Tensor& T) : m_Storage(new Storage(T.m_Storage->GetSize(), T.m_Storage->GetData())), m_Shape(T.m_Shape), m_Strides(T.m_Strides), m_Offset(T.m_Offset)
+	{}
+
 	Tensor(const Tensor& T) : m_Storage(new Storage(T.m_Storage->GetSize(), T.m_Storage->GetData())), m_Shape(T.m_Shape), m_Strides(T.m_Strides), m_Offset(T.m_Offset)
 	{}
 
@@ -460,53 +463,57 @@ public:
 
 	Tensor Softmax() const
 	{
-		if (m_Shape.size() != 1)
-			throw std::runtime_error("Only vector type supported");
-
 		float max_value = Max();
 
-		Tensor copy(Shape());
+		Tensor out(Shape());
+
 		float sum = 0.0f;
 		for (size_t i = 0; i < Size(); i++)
 		{
-			copy.At({ i }) = std::exp(At({ i }) - max_value);
-			sum += copy.At({ i });
+			out.Data()[i] = std::exp(Data()[i] - max_value);
+			sum += Data()[i];
 		}
 
 		for (size_t i = 0; i < Size(); i++)
-			copy.At({ i }) /= sum;
+			out.Data()[i] /= sum;
 
-		return copy;
+		return out;
 	}
 
 	Tensor CrossEntropy(const Tensor& Target) const
 	{
-		if (m_Shape.size() != 1)
-			throw std::runtime_error("Only vector type supported");
+		if (m_Shape.size() > 2)
+			throw std::runtime_error("Only vector/matrix type supported");
 
 		const float epsilon = 0.00001f;
+		float loss = 0.0f;
 
-		//Target only contains the label
-		if (Target.Size() == 1)
+		//Target only contains the label (Sparse)
+		if (Target.Size() == GetColumns())
 		{
-			int label = (int)(Target.At({ 0 }));
+			for (size_t i = 0; i < GetColumns(); i++)
+			{
+				int label = (int)Target.At({ i });
 
-			if (label < 0 || label >= (int)Size())
-				throw std::runtime_error("Matrix CrossEntropy invalid label index");
+				if (label < 0 || label >= (int)GetRows())
+					throw std::runtime_error("Tensor CrossEntropy invalid label index");
 
-			return Tensor({ 1 }, { -std::log(At({ (size_t)label }) + epsilon) });
+				float p = At({ (size_t)label, i });
+				loss -= std::log(p + epsilon);
+			}
+
+			return Tensor({ 1 }, { loss / GetColumns() });
 		}
 
-		//Target is on-hot vector
+		//Target is on-hot vector (Dense)
 		if (GetRows() != Target.GetRows() || GetColumns() != Target.GetColumns())
 			throw std::runtime_error("Matrix CrossEntropy size mismatch");
 
-		float loss = 0.0f;
+		for (size_t i = 0; i < GetRows(); i++)
+			for (size_t j = 0; j < GetColumns(); j++)
+				loss -= Target.At({ i, j }) * std::log(At({ i, j }) + epsilon);
 
-		for (size_t i = 0; i < Size(); i++)
-			loss -= Target.At({ i }) * std::log(At({ i }) + epsilon);
-
-		return Tensor({ 1 }, { loss });
+		return Tensor({ 1 }, { loss / GetColumns() });
 	}
 
 

@@ -48,13 +48,13 @@ void MNist_Tensor()
 	for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
 	{
 		xs.push_back(Node<Tensor>::Create(Tensor({ 28*28, 1 }, mnist.GetTrainingImageData(i))));
-		labels.push_back(Node<Tensor>::Create(Tensor({1,1},  { (float)mnist.GetTrainingLabelData(i) })));
+		labels.push_back(Node<Tensor>::Create(Tensor({ 1 },  { (float)mnist.GetTrainingLabelData(i) })));
 	}
 
 	for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
 	{
 		val_xs.push_back(Node<Tensor>::Create(Tensor({ 28*28, 1 }, mnist.GetValidationImageData(i))));
-		val_labels.push_back(Node<Tensor>::Create(Tensor({ 1,1 }, { (float)mnist.GetValidationLabelData(i) })));
+		val_labels.push_back(Node<Tensor>::Create(Tensor({ 1 }, { (float)mnist.GetValidationLabelData(i) })));
 	}
 
 
@@ -63,8 +63,8 @@ void MNist_Tensor()
 	const int batch_size = 8;
 
 	{
-		auto x = Node<Tensor>::CreateWithSize(784, "input");
-		auto label = Node<Tensor>::CreateWithSize(1, "label");
+		auto x = Node<Tensor>::Create(Tensor({ 28 * 28, 1 }), "input");
+		auto label = Node<Tensor>::Create(Tensor({ 1 }), "label");
 
 		Layer4D L1(784, 128, Activation::ReLU, InitType::Xavier);
 		Layer4D L2(128,  10, Activation::Identity, InitType::Xavier);
@@ -157,8 +157,8 @@ void MNist_Tensor()
 				tape.Forward();
 				tape.Backward();
 
-				epoch_loss += loss->At({ 0, 0 });;
-				batch_loss += loss->At({ 0, 0 });;
+				epoch_loss += loss->At({ 0 });;
+				batch_loss += loss->At({ 0 });;
 			}
 
 			sgd.Step(1.0f / actual_batch_size);

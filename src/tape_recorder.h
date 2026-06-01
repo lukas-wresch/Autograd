@@ -267,7 +267,7 @@ void TapeRecorder<T>::Forward()
         case Operator::Softmax_CrossEntropy:
             if constexpr (std::is_same_v<T, Tensor>)
             {
-                throw std::runtime_error("Unsupported Operation");
+                values[entry.out] = values[entry.a].Softmax().CrossEntropy(values[entry.b]);
             }
             else
                 values[entry.out] = values[entry.a].Softmax().CrossEntropy(values[entry.b]);
@@ -402,7 +402,8 @@ inline void TapeRecorder<T>::Backward()
         case Operator::ReLU:
             if constexpr (std::is_same_v<T, Tensor>)
             {
-                throw std::runtime_error("Unsupported Operation");
+                grads[entry.a] += values[entry.out].Heaviside().ElementwiseMul(outer_grad);//ReLU' = 1 if x > 0 else 0
+                //throw std::runtime_error("Unsupported Operation");
             }
             else
             {
@@ -414,7 +415,34 @@ inline void TapeRecorder<T>::Backward()
         {
             if constexpr (std::is_same_v<T, Tensor>)
             {
-                throw std::runtime_error("Unsupported Operation");
+                // logits are stored in "left"
+                T& logits = values[entry.a];
+                T& grad_logits = grads[entry.a];
+
+                const int target = (int)values[entry.b].Data()[0];
+
+                // forward softmax recomputation
+                // (oder cached probabilities!)
+                float max_val = logits.Max(); // numerical stability
+
+                float sum = 0.0f;
+                std::vector<float> probs(logits.GetSize());
+
+                for (size_t i = 0; i < logits.GetSize(); i++)
+                {
+                    probs[i] = std::exp(logits.Data()[i] - max_val);
+                    sum += probs[i];
+                }
+
+                for (float& p : probs)
+                    p /= sum;
+
+                // backward: dL/dlogits = p - y
+                for (size_t i = 0; i < logits.GetSize(); i++)
+                {
+                    float y = (i == (size_t)target) ? 1.0f : 0.0f;
+                    grad_logits.Data()[i] += (probs[i] - y) * outer_grad.Data()[0];
+                }
             }
             else
             {
