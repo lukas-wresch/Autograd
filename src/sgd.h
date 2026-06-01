@@ -50,9 +50,13 @@ public:
 
             for (size_t i = 0; i < values.size(); i++)
             {
-                velocity[i] = m_Momentum * velocity[i] - m_LR * Scale * (*grads[i]);
-                *values[i] += velocity[i];
-                //*values[i] -= lr * Scale * (*grads[i]);
+                if constexpr (std::is_same_v<T, Tensor>)
+                    Kernels::SGD_Update(*values[i], *grads[i], velocity[i], m_LR * Scale, m_Momentum);
+                else
+                {
+                    velocity[i] = m_Momentum * velocity[i] - m_LR * Scale * (*grads[i]);
+                    *values[i] += velocity[i];
+                }
             }
         }
 

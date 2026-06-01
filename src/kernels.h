@@ -16,6 +16,8 @@ public:
     static inline void MatMul_Backward_B(Tensor& gradB, const Tensor& A, const Tensor& dOut);
 
     static void Tanh_Backward(Tensor& grad_in, const Tensor& out, const Tensor& outer_grad);
+
+    static void SGD_Update(Tensor& param, const Tensor& grad, Tensor& velocity, float lr, float momentum);
 };
 
 
@@ -89,6 +91,114 @@ inline void Kernels::MatMul_Forward(Tensor& out, const Tensor& A, const Tensor& 
     const size_t ndim = ashape.size();
 
     if (ndim < 2 || bshape.size() != ndim)
+        throw std::runtime_error("MatMul invalid dimensions");
+
+    size_t M = ashape[ndim - 2];
+    size_t K = ashape[ndim - 1];
+    size_t K2 = bshape[ndim - 2];
+    size_t N = bshape[ndim - 1];
+
+    if (K != K2)
+        throw std::runtime_error("K mismatch");
+
+    std::vector<size_t> expected = ashape;
+    expected[ndim - 1] = N;
+
+    if (oshape != expected)
+        throw std::runtime_error("Output shape mismatch");
+
+    const float* aData = A.Data();
+    const float* bData = B.Data();
+    float* oData = out.Data();
+
+    const auto& aStr = A.Strides();
+    const auto& bStr = B.Strides();
+    const auto& oStr = out.Strides();
+
+    auto isContiguous2D = [&]()
+    {
+        if (ndim != 2) return false;
+
+        // classic row-major check
+        return (aStr[1] == 1 && aStr[0] == K) &&
+               (bStr[1] == 1 && bStr[0] == N) &&
+               (oStr[1] == 1 && oStr[0] == N);
+    };
+
+    if (isContiguous2D())
+    {
+        // =========================
+        // FAST PATH (2D contiguous)
+        // =========================
+
+        for (size_t i = 0; i < M; ++i)
+        {
+            const float* aRow = aData + i * K;
+            float* oRow = oData + i * N;
+
+            std::fill(oRow, oRow + N, 0.0f);
+
+            for (size_t k = 0; k < K; ++k)
+            {
+                float aVal = aRow[k];
+                const float* bRow = bData + k * N;
+
+                for (size_t j = 0; j < N; ++j)
+                {
+                    oRow[j] += aVal * bRow[j];
+                }
+            }
+        }
+
+        return;
+    }
+
+    // =========================
+    // GENERIC PATH (N-D tensors)
+    // =========================
+
+    std::vector<size_t> idx(ndim);
+
+    size_t total = out.Size();
+
+    for (size_t linear = 0; linear < total; ++linear)
+    {
+        DecodeIndex(linear, oshape, idx);
+
+        size_t outOffset = ComputeOffset(idx, oStr);
+
+        const size_t i = idx[ndim - 2];
+        const size_t j = idx[ndim - 1];
+
+        float sum = 0.0f;
+
+        for (size_t k = 0; k < K; ++k)
+        {
+            idx[ndim - 1] = k;
+            size_t aOffset = ComputeOffset(idx, aStr);
+
+            idx[ndim - 2] = k;
+            idx[ndim - 1] = j;
+            size_t bOffset = ComputeOffset(idx, bStr);
+
+            sum += aData[aOffset] * bData[bOffset];
+        }
+
+        oData[outOffset] = sum;
+    }
+}
+
+
+
+/*inline void Kernels::MatMul_Forward(Tensor& out, const Tensor& A, const Tensor& B)
+{
+    const auto& ashape = A.Shape();
+    const auto& bshape = B.Shape();
+    const auto& oshape = out.Shape();
+
+    const size_t ndim = ashape.size();
+
+    if (ndim < 2 || bshape.size() != ndim)
         throw std::runtime_error("Kernels::MatMul_Forward() invalid dimensions");
 
     size_t M = ashape[ndim - 2];
@@ -147,7 +257,7 @@ inline void Kernels::MatMul_Forward(Tensor& out, const Tensor& A, const Tensor& 
 
         oData[outOffset] = sum;
     }
-}
+}*/
 
 
 
@@ -197,77 +307,62 @@ inline void Kernels::Tanh_Backward(Tensor& grad_in, const Tensor& out, const Ten
 
 
 // dA += dOut @ B^T
-inline void Kernels::MatMul_Backward_A(
-    Tensor& gradA,
-    const Tensor& dOut,
-    const Tensor& B)
+inline void Kernels::MatMul_Backward_A(Tensor& gradA, const Tensor& dOut, const Tensor& B)
 {
-    const auto& ashape = gradA.Shape();
-    const auto& oshape = dOut.Shape();
-    const auto& bshape = B.Shape();
+    const auto& sA = gradA.Shape();
+    const size_t ndim = sA.size();
 
-    const size_t ndim = ashape.size();
+    const size_t M = sA[ndim - 2];
+    const size_t K = sA[ndim - 1];
+    const size_t N = B.Shape()[ndim - 1];
 
-    size_t M = ashape[ndim - 2];
-    size_t K = ashape[ndim - 1];
-    size_t N = bshape[ndim - 1];
+    const float* dOutPtr = dOut.Data();
+    const float* bPtr = B.Data();
+    float* gPtr = gradA.Data();
 
     const auto& aStr = gradA.Strides();
     const auto& oStr = dOut.Strides();
     const auto& bStr = B.Strides();
 
-    float* aGrad = gradA.Data();
-
-    const float* outGrad = dOut.Data();
-    const float* bData = B.Data();
-
-    std::vector<size_t> idx(ndim);
-
-    size_t total = gradA.Size();
-
-    for (size_t linear = 0; linear < total; linear++)
+    // iterate full tensor
+    for (size_t linear = 0; linear < gradA.Size(); ++linear)
     {
-        DecodeIndex(linear, ashape, idx);
+        size_t tmp = linear;
 
-        size_t i = idx[ndim - 2];
-        size_t k = idx[ndim - 1];
+        // decode only last 2 dims logically
+        size_t base = linear / (M * K);
+        size_t ik = linear % (M * K);
+
+        size_t i = ik / K;
+        size_t k = ik % K;
 
         float sum = 0.0f;
 
-        for (size_t j = 0; j < N; j++)
+        for (size_t j = 0; j < N; ++j)
         {
-            auto oIdx = idx;
-            auto bIdx = idx;
+            size_t o = base * oStr[0]
+                + i * oStr[ndim - 2]
+                + j * oStr[ndim - 1];
 
-            oIdx[ndim - 2] = i;
-            oIdx[ndim - 1] = j;
+            size_t b = base * bStr[0]
+                + k * bStr[ndim - 2]
+                + j * bStr[ndim - 1];
 
-            bIdx[ndim - 2] = k;
-            bIdx[ndim - 1] = j;
-
-            size_t oo = ComputeOffset(oIdx, oStr);
-            size_t bo = ComputeOffset(bIdx, bStr);
-
-            sum += outGrad[oo] * bData[bo];
+            sum += dOutPtr[o] * bPtr[b];
         }
 
-        size_t ao = ComputeOffset(idx, aStr);
-
-        aGrad[ao] += sum;
+        gPtr[linear] += sum;
     }
 }
 
 
 
-inline void Kernels::MatMul_Backward_B(
-    Tensor& gradB,
-    const Tensor& A,
-    const Tensor& dOut)
+//gradB += A.Transpose() @ dOut
+inline void Kernels::MatMul_Backward_B(Tensor& gradB, const Tensor& A, const Tensor& dOut)
 {
     const auto& bshape = gradB.Shape();
     const auto& ashape = A.Shape();
     const auto& oshape = dOut.Shape();
-
     const size_t ndim = bshape.size();
 
     size_t K = bshape[ndim - 2];
@@ -279,42 +374,53 @@ inline void Kernels::MatMul_Backward_B(
     const auto& oStr = dOut.Strides();
 
     float* bGrad = gradB.Data();
-
     const float* aData = A.Data();
     const float* outGrad = dOut.Data();
 
     std::vector<size_t> idx(ndim);
-
     size_t total = gradB.Size();
-
+    
     for (size_t linear = 0; linear < total; linear++)
     {
         DecodeIndex(linear, bshape, idx);
 
         size_t k = idx[ndim - 2];
         size_t j = idx[ndim - 1];
-
+        
         float sum = 0.0f;
-
         for (size_t i = 0; i < M; i++)
         {
             auto aIdx = idx;
             auto oIdx = idx;
-
             aIdx[ndim - 2] = i;
             aIdx[ndim - 1] = k;
-
             oIdx[ndim - 2] = i;
             oIdx[ndim - 1] = j;
 
             size_t ao = ComputeOffset(aIdx, aStr);
             size_t oo = ComputeOffset(oIdx, oStr);
-
+            
             sum += aData[ao] * outGrad[oo];
         }
 
         size_t bo = ComputeOffset(idx, bStr);
-
         bGrad[bo] += sum;
+    }
+}
+
+
+
+inline void Kernels::SGD_Update(Tensor& param, const Tensor& grad, Tensor& velocity, float lr, float momentum)
+{
+    float* p = param.Data();
+    const float* g = grad.Data();
+    float* v = velocity.Data();
+
+    const size_t n = param.Size();
+
+    for (size_t i = 0; i < n; ++i)
+    {
+        v[i] = momentum * v[i] - lr * g[i];
+        p[i] += v[i];
     }
 }

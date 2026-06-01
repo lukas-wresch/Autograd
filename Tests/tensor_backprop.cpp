@@ -55,7 +55,7 @@ TEST(MatrixVsTensor, SimpleTanhGraph)
 
 	o->Backwards();
 
-	TapeRecorder tape(o_t);
+	TapeRecorder<Tensor> tape(o_t);
 	tape.Forward();
 	tape.ZeroGradients();
 	tape.Backward();
@@ -134,7 +134,7 @@ TEST(MatrixVsTensor, MatrixMultiplicationGraph)
 	// backward pass
 	Y->Backwards();
 
-	TapeRecorder tape(Y_t);
+	TapeRecorder<Tensor> tape(Y_t);
 	tape.Forward();
 	tape.ZeroGradients();
 	tape.Backward();

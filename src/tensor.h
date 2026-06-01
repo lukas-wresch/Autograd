@@ -51,8 +51,8 @@ public:
 
 
 
-	Tensor(Tensor& T) : m_Storage(new Storage(T.m_Storage->GetSize(), T.m_Storage->GetData())), m_Shape(T.m_Shape), m_Strides(T.m_Strides), m_Offset(T.m_Offset)
-	{}
+	//Tensor(Tensor& T) : m_Storage(new Storage(T.m_Storage->GetSize(), T.m_Storage->GetData())), m_Shape(T.m_Shape), m_Strides(T.m_Strides), m_Offset(T.m_Offset)
+	//{}
 
 	Tensor(const Tensor& T) : m_Storage(new Storage(T.m_Storage->GetSize(), T.m_Storage->GetData())), m_Shape(T.m_Shape), m_Strides(T.m_Strides), m_Offset(T.m_Offset)
 	{}
@@ -418,8 +418,8 @@ public:
 
 	size_t ArgMax() const
 	{
-		if (m_Shape.size() != 1)
-			throw std::runtime_error("Only vector type supported");
+		//if (m_Shape.size() != 1)
+			//throw std::runtime_error("Only vector type supported");
 
 		size_t index = 0;
 		float max = m_Storage->GetData()[0];

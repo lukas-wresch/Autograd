@@ -60,7 +60,7 @@ void MNist_Tensor()
 
 	auto tape = TapeRecorder<Tensor>();
 	SGD<Tensor> sgd(0.03f, 0.7f);
-	const int batch_size = 8;
+	const int batch_size = 1;
 
 	{
 		auto x = Node<Tensor>::Create(Tensor({ 28 * 28, 1 }), "input");
@@ -103,7 +103,7 @@ void MNist_Tensor()
 
 			//Convert one hot to class index
 			int pred_class = (int)output->ArgMax();
-			int target_class = (int)labels[i]->GetValue().At({ 0, 0 });
+			int target_class = (int)labels[i]->GetValue().At({ 0 });
 
 			if (pred_class == target_class) correct++;
 		}
@@ -116,7 +116,7 @@ void MNist_Tensor()
 
 			//Convert one hot to class index
 			int pred_class = (int)output->ArgMax();
-			int target_class = (int)val_labels[i]->GetValue().At({ 0, 0 });
+			int target_class = (int)val_labels[i]->GetValue().At({ 0 });
 
 			if (pred_class == target_class) val_correct++;
 		}
@@ -129,17 +129,17 @@ void MNist_Tensor()
 
 	float epoch_loss = 0.0f;
 
-	for (size_t epoch = 0; epoch < 10; epoch++)
+	for (size_t epoch = 0; epoch < 1; epoch++)
 	{
 		ShuffleDataset(xs, labels);
 
 
 		epoch_loss = 0.0f;
 
-		for (size_t i = 0; i < xs.size(); i += batch_size)
+		for (size_t i = 0; i < 500/*xs.size()*/; i += batch_size)
 		{
-			//if (i / batch_size % 500 == 0)
-				//std::cout << "Batch " << i / batch_size << " of " << xs.size() / batch_size << std::endl;
+			if (i / batch_size % 500 == 0)
+				std::cout << "Batch " << i / batch_size << " of " << xs.size() / batch_size << std::endl;
 
 			size_t end = std::min(i + batch_size, xs.size());
 
@@ -168,9 +168,9 @@ void MNist_Tensor()
 
 		//if (epoch % 2 == 0)
 		std::cout << "Epoch " << epoch + 1 << " Loss: " << epoch_loss << std::endl;
-		auto [train_acc, val_acc] = calculate_acc();
-		std::cout << "Train Accuracy: " << train_acc << "%" << std::endl;
-		std::cout << "Valid Accuracy: " << val_acc << "%" << std::endl;
+		//auto [train_acc, val_acc] = calculate_acc();
+		//std::cout << "Train Accuracy: " << train_acc << "%" << std::endl;
+		//std::cout << "Valid Accuracy: " << val_acc << "%" << std::endl;
 
 		sgd.SetLearningRate(0.95f * sgd.GetLearningRate());
 	}

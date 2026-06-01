@@ -767,6 +767,154 @@ TEST(Kernels, MatMul_Backward_B_Shape)
 
 
 
+TEST(Kernels, MatMul_Backward_A_MatrixVsTensor)
+{
+    Matrix a({ 2, 3 });
+    Matrix b({ 3, 2 });
+    Matrix dOut({ 2, 2 });
+    Matrix gradA({ {2, 3}, {4, 5} });
+
+    Tensor a_t({2, 1}, { 2, 3 });
+    Tensor b_t({ 2, 1 }, { 3, 2 });
+    Tensor dOut_t({ 2, 1 }, { 2, 2 });
+    Tensor gradA_t({ 2, 2 }, { 2, 3, 4, 5 });
+
+    gradA += dOut * b.Transpose();
+
+    Kernels::MatMul_Backward_A(gradA_t, dOut_t, b_t);
+
+    EXPECT_EQ(gradA.At(0, 0), gradA_t.At({ 0, 0 }));
+    EXPECT_EQ(gradA.At(0, 1), gradA_t.At({ 0, 1 }));
+    EXPECT_EQ(gradA.At(1, 0), gradA_t.At({ 1, 0 }));
+    EXPECT_EQ(gradA.At(1, 1), gradA_t.At({ 1, 1 }));
+}
+
+
+
+TEST(Kernels, MatMul_Backward_B_MatrixVsTensor)
+{
+    Matrix a({ 2, 3 });
+    Matrix b({ 3, 2 });
+    Matrix dOut({ 2, 2 });
+    Matrix gradB({ {2, 3}, {4, 5} });
+
+    Tensor a_t({ 2, 1 }, { 2, 3 });
+    Tensor b_t({ 2, 1 }, { 3, 2 });
+    Tensor dOut_t({ 2, 1 }, { 2, 2 });
+    Tensor gradB_t({ 2, 2 }, { 2, 3, 4, 5 });
+
+    gradB += a.Transpose() * dOut;
+
+    Kernels::MatMul_Backward_B(gradB_t, a_t, dOut_t);
+
+    EXPECT_EQ(gradB.At(0, 0), gradB_t.At({ 0, 0 }));
+    EXPECT_EQ(gradB.At(0, 1), gradB_t.At({ 0, 1 }));
+    EXPECT_EQ(gradB.At(1, 0), gradB_t.At({ 1, 0 }));
+    EXPECT_EQ(gradB.At(1, 1), gradB_t.At({ 1, 1 }));
+}
+
+
+
+TEST(Kernels, MatMul_Backward_A_MatrixVsTensor_Hard)
+{
+    constexpr int RUNS = 20;
+
+    for (int r = 0; r < RUNS; r++)
+    {
+        size_t M = 4 + rand() % 8;   // 4..11
+        size_t K = 4 + rand() % 8;   // 4..11
+        size_t N = 4 + rand() % 8;   // 4..11
+
+        Matrix a(M, K);
+        Matrix b(K, N);
+        Matrix dOut(M, N);
+        Matrix gradA(M, K);
+
+        Tensor a_t({ M,K }, std::vector<float>(M * K));
+        Tensor b_t({ K,N }, std::vector<float>(K * N));
+        Tensor dOut_t({ M,N }, std::vector<float>(M * N));
+        Tensor gradA_t({ M,K }, std::vector<float>(M * K));
+
+        // random init
+        for (size_t i = 0; i < a.GetSize(); i++) a.SetValue()[i] = (float)(rand() % 100 - 50) / 10.f;
+        for (size_t i = 0; i < b.GetSize(); i++) b.SetValue()[i] = (float)(rand() % 100 - 50) / 10.f;
+        for (size_t i = 0; i < dOut.GetSize(); i++) dOut.SetValue()[i] = (float)(rand() % 100 - 50) / 10.f;
+        for (size_t i = 0; i < gradA.GetSize(); i++) gradA.SetValue()[i] = 0.0f;
+
+        // mirror into tensors
+        for (size_t i = 0; i < a.GetSize(); i++) a_t.Data()[i] = a.SetValue()[i];
+        for (size_t i = 0; i < b.GetSize(); i++) b_t.Data()[i] = b.SetValue()[i];
+        for (size_t i = 0; i < dOut.GetSize(); i++) dOut_t.Data()[i] = dOut.SetValue()[i];
+        for (size_t i = 0; i < gradA.GetSize(); i++) gradA_t.Data()[i] = 0.0f;
+
+        gradA += dOut * b.Transpose();
+        Kernels::MatMul_Backward_A(gradA_t, dOut_t, b_t);
+
+        for (size_t i = 0; i < M; i++)
+            for (size_t k = 0; k < K; k++)
+            {
+                float expected = gradA.At(i, k);
+                float actual = gradA_t.At({ i, k });
+
+                ASSERT_TRUE(std::isfinite(actual));
+                EXPECT_NEAR(actual, expected, 1e-4)
+                    << "Mismatch A at run " << r << " (" << i << "," << k << ")";
+            }
+    }
+}
+
+
+
+TEST(Kernels, MatMul_Backward_B_MatrixVsTensor_Hard)
+{
+    constexpr int RUNS = 20;
+
+    for (int r = 0; r < RUNS; r++)
+    {
+        size_t M = 4 + rand() % 8;   // 4..11
+        size_t K = 4 + rand() % 8;   // 4..11
+        size_t N = 4 + rand() % 8;   // 4..11
+
+        Matrix a(M, K);
+        Matrix b(K, N);
+        Matrix dOut(M, N);
+        Matrix gradB(K, N);
+
+        Tensor a_t({ M,K }, std::vector<float>(M * K));
+        Tensor b_t({ K,N }, std::vector<float>(K * N));
+        Tensor dOut_t({ M,N }, std::vector<float>(M * N));
+        Tensor gradB_t({ K,N }, std::vector<float>(K * N));
+
+        // random init
+        for (size_t i = 0; i < a.GetSize(); i++) a.SetValue()[i] = (float)(rand() % 100 - 50) / 10.f;
+        for (size_t i = 0; i < b.GetSize(); i++) b.SetValue()[i] = (float)(rand() % 100 - 50) / 10.f;
+        for (size_t i = 0; i < dOut.GetSize(); i++) dOut.SetValue()[i] = (float)(rand() % 100 - 50) / 10.f;
+        for (size_t i = 0; i < gradB.GetSize(); i++) gradB.SetValue()[i] = 0.0f;
+
+        // mirror into tensors
+        for (size_t i = 0; i < a.GetSize(); i++) a_t.Data()[i] = a.SetValue()[i];
+        for (size_t i = 0; i < b.GetSize(); i++) b_t.Data()[i] = b.SetValue()[i];
+        for (size_t i = 0; i < dOut.GetSize(); i++) dOut_t.Data()[i] = dOut.SetValue()[i];
+        for (size_t i = 0; i < gradB.GetSize(); i++) gradB_t.Data()[i] = 0.0f;
+
+        gradB += a.Transpose() * dOut;
+        Kernels::MatMul_Backward_B(gradB_t, a_t, dOut_t);
+
+        for (size_t k = 0; k < K; k++)
+            for (size_t j = 0; j < N; j++)
+            {
+                float expected = gradB.At(k, j);
+                float actual = gradB_t.At({ k, j });
+
+                ASSERT_TRUE(std::isfinite(actual));
+                EXPECT_NEAR(actual, expected, 1e-4)
+                    << "Mismatch B at run " << r << " (" << k << "," << j << ")";
+            }
+    }
+}
+
+
+
 TEST(Kernels, MatMul_Backward_IdentityGradient)
 {
     Tensor a({ 2, 2 });
