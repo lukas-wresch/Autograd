@@ -793,15 +793,25 @@ TEST(Kernels, MatMul_Backward_A_MatrixVsTensor)
 
 TEST(Kernels, MatMul_Backward_B_MatrixVsTensor)
 {
-    Matrix a({ 2, 3 });
-    Matrix b({ 3, 2 });
-    Matrix dOut({ 2, 2 });
-    Matrix gradB({ {2, 3}, {4, 5} });
+    Matrix a({
+        {1, 2, 3},
+        {4, 5, 6}
+        }); // 2×3
 
-    Tensor a_t({ 2, 1 }, { 2, 3 });
-    Tensor b_t({ 2, 1 }, { 3, 2 });
-    Tensor dOut_t({ 2, 1 }, { 2, 2 });
-    Tensor gradB_t({ 2, 2 }, { 2, 3, 4, 5 });
+    Matrix dOut({
+        {1, 2},
+        {3, 4}
+        }); // 2×2
+
+    Matrix gradB({
+        {0, 0},
+        {0, 0},
+        {0, 0}
+        }); // 3×2
+
+    Tensor a_t({ 2, 3 }, { 1,2,3,4,5,6 });
+    Tensor dOut_t({ 2, 2 }, { 1,2,3,4 });
+    Tensor gradB_t({ 3, 2 }, { 0,0,0,0,0,0 });
 
     gradB += a.Transpose() * dOut;
 
