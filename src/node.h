@@ -45,7 +45,7 @@ class Node : public std::enable_shared_from_this<Node<T>>
 public:
     Node() {}
 
-    Node(T value, const std::string& Label = "") : value(value), grad(value), label(Label)
+    Node(const T& value, const std::string& Label = "") : value(value), grad(value), label(Label)
     {}
 
     Node(size_t Length1, size_t Length2, const std::string& Label = "") : value(Length1, Length2), grad(Length1, Length2), label(Label)

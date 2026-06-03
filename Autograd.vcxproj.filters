@@ -62,5 +62,8 @@
     <ClInclude Include="src\kernels.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\tensor4d.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

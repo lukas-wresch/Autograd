@@ -105,7 +105,7 @@ inline void Kernels::MatMul_Forward(Tensor& out, const Tensor& A, const Tensor& 
     expected[ndim - 1] = N;
 
     if (oshape != expected)
-        throw std::runtime_error("Output shape mismatch");
+        throw std::runtime_error("Shape mismatch");
 
     const float* aData = A.Data();
     const float* bData = B.Data();
@@ -358,53 +358,65 @@ inline void Kernels::MatMul_Backward_A(Tensor& gradA, const Tensor& dOut, const 
 
 
 //gradB += A.Transpose() @ dOut
-inline void Kernels::MatMul_Backward_B(Tensor& gradB, const Tensor& A, const Tensor& dOut)
+inline void Kernels::MatMul_Backward_B(
+    Tensor& gradB,
+    const Tensor& A,
+    const Tensor& dOut)
 {
     const auto& bshape = gradB.Shape();
     const auto& ashape = A.Shape();
     const auto& oshape = dOut.Shape();
+
     const size_t ndim = bshape.size();
 
-    size_t K = bshape[ndim - 2];
-    size_t N = bshape[ndim - 1];
-    size_t M = ashape[ndim - 2];
+    const size_t K = bshape[ndim - 2];
+    const size_t N = bshape[ndim - 1];
+    const size_t M = ashape[ndim - 2];
 
-    const auto& bStr = gradB.Strides();
+    const float* aData = A.Data();
+    const float* oData = dOut.Data();
+    float* gData = gradB.Data();
+
     const auto& aStr = A.Strides();
     const auto& oStr = dOut.Strides();
+    const auto& gStr = gradB.Strides();
 
-    float* bGrad = gradB.Data();
-    const float* aData = A.Data();
-    const float* outGrad = dOut.Data();
+    const size_t outerSize = gradB.Size() / (K * N);
 
-    std::vector<size_t> idx(ndim);
-    size_t total = gradB.Size();
-    
-    for (size_t linear = 0; linear < total; linear++)
+    for (size_t base = 0; base < outerSize; ++base)
     {
-        DecodeIndex(linear, bshape, idx);
+        const size_t baseA = base * aStr[0];
+        const size_t baseO = base * oStr[0];
+        const size_t baseG = base * gStr[0];
 
-        size_t k = idx[ndim - 2];
-        size_t j = idx[ndim - 1];
-        
-        float sum = 0.0f;
-        for (size_t i = 0; i < M; i++)
+        for (size_t k = 0; k < K; ++k)
         {
-            auto aIdx = idx;
-            auto oIdx = idx;
-            aIdx[ndim - 2] = i;
-            aIdx[ndim - 1] = k;
-            oIdx[ndim - 2] = i;
-            oIdx[ndim - 1] = j;
+            const size_t gRowBase = baseG + k * gStr[ndim - 2];
+            const size_t aColBase = baseA + k * aStr[ndim - 1];
 
-            size_t ao = ComputeOffset(aIdx, aStr);
-            size_t oo = ComputeOffset(oIdx, oStr);
-            
-            sum += aData[ao] * outGrad[oo];
+            for (size_t j = 0; j < N; ++j)
+            {
+                const size_t gIdx = gRowBase + j * gStr[ndim - 1];
+                const size_t oColBase = baseO + j * oStr[ndim - 1];
+
+                float sum = 0.0f;
+
+                for (size_t i = 0; i < M; ++i)
+                {
+                    const size_t aIdx = baseA
+                        + i * aStr[ndim - 2]
+                        + k * aStr[ndim - 1];
+
+                    const size_t oIdx = baseO
+                        + i * oStr[ndim - 2]
+                        + j * oStr[ndim - 1];
+
+                    sum += aData[aIdx] * oData[oIdx];
+                }
+
+                gData[gIdx] += sum;
+            }
         }
-
-        size_t bo = ComputeOffset(idx, bStr);
-        bGrad[bo] += sum;
     }
 }
 

@@ -436,6 +436,86 @@ TEST(Kernels, MatMul_Forward_OutputShapeCorrect)
 
 
 
+TEST(Kernels, MatMul_Forward_GenericPath_NoIndexCorruption)
+{
+    // Force non-contiguous / ND path usage
+    constexpr int M = 2;
+    constexpr int K = 3;
+    constexpr int N = 2;
+
+    Tensor A({ M, K });
+    Tensor B({ K, N });
+    Tensor C({ M, N });
+
+    // Make tensors NON-trivial so bugs become visible
+    A.SetColumn(0, { 1, 2 });
+    A.SetColumn(1, { 3, 4 });
+    A.SetColumn(2, { 5, 6 });
+
+    B.SetColumn(0, { 1, 0, 1 });
+    B.SetColumn(1, { 0, 1, 0 });
+
+    // Force generic path by breaking contiguity assumption
+    A = A.Reshape({ M, K, 1 }); // or any trick that disables fast path
+    B = B.Reshape({ K, N, 1 });
+    C = Tensor({ M, N, 1 });
+
+    Kernels::MatMul_Forward(C, A, B);
+
+    // Compute expected result manually
+    Tensor expected({ M, N });
+
+    expected.At({ 0,0 }) = 1 * 1 + 3 * 0 + 5 * 1; // 6
+    expected.At({ 0,1 }) = 1 * 0 + 3 * 1 + 5 * 0; // 3
+
+    expected.At({ 1,0 }) = 2 * 1 + 4 * 0 + 6 * 1; // 8
+    expected.At({ 1,1 }) = 2 * 0 + 4 * 1 + 6 * 0; // 4
+
+    for (size_t i = 0; i < M; i++)
+        for (size_t j = 0; j < N; j++)
+        {
+            EXPECT_NEAR(C.At({ i,j }), expected.At({ i,j }), 1e-5f)
+                << "MatMul generic path corrupted indexing logic";
+        }
+}
+
+
+
+TEST(Kernels, MatMul_Forward_BatchIndependence_GenericPath)
+{
+    constexpr int M = 2;
+    constexpr int K = 2;
+    constexpr int N = 2;
+    constexpr int batch = 2;
+
+    Tensor A({ M * K, batch });
+    Tensor B({ K * N, batch });
+    Tensor C({ M * N, batch });
+
+    // batch 0
+    A.SetColumn(0, { 1, 0, 0, 1 });
+    B.SetColumn(0, { 1, 2, 3, 4 });
+
+    // batch 1 (different)
+    A.SetColumn(1, { 2, 0, 0, 2 });
+    B.SetColumn(1, { 5, 6, 7, 8 });
+
+    Kernels::MatMul_Forward(C, A, B);
+
+    auto c0 = C.ViewColumn(0);
+    auto c1 = C.ViewColumn(1);
+
+    bool identical = true;
+    for (size_t i = 0; i < M * N; i++)
+        if (std::abs(c0.At({ i, 0 }) - c1.At({ i, 0 })) > 1e-6f)
+            identical = false;
+
+    EXPECT_FALSE(identical)
+        << "Batch collapsed in column-based tensor design";
+}
+
+
+
 TEST(Kernels, Multiply_Forward_Elementwise2D)
 {
     Tensor a({ 2, 2 });

@@ -128,6 +128,34 @@ TEST(Tensor, ViewModifiesOriginal)
 
 
 
+TEST(Tensor, ViewArgMax)
+{
+    // 2x3 Tensor:
+    // [ 1, 5, 2
+    //   3, 4, 0 ]
+
+    std::vector<float> data = {
+        1, 5, 2,
+        3, 4, 0
+    };
+
+    Tensor t({ 2, 3 }, data);
+
+	EXPECT_EQ(t.ViewRow(0).At({ 0, 0 }), 1.0f);
+    EXPECT_EQ(t.ViewRow(0).At({ 0, 1 }), 5.0f);
+    EXPECT_EQ(t.ViewRow(0).At({ 0, 2 }), 2.0f);
+
+    EXPECT_EQ(t.ViewRow(0).ArgMax(), 1);
+    // Row 1 view: [3, 4, 0]
+    EXPECT_EQ(t.ViewRow(1).ArgMax(), 1);
+
+    EXPECT_EQ(t.ViewColumn(0).ArgMax(), 1);
+    EXPECT_EQ(t.ViewColumn(1).ArgMax(), 0);
+    EXPECT_EQ(t.ViewColumn(2).ArgMax(), 0);
+}
+
+
+
 TEST(Tensor, MoveConstructorTransfersOwnership)
 {
     Tensor a({ 2, 2 });

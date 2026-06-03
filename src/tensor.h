@@ -57,6 +57,12 @@ public:
 	Tensor(const Tensor& T) : m_Storage(new Storage(T.m_Storage->GetSize(), T.m_Storage->GetData())), m_Shape(T.m_Shape), m_Strides(T.m_Strides), m_Offset(T.m_Offset)
 	{}
 
+	~Tensor()
+	{
+		//delete m_Storage;
+		//m_Storage = nullptr;
+	}
+
 	void operator=(const Tensor& T)
 	{
 		m_Storage = T.m_Storage;
@@ -124,9 +130,55 @@ public:
 		strides_ = ComputeStrides(shape_);
 	}*/
 
+	Tensor Reshape(const std::vector<size_t>& newShape) const
+	{
+		size_t newSize = 1;
+
+		for (auto s : newShape)
+			newSize *= s;
+
+		if (GetSize() != newSize)
+			throw std::runtime_error("Reshape: size mismatch");
+
+		Tensor result = *this; // shallow copy (same data!)
+
+		result.m_Shape = newShape;
+		result.m_Strides = result.ComputeStrides(newShape);
+
+		return result;
+	}
+
+	inline size_t Offset(size_t b, size_t i, size_t j) const
+	{
+		if (m_Strides.size() != 3)
+			throw std::runtime_error("Offset: incompatible strides size");
+
+		return b * m_Strides[0] + i * m_Strides[1] + j * m_Strides[2];
+	}
+
 	Tensor View(const std::vector<size_t>& new_shape) const
 	{
 		return Tensor(m_Storage, new_shape, m_Strides);
+	}
+
+	Tensor ViewRow(size_t row) const
+	{
+		if (m_Shape.size() != 2)
+			throw std::runtime_error("ViewRow only valid for 2D tensors");
+
+		if (row >= m_Shape[0])
+			throw std::out_of_range("Row index out of range");
+
+		// neue Shape: 1 x cols (eine Zeile)
+		std::vector<size_t> new_shape = { 1, m_Shape[1] };
+
+		// gleiche Strides behalten, aber effektiv nur Spalten relevant
+		std::vector<size_t> new_strides = { 0, m_Strides[1] };
+
+		// Offset springt auf die gewünschte Zeile
+		size_t new_offset = m_Offset + row * m_Strides[0];
+
+		return Tensor(m_Storage, new_shape, new_strides, new_offset);
 	}
 
 	Tensor ViewColumn(size_t col) const
@@ -233,7 +285,7 @@ public:
 	float& At(const std::vector<size_t>& idx)
 	{
 		if (idx.size() != m_Shape.size())
-			throw std::runtime_error("dimension mismatch");
+			throw std::runtime_error("index dimension mismatch");
 
 		size_t offset = m_Offset;
 
@@ -308,7 +360,7 @@ public:
 
 	void Print() const
 	{
-		std::cout << "Tensor(" << Shape2String() << ")\n";
+		std::cout << "Tensor (" << Shape2String() << ")\n";
 		std::cout << "Offset: " << m_Offset << "\n";
 		std::cout << "Strides: ";
 
@@ -376,8 +428,30 @@ public:
 
 	void SetColumn(size_t col, std::initializer_list<float> vec)
 	{
-		if (m_Shape.size() != 2)
-			throw std::runtime_error("SetRow only valid for 2D tensors");
+		if (m_Shape.size() > 2)
+			throw std::runtime_error("SetColumn only valid for 2D tensors");
+
+		if (m_Shape.size() == 1)
+		{
+			size_t rows = 1;
+
+			if (vec.size() != rows)
+				throw std::runtime_error("Column size mismatch");
+			if (col >= m_Shape[0])
+				throw std::runtime_error("col invalid size");
+
+			float* data = m_Storage->SetData();
+
+			size_t i = 0;
+			for (auto v : vec)
+			{
+				size_t idx = m_Offset + i;
+				data[idx] = v;
+				i++;
+			}
+
+			return;
+		}
 
 		size_t rows = m_Shape[0];
 
@@ -389,9 +463,50 @@ public:
 		size_t i = 0;
 		for (auto v : vec)
 		{
-			size_t idx = m_Offset + i * m_Strides[0] + col * m_Strides[1];
+			size_t idx = m_Offset + i;
 			data[idx] = v;
 			i++;
+		}
+	}
+
+	void SetColumn(size_t col, const std::vector<float>& vec)
+	{
+		if (m_Shape.size() > 2)
+			throw std::runtime_error("SetColumn only valid for 2D tensors");
+
+		if (m_Shape.size() == 1)
+		{
+			size_t rows = 1;
+
+			if (vec.size() != rows)
+				throw std::runtime_error("Column size mismatch");
+			if (col >= m_Shape[0])
+				throw std::runtime_error("col invalid size");
+
+			float* data = m_Storage->SetData();
+
+			size_t i = 0;
+			for (auto v : vec)
+			{
+				size_t idx = m_Offset + i * m_Strides[0] + col * m_Strides[1];
+				data[idx] = v;
+				i++;
+			}
+
+			return;
+		}
+
+		size_t rows = m_Shape[0];
+
+		if (vec.size() != rows)
+			throw std::runtime_error("Column size mismatch");
+
+		float* data = m_Storage->SetData();
+
+		for (size_t row = 0; row < rows; ++row)
+		{
+			size_t idx = m_Offset + row * m_Strides[0] + col * m_Strides[1];
+			data[idx] = vec[row];
 		}
 	}
 
@@ -421,7 +536,7 @@ public:
 		//if (m_Shape.size() != 1)
 			//throw std::runtime_error("Only vector type supported");
 
-		size_t index = 0;
+		/*size_t index = 0;
 		float max = m_Storage->GetData()[0];
 		for (size_t i = 1; i < m_Storage->GetSize(); i++)
 		{
@@ -431,7 +546,43 @@ public:
 				index = i;
 			}
 		}
-		return index;
+		return index;*/
+
+		size_t ndim = m_Shape.size();
+
+		// special case: scalar
+		if (ndim == 0)
+			return 0;
+
+		// compute total elements logically
+		size_t total = GetSize();
+
+		size_t best_index = 0;
+		float best_value = -std::numeric_limits<float>::infinity();
+
+		for (size_t i = 0; i < total; i++)
+		{
+			// convert flat index -> multi-index
+			size_t tmp = i;
+			size_t offset = m_Offset;
+
+			for (size_t dim = 0; dim < ndim; dim++)
+			{
+				size_t idx = tmp % m_Shape[dim];
+				tmp /= m_Shape[dim];
+				offset += idx * m_Strides[dim];
+			}
+
+			float v = m_Storage->GetData()[offset];
+
+			if (v > best_value)
+			{
+				best_value = v;
+				best_index = i;
+			}
+		}
+
+		return best_index;
 	}
 
 	Tensor Tanh() const
@@ -463,6 +614,9 @@ public:
 
 	Tensor Softmax() const
 	{
+		if (m_Shape.size() > 2)
+			throw std::runtime_error("Only vector/matrix type supported");
+
 		float max_value = Max();
 
 		Tensor out(Shape());
@@ -471,7 +625,7 @@ public:
 		for (size_t i = 0; i < Size(); i++)
 		{
 			out.Data()[i] = std::exp(Data()[i] - max_value);
-			sum += Data()[i];
+			sum += out.Data()[i];
 		}
 
 		for (size_t i = 0; i < Size(); i++)
@@ -485,7 +639,7 @@ public:
 		if (m_Shape.size() > 2)
 			throw std::runtime_error("Only vector/matrix type supported");
 
-		const float epsilon = 0.00001f;
+		const float epsilon = 0.0001f;
 		float loss = 0.0f;
 
 		//Target only contains the label (Sparse)

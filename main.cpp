@@ -1,12 +1,18 @@
 #include <stdio.h>
 #include <iostream>
 #include <random>
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <mmsystem.h>
+#pragma comment(lib, "winmm.lib")
 #include "src/scalar.h"
 #include "src/vector.h"
 #include "src/node.h"
 #include "src/neuron.h"
 #include "src/layer.h"
 #include "src/sgd.h"
+#include "src/tensor4d.h"
 #include "mnist.h"
 #include "cifar.h"
 
@@ -14,6 +20,23 @@
 
 template<typename T>
 void ShuffleDataset(std::vector<NodePtr<T>>& xs, std::vector<NodePtr<T>>& labels)
+{
+	static std::random_device rd;
+	static std::mt19937 rng(rd());
+
+	for (size_t i = xs.size() - 1; i > 0; i--)
+	{
+		std::uniform_int_distribution<size_t> dist(0, i);
+		size_t j = dist(rng);
+
+		std::swap(xs[i], xs[j]);
+		std::swap(labels[i], labels[j]);
+	}
+}
+
+
+
+void ShuffleDataset(std::vector<std::vector<float>>& xs, std::vector<float>& labels)
 {
 	static std::random_device rd;
 	static std::mt19937 rng(rd());
@@ -39,32 +62,33 @@ void MNist_Tensor()
 	mnist.PrintTrainImage(1);
 	mnist.PrintTrainImage(2);
 
-	std::vector<NodePtr<Tensor>> xs;
-	std::vector<NodePtr<Tensor>> labels;
+	std::vector<std::vector<float>> xs_train;
+	std::vector<float> labels_train;
 
-	std::vector<NodePtr<Tensor>> val_xs;
-	std::vector<NodePtr<Tensor>> val_labels;
+	std::vector<std::vector<float>> xs_val;
+	std::vector<float> labels_val;
 
 	for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
 	{
-		xs.push_back(Node<Tensor>::Create(Tensor({ 28*28, 1 }, mnist.GetTrainingImageData(i))));
-		labels.push_back(Node<Tensor>::Create(Tensor({ 1 },  { (float)mnist.GetTrainingLabelData(i) })));
+		//xs.push_back(Node<Tensor>::Create(Tensor({ 28*28, 1 }, mnist.GetTrainingImageData(i))));
+		xs_train.push_back(mnist.GetTrainingImageData(i));
+		labels_train.push_back((float)mnist.GetTrainingLabelData(i));
 	}
 
 	for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
 	{
-		val_xs.push_back(Node<Tensor>::Create(Tensor({ 28*28, 1 }, mnist.GetValidationImageData(i))));
-		val_labels.push_back(Node<Tensor>::Create(Tensor({ 1 }, { (float)mnist.GetValidationLabelData(i) })));
+		xs_val.push_back(mnist.GetValidationImageData(i));
+		labels_val.push_back((float)mnist.GetValidationLabelData(i));
 	}
 
 
 	auto tape = TapeRecorder<Tensor>();
 	SGD<Tensor> sgd(0.03f, 0.7f);
-	const int batch_size = 1;
+	const int batch_size = 2;
 
 	{
-		auto x = Node<Tensor>::Create(Tensor({ 28 * 28, 1 }), "input");
-		auto label = Node<Tensor>::Create(Tensor({ 1 }), "label");
+		auto x = Node<Tensor>::Create(Tensor({ 28 * 28, batch_size }), "input");
+		auto label = Node<Tensor>::Create(Tensor({ batch_size }), "label");
 
 		Layer4D L1(784, 128, Activation::ReLU, InitType::Xavier);
 		Layer4D L2(128,  10, Activation::Identity, InitType::Xavier);
@@ -95,33 +119,64 @@ void MNist_Tensor()
 		int correct = 0;
 		int val_correct = 0;
 
-		for (size_t i = 0; i < xs.size(); i++)
+		for (size_t i = 0; i < xs_train.size();)
 		{
-			*input = xs[i]->GetValue();
+			size_t actual_batch_size = 0;
+
+			while (actual_batch_size < batch_size && i + actual_batch_size < xs_train.size())
+			{
+				input->SetColumn(actual_batch_size, xs_train[i + actual_batch_size]);
+				label->SetColumn(actual_batch_size, { labels_train[i + actual_batch_size] });
+				actual_batch_size++;
+			}
 
 			tape.Forward();
 
-			//Convert one hot to class index
-			int pred_class = (int)output->ArgMax();
-			int target_class = (int)labels[i]->GetValue().At({ 0 });
+			for (size_t j = 0; j < actual_batch_size; j++)
+			{
+				input->Print();
+				output->Print();
+				auto output_row = output->ViewColumn(j);
+				
+				//Convert one hot to class index
+				int pred_class = (int)output_row.ArgMax();
+				int target_class = (int)labels_train[i + j];
 
-			if (pred_class == target_class) correct++;
+				if (pred_class == target_class) correct++;
+			}
+
+			i += actual_batch_size;
 		}
 
-		for (size_t i = 0; i < val_xs.size(); i++)
+
+		for (size_t i = 0; i < xs_val.size();)
 		{
-			*input = val_xs[i]->GetValue();
+			size_t actual_batch_size = 0;
+
+			while (actual_batch_size < batch_size && i + actual_batch_size < xs_val.size())
+			{
+				input->SetColumn(actual_batch_size, xs_val[i + actual_batch_size]);
+				label->SetColumn(actual_batch_size, { labels_val[i + actual_batch_size] });
+				actual_batch_size++;
+			}
 
 			tape.Forward();
 
-			//Convert one hot to class index
-			int pred_class = (int)output->ArgMax();
-			int target_class = (int)val_labels[i]->GetValue().At({ 0 });
+			for (size_t j = 0; j < actual_batch_size; j++)
+			{
+				auto output_row = output->ViewColumn(j);
 
-			if (pred_class == target_class) val_correct++;
+				//Convert one hot to class index
+				int pred_class = (int)output_row.ArgMax();
+				int target_class = (int)labels_val[i + j];
+
+				if (pred_class == target_class) val_correct++;
+			}
+
+			i += actual_batch_size;
 		}
 
-		return std::tuple{ (float)correct * 100.0f / xs.size(), (float)val_correct * 100.0f / val_xs.size() };
+		return std::tuple{ (float)correct * 100.0f / xs_train.size(), (float)val_correct * 100.0f / xs_val.size() };
 	};
 
 
@@ -129,48 +184,54 @@ void MNist_Tensor()
 
 	float epoch_loss = 0.0f;
 
-	for (size_t epoch = 0; epoch < 1; epoch++)
+	for (size_t epoch = 0; epoch < 3; epoch++)
 	{
-		ShuffleDataset(xs, labels);
+		ShuffleDataset(xs_train, labels_train);
 
 
 		epoch_loss = 0.0f;
 
-		for (size_t i = 0; i < 500/*xs.size()*/; i += batch_size)
+		DWORD start_time = timeGetTime();
+
+		for (size_t i = 0; i < xs_train.size(); i += batch_size)
 		{
-			if (i / batch_size % 500 == 0)
-				std::cout << "Batch " << i / batch_size << " of " << xs.size() / batch_size << std::endl;
-
-			size_t end = std::min(i + batch_size, xs.size());
-
-			size_t actual_batch_size = end - i;
+			size_t end = std::min(i + batch_size, xs_train.size());
 
 			float batch_loss = 0.0f;
 
-			tape.ZeroGradients();
+			size_t actual_batch_size = 0;
 
 			for (size_t j = i; j < end; j++)
 			{
-				*input = xs[j]->GetValue();
-				*label = labels[j]->GetValue();
-
-				tape.Forward();
-				tape.Backward();
-
-				epoch_loss += loss->At({ 0 });;
-				batch_loss += loss->At({ 0 });;
+				input->SetColumn(actual_batch_size, xs_train[j]);
+				label->SetColumn(actual_batch_size, { labels_train[j] });
+				actual_batch_size++;
 			}
 
-			sgd.Step(1.0f / actual_batch_size);
+			tape.Forward();
+			tape.ZeroGradients();
+			tape.Backward();
+
+			epoch_loss += loss->At({ 0 });
+			batch_loss += loss->At({ 0 });
+
+			if (i / batch_size % 1000 == 0)
+				std::cout << "Batch " << i / batch_size + 1 << " of " << xs_train.size() / batch_size << " batch_loss " << batch_loss / batch_size << std::endl;
+
+			sgd.Step();
 		}
 
-		epoch_loss /= xs.size();
+		epoch_loss /= xs_train.size();
 
-		//if (epoch % 2 == 0)
+		auto epoch_duration = timeGetTime() - start_time;
+		auto samples_per_second = (float)xs_train.size() / epoch_duration * 1000.0f;
+
+		std::cout << "batch_size: " << batch_size << std::endl;
+		std::cout << "samples_per_second: " << samples_per_second << std::endl;
 		std::cout << "Epoch " << epoch + 1 << " Loss: " << epoch_loss << std::endl;
-		//auto [train_acc, val_acc] = calculate_acc();
-		//std::cout << "Train Accuracy: " << train_acc << "%" << std::endl;
-		//std::cout << "Valid Accuracy: " << val_acc << "%" << std::endl;
+		auto [train_acc, val_acc] = calculate_acc();
+		std::cout << "Train Accuracy: " << train_acc << "%" << std::endl;
+		std::cout << "Valid Accuracy: " << val_acc << "%" << std::endl;
 
 		sgd.SetLearningRate(0.95f * sgd.GetLearningRate());
 	}
