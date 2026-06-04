@@ -2456,8 +2456,8 @@ TEST(TapeRecorder, XOR_Tensor)
 	NodePtr<Tensor> xs     = Node<Tensor>::Create(data);
 	NodePtr<Tensor> labels = Node<Tensor>::Create(data_labels);
 
-	Layer4D L1(2, 3, Activation::Tanh);
-	Layer4D L2(3, 1, Activation::Tanh);
+	LayerTensor L1(2, 3, Activation::Tanh);
+	LayerTensor L2(3, 1, Activation::Tanh);
 
 	SGD<Tensor> sgd(0.1f);
 
@@ -2880,13 +2880,13 @@ TEST(TapeRecorder, SpiralClassification_MSE_Layer3D)
 
 
 
-TEST(Layer4DTest, BatchIndependence)
+TEST(LayerTensor, BatchIndependence)
 {
 	constexpr int input_size  = 4;
 	constexpr int output_size = 3;
 	constexpr int batch_size  = 2;
 
-	Layer4D layer(input_size, output_size, Activation::Identity, InitType::Xavier);
+	LayerTensor layer(input_size, output_size, Activation::Identity, InitType::Xavier);
 
 	Tensor x({ input_size, batch_size });
 
@@ -2914,12 +2914,12 @@ TEST(Layer4DTest, BatchIndependence)
 
 
 
-TEST(Layer4DTest, BatchConsistency)
+TEST(LayerTensor, BatchConsistency)
 {
 	constexpr int input_size = 4;
 	constexpr int output_size = 3;
 
-	Layer4D layer(input_size, output_size, Activation::Identity, InitType::Xavier);
+	LayerTensor layer(input_size, output_size, Activation::Identity, InitType::Xavier);
 
 	Tensor x1({ input_size, 1 });
 	Tensor x2({ input_size, 2 });
@@ -2946,13 +2946,13 @@ TEST(Layer4DTest, BatchConsistency)
 
 
 
-TEST(Layer4DTest, NoAliasingBetweenBatchColumns)
+TEST(LayerTensor, NoAliasingBetweenBatchColumns)
 {
 	constexpr int input_size = 4;
 	constexpr int output_size = 3;
 	constexpr int batch_size = 2;
 
-	Layer4D layer(input_size, output_size, Activation::Identity, InitType::Xavier);
+	LayerTensor layer(input_size, output_size, Activation::Identity, InitType::Xavier);
 
 	Tensor x({ input_size, batch_size });
 

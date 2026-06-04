@@ -3,6 +3,7 @@
 #include <string>
 #include <stdio.h>
 #include "node.h"
+#include "tensor4d.h"
 #include "kernels.h"
 
 
@@ -235,18 +236,30 @@ void TapeRecorder<T>::Forward()
             {
                 throw std::runtime_error("Unsupported Operation");
             }
+            else if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                throw std::runtime_error("Unsupported Operation");
+            }
             else
                 values[entry.out] = values[entry.a].ElementwiseAdd(values[entry.b]);
             break;
         case Operator::ElementwiseMul:
             if constexpr (std::is_same_v<T, Tensor>)
                 Kernels::Multiply_Forward(values[entry.out], values[entry.a], values[entry.b]);
+            else if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                throw std::runtime_error("Unsupported Operation");
+            }
             else
                 values[entry.out] = values[entry.a].ElementwiseMul(values[entry.b]);
             break;
 
         case Operator::Pack:
             if constexpr (std::is_same_v<T, Tensor>)
+            {
+                throw std::runtime_error("Unsupported Operation");
+            }
+            else if constexpr (std::is_same_v<T, Tensor4D>)
             {
                 throw std::runtime_error("Unsupported Operation");
             }
@@ -317,8 +330,8 @@ inline void TapeRecorder<T>::Backward()
             }
             else
             {
-                grads[entry.a] += outer_grad;
-                grads[entry.b] += outer_grad;
+                //grads[entry.a] += outer_grad;
+                //grads[entry.b] += outer_grad;
             }
             break;
         case Operator::Subtract:
@@ -329,8 +342,8 @@ inline void TapeRecorder<T>::Backward()
             }
             else
             {
-                grads[entry.a] += outer_grad;
-                grads[entry.b] -= outer_grad;
+                //grads[entry.a] += outer_grad;
+                //grads[entry.b] -= outer_grad;
             }
             break;
         case Operator::Multiply:
@@ -338,6 +351,10 @@ inline void TapeRecorder<T>::Backward()
             {
                 Kernels::MatMul_Backward_A(grads[entry.a], outer_grad, values[entry.b]);
                 Kernels::MatMul_Backward_B(grads[entry.b], values[entry.a], outer_grad);
+            }
+            else if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                throw std::runtime_error("Unsupported Operation");
             }
             else
             {
@@ -351,6 +368,10 @@ inline void TapeRecorder<T>::Backward()
                 grads[entry.a] += outer_grad;
                 //throw std::runtime_error("Unsupported Operation");
             }
+            else if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                throw std::runtime_error("Unsupported Operation");
+            }
             else
             {
                 //grads[entry.a] = grads[entry.a].ElementwiseAdd(outer_grad);
@@ -360,6 +381,10 @@ inline void TapeRecorder<T>::Backward()
 
         case Operator::ElementwiseAdd:
             if constexpr (std::is_same_v<T, Tensor>)
+            {
+                throw std::runtime_error("Unsupported Operation");
+            }
+            else if constexpr (std::is_same_v<T, Tensor4D>)
             {
                 throw std::runtime_error("Unsupported Operation");
             }
@@ -375,6 +400,10 @@ inline void TapeRecorder<T>::Backward()
                 grads[entry.a] += values[entry.b].ElementwiseMul(outer_grad);
                 grads[entry.b] += values[entry.a].ElementwiseMul(outer_grad);
             }
+            else if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                throw std::runtime_error("Unsupported Operation");
+            }
             else
             {
                 grads[entry.a] += values[entry.b].ElementwiseMul(outer_grad);
@@ -383,6 +412,10 @@ inline void TapeRecorder<T>::Backward()
             break;
         case Operator::Pack:
             if constexpr (std::is_same_v<T, Tensor>)
+            {
+                throw std::runtime_error("Unsupported Operation");
+            }
+            else if constexpr (std::is_same_v<T, Tensor4D>)
             {
                 throw std::runtime_error("Unsupported Operation");
             }
@@ -396,6 +429,10 @@ inline void TapeRecorder<T>::Backward()
         case Operator::Tanh:
             if constexpr (std::is_same_v<T, Tensor>)
                 Kernels::Tanh_Backward(grads[entry.a], values[entry.out], outer_grad);
+            else if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                throw std::runtime_error("Unsupported Operation");
+            }
             else
                 grads[entry.a] += (1.0f - values[entry.out].ElementwiseMul(values[entry.out])).ElementwiseMul(outer_grad);//tanh' = 1 - tanh^2
             break;
@@ -404,6 +441,10 @@ inline void TapeRecorder<T>::Backward()
             {
                 grads[entry.a] += values[entry.out].Heaviside().ElementwiseMul(outer_grad);//ReLU' = 1 if x > 0 else 0
                 //throw std::runtime_error("Unsupported Operation");
+            }
+            else if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                throw std::runtime_error("Unsupported Operation");
             }
             else
             {
@@ -443,6 +484,10 @@ inline void TapeRecorder<T>::Backward()
                     float y = (i == (size_t)target) ? 1.0f : 0.0f;
                     grad_logits.Data()[i] += (probs[i] - y) * outer_grad.Data()[0];
                 }
+            }
+            else if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                throw std::runtime_error("Unsupported Operation");
             }
             else
             {

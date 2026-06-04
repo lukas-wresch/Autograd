@@ -102,6 +102,7 @@
     <ClCompile Include="kernels.cpp" />
     <ClCompile Include="matrix.cpp" />
     <ClCompile Include="tensor.cpp" />
+    <ClCompile Include="tensor4d.cpp" />
     <ClCompile Include="tensor_backprop.cpp" />
     <ClCompile Include="test.cpp" />
   </ItemGroup>

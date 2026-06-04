@@ -130,12 +130,12 @@ public:
 		std::fill(m_pValues, m_pValues + m_Rows * m_Columns, 0.0f);
 	}
 
-	/*void SetOne()
+	void SetOne()
 	{
 		std::fill(m_pValues, m_pValues + m_Rows * m_Columns, 1.0f);
-	}*/
+	}
 
-	void SetOne()
+	void SetIdentity()
 	{
 		std::fill(m_pValues, m_pValues + m_Rows * m_Columns, 0.0f);
 

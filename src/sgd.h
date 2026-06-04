@@ -52,6 +52,10 @@ public:
             {
                 if constexpr (std::is_same_v<T, Tensor>)
                     Kernels::SGD_Update(*values[i], *grads[i], velocity[i], m_LR * Scale, m_Momentum);
+                else if constexpr (std::is_same_v<T, Tensor4D>)
+                {
+                    throw std::runtime_error("Unsupported Operation");
+                }
                 else
                 {
                     velocity[i] = m_Momentum * velocity[i] - m_LR * Scale * (*grads[i]);
@@ -64,7 +68,10 @@ public:
         else
         {
             for (auto& p : params)
-                p->GetValue() -= m_LR * Scale * p->GetGradient();
+                if constexpr (std::is_same_v<T, Tensor4D>)
+                    throw std::runtime_error("Unsupported Operation");
+                else
+                    p->GetValue() -= m_LR * Scale * p->GetGradient();
         }
     }
 

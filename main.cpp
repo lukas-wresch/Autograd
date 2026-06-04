@@ -53,6 +53,197 @@ void ShuffleDataset(std::vector<std::vector<float>>& xs, std::vector<float>& lab
 
 
 
+void MNist_Tensor4D()
+{
+	MNist mnist = MNist();
+	//MNist mnist = MNist("mnist-fashion");
+
+	mnist.PrintTrainImage(0);
+	mnist.PrintTrainImage(1);
+	mnist.PrintTrainImage(2);
+
+	std::vector<std::vector<float>> xs_train;
+	std::vector<float> labels_train;
+
+	std::vector<std::vector<float>> xs_val;
+	std::vector<float> labels_val;
+
+	for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
+	{
+		//xs.push_back(Node<Tensor>::Create(Tensor({ 28*28, 1 }, mnist.GetTrainingImageData(i))));
+		xs_train.push_back(mnist.GetTrainingImageData(i));
+		labels_train.push_back((float)mnist.GetTrainingLabelData(i));
+	}
+
+	for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
+	{
+		xs_val.push_back(mnist.GetValidationImageData(i));
+		labels_val.push_back((float)mnist.GetValidationLabelData(i));
+	}
+
+
+	auto tape = TapeRecorder<Tensor4D>();
+	SGD<Tensor4D> sgd(0.03f, 0.7f);
+	const int batch_size = 2;
+
+	{
+		auto x = Node<Tensor4D>::Create(Tensor4D({ 28 * 28, batch_size }), "input");
+		auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size }), "label");
+
+		Layer4D L1(784, 128, Activation::ReLU,     InitType::Xavier);
+		Layer4D L2(128,  10, Activation::Identity, InitType::Xavier);
+
+		auto h1 = L1.Forward(x);
+		auto pred = L2.Forward(h1);
+		pred->SetLabel("output");
+
+		//auto loss = (  (pred - label)->ElementwiseMul(pred - label)  )->Sum();
+		auto loss = pred->Softmax_CrossEntropy(label);
+		loss->SetLabel("loss");
+
+		tape.Compile(loss);
+		sgd.SetTrainableParams(tape);
+		std::cout << "Number of parameters: " << sgd.GetNumberOfParameters() << std::endl;
+	}
+
+	auto input  = tape.SetValue("input");
+	auto label  = tape.SetValue("label");
+	auto output = tape.SetValue("output");
+	auto loss   = tape.SetValue("loss");
+
+	tape.PrintTape();
+
+
+	// Forward pass
+	auto calculate_acc = [&]() {
+		int correct = 0;
+		int val_correct = 0;
+
+		for (size_t i = 0; i < xs_train.size();)
+		{
+			size_t actual_batch_size = 0;
+
+			while (actual_batch_size < batch_size && i + actual_batch_size < xs_train.size())
+			{
+				input->SetRow(actual_batch_size, 0, 0, xs_train[i + actual_batch_size]);
+				label->SetRow(actual_batch_size, 0, 0, { labels_train[i + actual_batch_size] });
+				actual_batch_size++;
+			}
+
+			tape.Forward();
+
+			for (size_t j = 0; j < actual_batch_size; j++)
+			{
+				input->Print();
+				output->Print();
+				auto output_row = output->ViewRow(0, 0, j);
+				output_row.Print();
+
+				//Convert one hot to class index
+				int pred_class = (int)output_row.ArgMax(j, 0);
+				int target_class = (int)labels_train[i + j];
+
+				if (pred_class == target_class) correct++;
+			}
+
+			i += actual_batch_size;
+		}
+
+
+		for (size_t i = 0; i < xs_val.size();)
+		{
+			size_t actual_batch_size = 0;
+
+			while (actual_batch_size < batch_size && i + actual_batch_size < xs_val.size())
+			{
+				input->SetRow(actual_batch_size, 0, 0, xs_val[i + actual_batch_size]);
+				label->SetRow(actual_batch_size, 0, 0,{ labels_val[i + actual_batch_size] });
+				actual_batch_size++;
+			}
+
+			tape.Forward();
+
+			for (size_t j = 0; j < actual_batch_size; j++)
+			{
+				auto output_row = output->ViewColumn(j);
+
+				//Convert one hot to class index
+				int pred_class = (int)output_row.ArgMax(j, 0);
+				int target_class = (int)labels_val[i + j];
+
+				if (pred_class == target_class) val_correct++;
+			}
+
+			i += actual_batch_size;
+		}
+
+		return std::tuple{ (float)correct * 100.0f / xs_train.size(), (float)val_correct * 100.0f / xs_val.size() };
+		};
+
+
+	//Training loop
+
+	float epoch_loss = 0.0f;
+
+	for (size_t epoch = 0; epoch < 3; epoch++)
+	{
+		ShuffleDataset(xs_train, labels_train);
+
+
+		epoch_loss = 0.0f;
+
+		DWORD start_time = timeGetTime();
+
+		for (size_t i = 0; i < xs_train.size(); i += batch_size)
+		{
+			size_t end = std::min(i + batch_size, xs_train.size());
+
+			float batch_loss = 0.0f;
+
+			size_t actual_batch_size = 0;
+
+			for (size_t j = i; j < end; j++)
+			{
+				input->SetRow(actual_batch_size, 0, 0, xs_train[j]);
+				label->SetRow(actual_batch_size, 0, 0, { labels_train[j] });
+				actual_batch_size++;
+			}
+
+			tape.Forward();
+			tape.ZeroGradients();
+			tape.Backward();
+
+			epoch_loss += loss->At(0, 0, 0, 0);
+			batch_loss += loss->At(0, 0, 0, 0);
+
+			if (i / batch_size % 1000 == 0)
+				std::cout << "Batch " << i / batch_size + 1 << " of " << xs_train.size() / batch_size << " batch_loss " << batch_loss / batch_size << std::endl;
+
+			sgd.Step();
+		}
+
+		epoch_loss /= xs_train.size();
+
+		auto epoch_duration = timeGetTime() - start_time;
+		auto samples_per_second = (float)xs_train.size() / epoch_duration * 1000.0f;
+
+		std::cout << "batch_size: " << batch_size << std::endl;
+		std::cout << "samples_per_second: " << samples_per_second << std::endl;
+		std::cout << "Epoch " << epoch + 1 << " Loss: " << epoch_loss << std::endl;
+		auto [train_acc, val_acc] = calculate_acc();
+		std::cout << "Train Accuracy: " << train_acc << "%" << std::endl;
+		std::cout << "Valid Accuracy: " << val_acc << "%" << std::endl;
+
+		sgd.SetLearningRate(0.95f * sgd.GetLearningRate());
+	}
+
+	/*auto [train_acc, val_acc] = calculate_acc();
+	std::cout << "Final Train Accuracy: " << train_acc << "%" << std::endl;
+	std::cout << "Final Valid Accuracy: " << val_acc   << "%" << std::endl;*/
+}
+
+
+
 void MNist_Tensor()
 {
 	MNist mnist = MNist();
@@ -90,8 +281,8 @@ void MNist_Tensor()
 		auto x = Node<Tensor>::Create(Tensor({ 28 * 28, batch_size }), "input");
 		auto label = Node<Tensor>::Create(Tensor({ batch_size }), "label");
 
-		Layer4D L1(784, 128, Activation::ReLU, InitType::Xavier);
-		Layer4D L2(128,  10, Activation::Identity, InitType::Xavier);
+		LayerTensor L1(784, 128, Activation::ReLU, InitType::Xavier);
+		LayerTensor L2(128,  10, Activation::Identity, InitType::Xavier);
 
 		auto h1 = L1.Forward(x);
 		auto pred = L2.Forward(h1);
@@ -939,7 +1130,8 @@ int main()
 	//Cifar_Test();
 
 
-	MNist_Tensor();
+	//MNist_Tensor();
+	MNist_Tensor4D();
 
 
 	return 0;
