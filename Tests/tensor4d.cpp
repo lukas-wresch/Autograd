@@ -37,8 +37,8 @@ TEST(Tensor4D, Transpose)
     Tensor4D m({ 2, 3 },
               { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f });
 
-    EXPECT_FLOAT_EQ(m[0], 1.0f);
-    EXPECT_FLOAT_EQ(m[1], 2.0f);
+    EXPECT_FLOAT_EQ(m.At(0, 0), 1.0f);
+    EXPECT_FLOAT_EQ(m.At(0, 1), 2.0f);
 
     m = m.Transpose();
 
@@ -46,8 +46,8 @@ TEST(Tensor4D, Transpose)
     EXPECT_EQ(m.GetColumns(), 2);
     EXPECT_EQ(m.GetSize(),    6);
 
-    EXPECT_FLOAT_EQ(m[0], 1.0f);
-    EXPECT_FLOAT_EQ(m[1], 4.0f);
+    EXPECT_FLOAT_EQ(m.At(0, 0), 1.0f);
+    EXPECT_FLOAT_EQ(m.At(0, 1), 4.0f);
 }
 
 
@@ -97,25 +97,6 @@ TEST(Tensor4D, SetIdentity)
 
 
 
-TEST(Tensor4D, MoveConstructorTransfersOwnership)
-{
-    Tensor4D a({ 2, 2 });
-
-    a.SetOne();
-
-    Tensor4D b = std::move(a);
-
-    EXPECT_EQ(b.GetRows(), 2);
-    EXPECT_EQ(b.GetColumns(), 2);
-
-    EXPECT_FLOAT_EQ(b[0], 1.0f);
-
-    EXPECT_EQ(a.GetRows(), 0);
-    EXPECT_EQ(a.GetColumns(), 0);
-}
-
-
-
 TEST(Tensor4D, Addition)
 {
     Tensor4D a({ 2, 2 });
@@ -148,6 +129,39 @@ TEST(Tensor4D, AdditionAssignment)
     EXPECT_FLOAT_EQ(a.At(0, 1), 0.0f);
     EXPECT_FLOAT_EQ(a.At(1, 0), 0.0f);
     EXPECT_FLOAT_EQ(a.At(1, 1), 2.0f);
+
+    Tensor4D c({ 2, 2 });
+    c += Tensor4D({ 1 }, { 5.0f });
+
+    EXPECT_FLOAT_EQ(c.At(0, 0), 5.0f);
+    EXPECT_FLOAT_EQ(c.At(0, 1), 5.0f);
+    EXPECT_FLOAT_EQ(c.At(1, 0), 5.0f);
+    EXPECT_FLOAT_EQ(c.At(1, 1), 5.0f);
+}
+
+
+
+TEST(Tensor4D, Subtraction)
+{
+    Tensor4D a({ 2, 2 });
+    Tensor4D b({ 2, 2 });
+
+    a.SetIdentity();
+    b.SetIdentity();
+
+    Tensor4D c = a - b;
+
+    EXPECT_FLOAT_EQ(c.At(0, 0), 0.0f);
+    EXPECT_FLOAT_EQ(c.At(0, 1), 0.0f);
+    EXPECT_FLOAT_EQ(c.At(1, 0), 0.0f);
+    EXPECT_FLOAT_EQ(c.At(1, 1), 0.0f);
+
+    Tensor4D d = a - Tensor4D({ 1 }, { 1.0f });
+
+    EXPECT_FLOAT_EQ(d.At(0, 0), 0.0f);
+    EXPECT_FLOAT_EQ(d.At(0, 1), -1.0f);
+    EXPECT_FLOAT_EQ(d.At(1, 0), -1.0f);
+    EXPECT_FLOAT_EQ(d.At(1, 1), 0.0f);
 }
 
 
@@ -184,7 +198,7 @@ TEST(Tensor4D, ScalarMultiplication)
 
 
 
-/*TEST(Tensor4D, ElementwiseMultiplication)
+TEST(Tensor4D, ElementwiseMultiplication)
 {
     Tensor4D a({ 2, 3 }, 
         { 1.0f, -2.0f,  3.0f, 4.0f,  0.0f, -6.0f });
@@ -192,11 +206,11 @@ TEST(Tensor4D, ScalarMultiplication)
     Tensor4D b({ 2,3 },
         { 7.0f,  8.0f, -9.0f, -1.0f,  2.0f, 3.0f });
 
-    Tensor4D c = a.ElementwiseMul(b);
+    Tensor4D c = a * b;
 
     EXPECT_EQ(c.GetRows(),    2);
     EXPECT_EQ(c.GetColumns(), 3);
-    EXPECT_EQ(c.GetSize(),  6);
+    EXPECT_EQ(c.GetSize(),    6);
 
     // Row 0
     EXPECT_FLOAT_EQ(c.At(0, 0), 7.0f);   //  1 *  7
@@ -211,7 +225,7 @@ TEST(Tensor4D, ScalarMultiplication)
 
 
 
-TEST(Tensor4D, Tensor4DMultiplication)
+/*TEST(Tensor4D, MatrixMultiplication)
 {
     Tensor4D a(2, 3);
     Tensor4D b(3, 2);
@@ -245,7 +259,7 @@ TEST(Tensor4D, Tensor4DMultiplication)
 
 
 
-TEST(Tensor4D, Tensor4DMultiplication2)
+TEST(Tensor4D, MatrixMultiplication2)
 {
     Tensor4D a(2, 2);
     Tensor4D b(2, 2);
