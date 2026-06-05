@@ -54,6 +54,23 @@ void ShuffleDataset(std::vector<std::vector<float>>& xs, std::vector<float>& lab
 
 
 
+void ShuffleDataset(std::vector<Tensor4D>& xs, std::vector<float>& labels)
+{
+	static std::random_device rd;
+	static std::mt19937 rng(rd());
+
+	for (size_t i = xs.size() - 1; i > 0; i--)
+	{
+		std::uniform_int_distribution<size_t> dist(0, i);
+		size_t j = dist(rng);
+
+		std::swap(xs[i], xs[j]);
+		std::swap(labels[i], labels[j]);
+	}
+}
+
+
+
 void MNist_Tensor4D()
 {
 	MNist mnist = MNist();
@@ -63,22 +80,22 @@ void MNist_Tensor4D()
 	mnist.PrintTrainImage(1);
 	mnist.PrintTrainImage(2);
 
-	std::vector<std::vector<float>> xs_train;
+	std::vector<Tensor4D> xs_train;
 	std::vector<float> labels_train;
 
-	std::vector<std::vector<float>> xs_val;
+	std::vector<Tensor4D> xs_val;
 	std::vector<float> labels_val;
 
 	for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
 	{
 		//xs.push_back(Node<Tensor>::Create(Tensor({ 28*28, 1 }, mnist.GetTrainingImageData(i))));
-		xs_train.push_back(mnist.GetTrainingImageData(i));
+		xs_train.push_back(mnist.GetTrainImageTensor(i));
 		labels_train.push_back((float)mnist.GetTrainingLabelData(i));
 	}
 
 	for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
 	{
-		xs_val.push_back(mnist.GetValidationImageData(i));
+		xs_val.push_back(mnist.GetValidationImageTensor(i));
 		labels_val.push_back((float)mnist.GetValidationLabelData(i));
 	}
 
@@ -88,17 +105,23 @@ void MNist_Tensor4D()
 	const int batch_size = 10;
 
 	{
-		auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 28 * 28, 1 }), "input");
+		auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 28, 28 }), "input");
 		auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 1, 1 }), "label");
 
+		Conv2D conv1(1,  8, 3, 1, 1, Activation::ReLU);
+		Conv2D conv2(8, 16, 3, 1, 1, Activation::ReLU);
 		Layer4D L1(784, 128, Activation::ReLU,     InitType::Xavier);
 		Layer4D L2(128,  10, Activation::Identity, InitType::Xavier);
 
-		auto h1 = L1.Forward(x);
+		auto out_conv1 = conv1.Conv(x)->MaxPool2D(2, 2);
+		auto out_conv2 = conv2.Conv(out_conv1)->MaxPool2D(2, 2);
+
+		auto flattened = out_conv2->Flatten();
+
+		auto h1 = L1.Forward(flattened);
 		auto pred = L2.Forward(h1);
 		pred->SetLabel("output");
 
-		//auto loss = (  (pred - label)->ElementwiseMul(pred - label)  )->Sum();
 		auto loss = pred->Softmax_CrossEntropy(label);
 		loss->SetLabel("loss");
 
@@ -126,7 +149,7 @@ void MNist_Tensor4D()
 
 			while (actual_batch_size < batch_size && i + actual_batch_size < xs_train.size())
 			{
-				input->SetColumn(actual_batch_size, 0, 0, xs_train[i + actual_batch_size]);
+				input->ViewBatch(actual_batch_size) = xs_train[i + actual_batch_size];
 				label->SetColumn(actual_batch_size, 0, 0, { labels_train[i + actual_batch_size] });
 				actual_batch_size++;
 			}
@@ -157,7 +180,7 @@ void MNist_Tensor4D()
 
 			while (actual_batch_size < batch_size && i + actual_batch_size < xs_val.size())
 			{
-				input->SetColumn(actual_batch_size, 0, 0, xs_val[i + actual_batch_size]);
+				input->ViewBatch(actual_batch_size) = xs_val[i + actual_batch_size];
 				label->SetColumn(actual_batch_size, 0, 0,{ labels_val[i + actual_batch_size] });
 				actual_batch_size++;
 			}
@@ -203,7 +226,7 @@ void MNist_Tensor4D()
 
 			for (size_t j = i; j < end; j++)
 			{
-				input->SetColumn(actual_batch_size, 0, 0, xs_train[j]);
+				input->ViewBatch(actual_batch_size) = xs_train[j];
 				label->SetColumn(actual_batch_size, 0, 0, { labels_train[j] });
 				actual_batch_size++;
 			}

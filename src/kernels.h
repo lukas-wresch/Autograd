@@ -22,6 +22,9 @@ public:
 
     static Tensor4D Conv2D_Forward(const Tensor4D& Input, const Tensor4D& Kernel, int Stride = 1, int Padding = 0);
     static void Conv2D_Backward(Tensor4D& dInput, Tensor4D& dKernel, const Tensor4D& Input, const Tensor4D& Kernel, const Tensor4D& dOut, int Stride, int Padding);
+
+    static Tensor4D MaxPool2D_Forward(const Tensor4D& Input, int KernelSize, int Stride, Tensor4D* ArgMax = nullptr);
+    static void MaxPool2D_Backward(Tensor4D& dInput, const Tensor4D& Input, const Tensor4D& dOut, const Tensor4D& ArgMax, int KernelSize, int Stride);
 };
 
 
@@ -595,6 +598,98 @@ inline void Kernels::Conv2D_Backward(Tensor4D& dInput, Tensor4D& dKernel, const 
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+
+
+inline Tensor4D Kernels::MaxPool2D_Forward(const Tensor4D& Input, int KernelSize, int Stride, Tensor4D* ArgMax)
+{
+    size_t N = Input.GetShape()[0];
+    size_t C = Input.GetShape()[1];
+    size_t H = Input.GetShape()[2];
+    size_t W = Input.GetShape()[3];
+
+    size_t H_out = (H - KernelSize) / Stride + 1;
+    size_t W_out = (W - KernelSize) / Stride + 1;
+
+    Tensor4D Output({ N, C, H_out, W_out });
+
+    for (size_t n = 0; n < N; n++)
+    {
+        for (size_t c = 0; c < C; c++)
+        {
+            for (size_t oh = 0; oh < H_out; oh++)
+            {
+                for (size_t ow = 0; ow < W_out; ow++)
+                {
+                    float maxVal = -FLT_MAX;
+                    size_t maxIndex = 0;
+
+                    for (size_t kh = 0; kh < KernelSize; kh++)
+                    {
+                        for (size_t kw = 0; kw < KernelSize; kw++)
+                        {
+                            size_t ih = oh * Stride + kh;
+                            size_t iw = ow * Stride + kw;
+
+                            float v = Input.At(n, c, ih, iw);
+
+                            if (v > maxVal)
+                            {
+                                maxVal = v;
+                                maxIndex = ih * W + iw; // flatten index
+                            }
+                        }
+                    }
+
+                    Output.At(n, c, oh, ow) = maxVal;
+                    if (ArgMax)
+                        ArgMax->At(n, c, oh, ow) = (float)maxIndex;
+                }
+            }
+        }
+    }
+
+    return Output;
+}
+
+
+
+inline void Kernels::MaxPool2D_Backward(Tensor4D& dInput, const Tensor4D& Input, const Tensor4D& dOut, const Tensor4D& ArgMax, int KernelSize, int Stride)
+{
+    dInput.SetZero();
+
+    const size_t N = Input.GetShape()[0];
+    const size_t C = Input.GetShape()[1];
+    const size_t H = Input.GetShape()[2];
+    const size_t W = Input.GetShape()[3];
+
+    const size_t Hout = dOut.GetShape()[2];
+    const size_t Wout = dOut.GetShape()[3];
+
+    for (size_t n = 0; n < N; n++)
+    {
+        for (size_t c = 0; c < C; c++)
+        {
+            for (size_t oh = 0; oh < Hout; oh++)
+            {
+                for (size_t ow = 0; ow < Wout; ow++)
+                {
+                    float grad = dOut.At(n, c, oh, ow);
+
+                    // ArgMax ist flattened index
+                    size_t idx = (size_t)ArgMax.At(n, c, oh, ow);
+
+                    size_t ih = idx / W;
+                    size_t iw = idx % W;
+
+                    // safety check (optional)
+                    if (ih < H && iw < W)
+                        dInput.At(n, c, ih, iw) += grad;
                 }
             }
         }

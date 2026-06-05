@@ -1264,3 +1264,140 @@ TEST(Kernels, Conv2D_Backward_Numerical)
         EXPECT_NEAR(analytic, numerical, 1e-3f) << "Kernel index " << i;
     }
 }
+
+
+
+TEST(Kernels, MaxPool2D_Forward_2x2)
+{
+    Tensor4D input(
+        { 1,1,2,2 },
+        {
+            1, 3,
+            2, 4
+        });
+
+        auto out = Kernels::MaxPool2D_Forward(input, 2, 2);
+
+        EXPECT_EQ(out.GetShape()[0], 1);
+        EXPECT_EQ(out.GetShape()[1], 1);
+        EXPECT_EQ(out.GetShape()[2], 1);
+        EXPECT_EQ(out.GetShape()[3], 1);
+
+        EXPECT_FLOAT_EQ(out.At(0, 0, 0, 0), 4);
+}
+
+
+
+TEST(Kernels, MaxPool2D_Forward_Stride1)
+{
+    Tensor4D input({ 1,1,2,2 }, { 1, 3, 2, 4 });
+
+    auto out = Kernels::MaxPool2D_Forward(input, 2, 1);
+
+    EXPECT_EQ(out.GetShape()[2], 1);
+    EXPECT_EQ(out.GetShape()[3], 1);
+
+    EXPECT_FLOAT_EQ(out.At(0, 0, 0, 0), 4);
+}
+
+
+
+TEST(Kernels, MaxPool2D_Backward_Simple)
+{
+    Tensor4D input(
+        { 1,1,2,2 },
+        {
+            1, 3,
+            2, 4
+        });
+
+        Tensor4D dOut({ 1,1,1,1 }, { 10 });
+
+        Tensor4D gradInput({ 1,1,2,2 });
+        Tensor4D argmax({ 1,1,1,1 });
+
+        auto out = Kernels::MaxPool2D_Forward(input, 2, 2, &argmax);
+
+        Kernels::MaxPool2D_Backward(gradInput, input, dOut, argmax, 2, 2);
+
+        EXPECT_FLOAT_EQ(gradInput.At(0, 0, 0, 0), 0);
+        EXPECT_FLOAT_EQ(gradInput.At(0, 0, 0, 1), 0);
+        EXPECT_FLOAT_EQ(gradInput.At(0, 0, 1, 0), 0);
+        EXPECT_FLOAT_EQ(gradInput.At(0, 0, 1, 1), 10);
+}
+
+
+
+TEST(Kernels, MaxPool2D_Backward_MultiWindow)
+{
+    Tensor4D input({ 1,1,4,4 },
+        {
+            1, 2, 3, 4,
+            5, 6, 7, 8,
+            9,10,11,12,
+            13,14,15,16
+        });
+
+    Tensor4D dOut({ 1,1,2,2 }, { 1, 2, 3, 4 });
+
+    Tensor4D gradInput({ 1,1,4,4 });
+    Tensor4D argmax({ 1,1,2,2 });
+
+    Kernels::MaxPool2D_Forward(input, 2, 2, &argmax);
+    Kernels::MaxPool2D_Backward(gradInput, input, dOut, argmax, 2, 2);
+
+    // Block 1 (max=6 at (1,1))
+    EXPECT_FLOAT_EQ(gradInput.At(0, 0, 1, 1), 1);
+
+    // Block 2 (max=8 at (1,3))
+    EXPECT_FLOAT_EQ(gradInput.At(0, 0, 1, 3), 2);
+
+    // Block 3 (max=14 at (3,1))
+    EXPECT_FLOAT_EQ(gradInput.At(0, 0, 3, 1), 3);
+
+    // Block 4 (max=16 at (3,3))
+    EXPECT_FLOAT_EQ(gradInput.At(0, 0, 3, 3), 4);
+}
+
+
+
+TEST(Kernels, MaxPool2D_Backward_Numerical)
+{
+    constexpr float eps = 1e-3f;
+
+    Tensor4D input({ 1,1,2,2 }, {1, 3, 2, 4 });
+
+    Tensor4D dOut({ 1,1,1,1 });
+    dOut.SetOne();
+
+    Tensor4D gradInput({ 1,1,2,2 });
+    Tensor4D argmax({ 1,1,1,1 });
+
+    Kernels::MaxPool2D_Forward(input, 2, 2, &argmax);
+    Kernels::MaxPool2D_Backward(gradInput, input, dOut, argmax, 2, 2);
+
+        for (size_t i = 0; i < input.GetSize(); i++)
+        {
+            float analytic = gradInput[i];
+
+            Tensor4D input_plus = input.Clone();
+            input_plus[i] += eps;
+
+            Tensor4D input_minus = input.Clone();
+            input_minus[i] -= eps;
+
+            Tensor4D argmax_p({ 1,1,1,1 });
+            Tensor4D argmax_m({ 1,1,1,1 });
+
+            auto out_plus = Kernels::MaxPool2D_Forward(input_plus, 2, 2, &argmax_p);
+            auto out_minus = Kernels::MaxPool2D_Forward(input_minus, 2, 2, &argmax_m);
+
+            float loss_plus = out_plus.Sum().At(0, 0, 0, 0);
+            float loss_minus = out_minus.Sum().At(0, 0, 0, 0);
+
+            float numerical = (loss_plus - loss_minus) / (2.0f * eps);
+
+            EXPECT_NEAR(analytic, numerical, 1e-3f)
+                << "Input index " << i;
+        }
+}

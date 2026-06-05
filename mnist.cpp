@@ -120,6 +120,52 @@ std::vector<float> MNist::GetValidationImageData(size_t Index) const
 
 
 
+Tensor4D MNist::GetTrainImageTensor(size_t index)
+{
+    if (index >= m_TrainNumImages)
+        throw std::runtime_error("MNist: Index out of range");
+
+    Tensor4D t({ 1, 1, m_Height, m_Width });
+
+    for (uint32_t y = 0; y < m_Height; y++)
+    {
+        for (uint32_t x = 0; x < m_Width; x++)
+        {
+            unsigned char p = m_TrainImages[y * m_Width + x + index * m_Height * m_Width];
+
+            // normalize to [0,1]
+            t.At(0, 0, y, x) = (float)p / 255.0f;
+        }
+    }
+
+    return t;
+}
+
+
+
+Tensor4D MNist::GetValidationImageTensor(size_t index)
+{
+    if (index >= m_ValidNumImages)
+        throw std::runtime_error("MNist: Index out of range");
+
+    Tensor4D t({ 1, 1, m_Height, m_Width });
+
+    for (uint32_t y = 0; y < m_Height; y++)
+    {
+        for (uint32_t x = 0; x < m_Width; x++)
+        {
+            unsigned char p = m_ValidationImages[y * m_Width + x + index * m_Height * m_Width];
+
+            // normalize to [0,1]
+            t.At(0, 0, y, x) = (float)p / 255.0f;
+        }
+    }
+
+    return t;
+}
+
+
+
 int MNist::GetTrainingLabelData(size_t Index) const
 {
     if (Index >= m_TrainNumImages)

@@ -307,7 +307,7 @@ NodePtr<Tensor> LayerTensor::Forward(const NodePtr<Tensor>& Input) const
 		return pre_activation->Tanh();
 		break;
 	default:
-		throw std::runtime_error("Layer3D: Unsupported activation function");
+		throw std::runtime_error("LayerTensor: Unsupported activation function");
 		break;
 	}
 

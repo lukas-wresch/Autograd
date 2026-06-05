@@ -29,6 +29,8 @@ enum class Operator
     Softmax_CrossEntropy,
 
     Conv2D,
+    MaxPool2D,
+    Flatten,
 };
 
 
@@ -79,6 +81,8 @@ public:
     NodePtr<T> CrossEntropy(NodePtr<T> Target);
     NodePtr<T> Softmax_CrossEntropy(NodePtr<T> Target);
     NodePtr<T> Conv2D(NodePtr<T> Kernel, int Stride = 1, int Padding = 0);
+    NodePtr<T> MaxPool2D(int KernelSize, int Stride);
+    NodePtr<T> Flatten();
 
     void Backwards();
 
@@ -111,6 +115,13 @@ public:
     // Convolution
     int stride  = 1;
     int padding = 0;
+    int kernel_size = 1;
+
+    // Flatten
+    size_t B;
+    size_t C;
+    size_t H;
+    size_t W;
 
     NodePtr<T> left  = nullptr;
     NodePtr<T> right = nullptr;
@@ -540,5 +551,39 @@ NodePtr<T> Node<T>::Conv2D(NodePtr<T> Kernel, int Stride, int Padding)
     out->right   = Kernel;
 	out->stride  = Stride;
     out->padding = Padding;
+    return out;
+}
+
+
+
+template<typename T>
+NodePtr<T> Node<T>::MaxPool2D(int KernelSize, int Stride)
+{
+    auto out = std::make_shared<Node<T>>(Kernels::MaxPool2D_Forward(this->value, KernelSize, Stride));
+
+    out->op   = Operator::MaxPool2D;
+    out->left = this->shared_from_this();
+    out->kernel_size = KernelSize;
+    out->stride      = Stride;
+    return out;
+}
+
+
+
+template<typename T>
+NodePtr<T> Node<T>::Flatten()
+{
+    size_t C = value.GetShape()[1];
+    size_t H = value.GetShape()[2];
+    size_t W = value.GetShape()[3];
+
+    auto out = std::make_shared<Node<T>>(this->value.Reshape({ this->value.GetBatches(), 1, C*H*W, 1 }  ));
+
+    out->op = Operator::Flatten;
+    out->left = this->shared_from_this();
+    out->B = this->value.GetBatches();
+	out->C = C;
+	out->H = H;
+    out->W = W;
     return out;
 }

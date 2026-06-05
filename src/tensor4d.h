@@ -229,6 +229,19 @@ public:
 
 	bool IsContiguous() const { return m_Shape.IsContiguous(); }
 
+	Tensor4D Reshape(const std::vector<size_t>& newShape) const
+	{
+		size_t newSize = 1;
+
+		for (auto s : newShape)
+			newSize *= s;
+
+		if (GetSize() != newSize)
+			throw std::runtime_error("Reshape: size mismatch");
+
+		return Tensor4D(m_Storage, Shape(newShape), m_Offset); // shallow copy (same data!)
+	}
+
 	float operator[](size_t Index) const
 	{
 		if (Index >= GetSize())
@@ -268,6 +281,21 @@ public:
 	{
 		return Tensor4D(m_Storage, new_shape);
 	}*/
+
+	Tensor4D ViewBatch(size_t batch) const
+	{
+		if (batch >= GetBatches())
+			throw std::out_of_range("Batch index out of range");
+
+		// neue Shape: 1 x cols (eine Zeile)
+		Shape new_shape = Shape({ 1, GetDepth(), GetRows(), GetColumns()}, // New shape
+			{ 0, m_Shape.stride[1], m_Shape.stride[2], m_Shape.stride[3] }); // New strides
+
+		// Offset springt auf die gewünschte Zeile
+		size_t new_offset = m_Offset + batch * m_Shape.stride[0];
+
+		return Tensor4D(m_Storage, new_shape, new_offset);
+	}
 
 	Tensor4D ViewRow(size_t batch, size_t depth, size_t row) const
 	{

@@ -21,6 +21,15 @@ struct TapeEntry
     // Convolution
     int stride  = 1;
     int padding = 0;
+
+	// Max Pool
+	int kernel_size = 1;
+
+    // Flatten
+    size_t B;
+    size_t C;
+    size_t H;
+    size_t W;
 };
 
 
@@ -101,6 +110,32 @@ public:
         tape.push_back({ op, a, b, {}, out });
 	}
 
+    void AddOpEntryConv2D(Operator op, int a, int b, int out, int stride, int padding)
+    {
+        TapeEntry new_entry({ op, a, b, {}, out, stride, padding });
+        new_entry.stride = stride;
+        new_entry.padding = padding;
+        tape.push_back(new_entry);
+    }
+
+    void AddOpEntryMaxPool(Operator op, int a, int b, int out, int KernelSize, int Stride)
+    {
+        TapeEntry new_entry({ op, a, b, {}, out, Stride, 0 });
+        new_entry.kernel_size = KernelSize;
+        new_entry.stride = Stride;
+        tape.push_back(new_entry);
+    }
+
+    void AddOpEntry(Operator op, int a, int out, size_t B, size_t C, size_t H, size_t W)
+    {
+        TapeEntry new_entry({ op, a, -1, {}, out, 1, 0 });
+        new_entry.B = B;
+        new_entry.C = C;
+        new_entry.H = H;
+        new_entry.W = W;
+        tape.push_back(new_entry);
+    }
+
     void AddOpEntry(Operator op, const std::vector<int>& inputs, int out)
     {
         tape.push_back({ op, -1, -1, inputs, out });
@@ -159,7 +194,7 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
     case Operator::Undefined:
         break;
 
-    //Two operands
+    // Two operands
     case Operator::Add:
     case Operator::Subtract:
     case Operator::Multiply:
@@ -170,12 +205,27 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
         AddOpEntry(node->op, GetID(node->left), GetID(node->right), node_id);
         break;
 
-	//1 Operand
+	// One Operand
 	case Operator::Sum:
     case Operator::Tanh:
     case Operator::ReLU:
     case Operator::Softmax:
         AddOpEntry(node->op, GetID(node->left), -1, node_id);
+        break;
+
+    // Convolutions
+    case Operator::Conv2D:
+        AddOpEntryConv2D(node->op, GetID(node->left), GetID(node->right), node_id, node->stride, node->padding);
+        break;
+
+    // Max Pool
+    case Operator::MaxPool2D:
+        AddOpEntryMaxPool(node->op, GetID(node->left), GetID(node->right), node_id, node->kernel_size, node->stride);
+        break;
+
+    // Flatten
+    case Operator::Flatten:
+        AddOpEntry(node->op, GetID(node->left), node_id, node->B, node->C, node->H, node->W);
         break;
 
 	//N operands
@@ -276,6 +326,24 @@ void TapeRecorder<T>::Forward()
             }
             else
                 values[entry.out] = values[entry.a].Softmax().CrossEntropy(values[entry.b]);
+            break;
+        case Operator::Conv2D:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+                values[entry.out] = Kernels::Conv2D_Forward(values[entry.a], values[entry.b], entry.stride, entry.padding);
+            else
+                throw std::runtime_error("Unsupported Operation");
+            break;
+        case Operator::MaxPool2D:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+                values[entry.out] = Kernels::MaxPool2D_Forward(values[entry.a], entry.kernel_size, entry.stride, nullptr);
+            else
+                throw std::runtime_error("Unsupported Operation");
+            break;
+        case Operator::Flatten:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+                values[entry.out] = values[entry.a].Reshape({ entry.B, 1, entry.C*entry.H*entry.W, 1 });
+            else
+                throw std::runtime_error("Unsupported Operation");
             break;
 
         default:
@@ -526,6 +594,26 @@ inline void TapeRecorder<T>::Backward()
             }
             break;
         }
+        case Operator::Conv2D:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+                //values[entry.out] = Kernels::Conv2D_Backward(values[entry.a], values[entry.b], entry.stride, entry.padding);
+                throw std::runtime_error("Unsupported Operation");
+            else
+                throw std::runtime_error("Unsupported Operation");
+            break;
+        case Operator::MaxPool2D:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+                //values[entry.out] = Kernels::MaxPool2D_Backward(values[entry.a], entry.kernel_size, entry.stride, nullptr);
+                throw std::runtime_error("Unsupported Operation");
+            else
+                throw std::runtime_error("Unsupported Operation");
+            break;
+        case Operator::Flatten:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+                values[entry.out] = values[entry.a].Reshape({ entry.B, entry.C, entry.H, entry.W });
+            else
+                throw std::runtime_error("Unsupported Operation");
+            break;
 
         default:
             throw std::runtime_error("Unsupported Operation");
@@ -590,6 +678,18 @@ inline void TapeRecorder<T>::PrintTape() const
         case Operator::Softmax_CrossEntropy:
             op_text = "Softmax_CrossEntropy";
             op_sign = "smce";
+            break;
+        case Operator::Conv2D:
+            op_text = "Conv2D";
+            op_sign = "conv2d";
+            break;
+        case Operator::MaxPool2D:
+            op_text = "MaxPool2D";
+            op_sign = "maxpool2d";
+            break;
+        case Operator::Flatten:
+            op_text = "Flatten";
+            op_sign = "flatten";
             break;
         }
 
