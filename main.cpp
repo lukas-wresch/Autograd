@@ -84,7 +84,7 @@ void MNist_Tensor4D()
 
 	auto tape = TapeRecorder<Tensor4D>();
 	SGD<Tensor4D> sgd(0.03f, 0.7f);
-	const int batch_size = 1;
+	const int batch_size = 10;
 
 	{
 		auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 28 * 28, 1 }), "input");
@@ -211,8 +211,8 @@ void MNist_Tensor4D()
 			tape.ZeroGradients();
 			tape.Backward();
 
-			epoch_loss += loss->At(0, 0, 0, 0);
-			batch_loss += loss->At(0, 0, 0, 0);
+			epoch_loss += loss->At(0, 0, 0, 0) * actual_batch_size;
+			batch_loss += loss->At(0, 0, 0, 0) * actual_batch_size;
 
 			if (i / batch_size % 1000 == 0)
 				std::cout << "Batch " << i / batch_size + 1 << " of " << xs_train.size() / batch_size << " batch_loss " << batch_loss / batch_size << std::endl;
@@ -1129,7 +1129,7 @@ int main()
 
 
 	//MNist_Tensor();
-	//MNist_Tensor4D();
+	MNist_Tensor4D();
 
 
 	return 0;

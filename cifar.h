@@ -10,9 +10,8 @@ class Cifar
 public:
 	Cifar(const std::string& FolderName = "cifar-10")
 	{
-		//m_TrainNumImages = ReadImageData("datasets/" + FolderName + "/data_batch_%d.bin");
-		m_TrainNumImages = ReadImageData("datasets/" + FolderName + "/train.bin");
-		//m_ValidNumImages = ReadImageData("datasets/" + FolderName + "/test_batch.bin");
+		m_TrainNumImages = ReadImageData("datasets/" + FolderName + "/data_batch_%d.bin");
+		m_ValidNumImages = ReadImageData("datasets/" + FolderName + "/test_batch.bin");
 	}
 	~Cifar()
 	{
