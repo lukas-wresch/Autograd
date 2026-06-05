@@ -67,6 +67,47 @@ int Cifar::ReadImageData(const std::string& Filename)
 
 
 
+void Cifar::SaveDataSplit(const std::string& BaseFilename, int NumFiles)
+{
+    if (NumFiles <= 0)
+        throw std::runtime_error("NumFiles must be > 0");
+
+    const uint32_t ImagesPerFile = (m_ValidNumImages + NumFiles - 1) / NumFiles;
+
+    for (int fileIdx = 0; fileIdx < NumFiles; fileIdx++)
+    {
+        uint32_t start = fileIdx * ImagesPerFile;
+        uint32_t end = std::min(start + ImagesPerFile, m_ValidNumImages);
+
+        if (start >= end)
+            break;
+
+        char filename[256];
+        snprintf(filename, sizeof(filename), "%s_%d.bin", BaseFilename.c_str(), fileIdx+1);
+
+        FILE* fp = nullptr;
+        fopen_s(&fp, filename, "wb");
+
+        if (!fp)
+            throw std::runtime_error("Could not create file");
+
+        uint32_t count = end - start;
+
+        // Anzahl Bilder speichern
+        fwrite(&count, sizeof(count), 1, fp);
+
+        for (uint32_t i = start; i < end; i++)
+        {
+            fwrite(&m_ValidationLabels[i], 1, 1, fp);
+            fwrite(&m_ValidationImages[i * 32 * 32 * 3], 32 * 32 * 3, 1, fp);
+        }
+
+        fclose(fp);
+    }
+}
+
+
+
 std::vector<float> Cifar::GetTrainingImageData(size_t Index) const
 {
     if (Index >= m_TrainNumImages)

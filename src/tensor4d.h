@@ -215,6 +215,18 @@ public:
 		m_Storage = std::make_shared<Storage>(m_Shape.ComputeSize(), Data);
 	}
 
+	Tensor4D Clone() const
+	{
+		Tensor4D out(m_Shape);
+
+		if (!IsContiguous())
+			throw std::out_of_range("Not supported for non-contiguous tensors");
+
+		// assumes contiguous storage
+		std::copy(Data(), Data() + GetSize(), out.Data());
+		return out;
+	}
+
 	bool IsContiguous() const { return m_Shape.IsContiguous(); }
 
 	float operator[](size_t Index) const
@@ -448,10 +460,10 @@ public:
 		{
 			std::cout << std::fixed << std::setprecision(4) << Data()[i] << " ";
 		}
-		std::cout << "]\n";
+		std::cout << "]\n\n";
 	}
 
-	void SetRow(size_t batch, size_t depth, size_t row, std::vector<float> vec)
+	void SetRow(size_t batch, size_t depth, size_t row, const std::vector<float>& vec)
 	{
 		size_t cols = GetColumns();
 
@@ -559,22 +571,31 @@ public:
 
 	Tensor4D Softmax() const
 	{
-		if (Dim() > 1)
-			throw std::runtime_error("Tensor4D::Softmax() Only vector type supported");
-
-		float max_value = Max();
-
 		Tensor4D out(GetShape());
 
-		float sum = 0.0f;
-		for (size_t r = 0; r < GetRows(); r++)
-		{
-			out[r] = std::exp(At(0, 0, r, 0) - max_value);
-			sum += out[r];
-		}
+		for (size_t b = 0; b < GetBatches(); b++)
+			for (size_t d = 0; d < GetDepth(); d++)
+				for (size_t c = 0; c < GetColumns(); c++)
+				{
+					float max_value = -std::numeric_limits<float>::infinity();
 
-		for (size_t i = 0; i < GetRows(); i++)
-			out[i] /= sum;
+					// 1. max (stabil)
+					for (size_t r = 0; r < GetRows(); r++)
+						max_value = std::max(max_value, At(b, d, r, c));
+
+					// 2. exp + sum
+					float sum = 0.0f;
+					for (size_t r = 0; r < GetRows(); r++)
+					{
+						float e = std::exp(At(b, d, r, c) - max_value);
+						out.At(b, d, r, c) = e;
+						sum += e;
+					}
+
+					// 3. normalize
+					for (size_t r = 0; r < GetRows(); r++)
+						out.At(b, d, r, c) /= sum;
+				}
 
 		return out;
 	}
@@ -591,13 +612,14 @@ public:
 		if (Target.GetRows() == 1)
 		{
 			for (size_t b = 0; b < GetBatches(); b++)
+				for (size_t d = 0; d < GetDepth(); d++)
 			{
-				int label = (int)Target.At(b, 0, 0, 0);
+				int label = (int)Target.At(b, d, 0, 0);
 
 				if (label < 0 || label >= (int)GetRows())
 					throw std::runtime_error("Tensor4D CrossEntropy invalid label index");
 
-				float p = At(b, 0, (size_t)label, 0);
+				float p = At(b, d, (size_t)label, 0);
 				loss -= std::log(p + epsilon);
 			}
 
@@ -609,8 +631,9 @@ public:
 			throw std::runtime_error("Tensor4D CrossEntropy size mismatch");
 
 		for (size_t b = 0; b < GetBatches(); b++)
-			for (size_t r = 0; r < GetRows(); r++)
-				loss -= Target.At(b, 0, r, 0) * std::log(At(b, 0, r, 0) + epsilon);
+			for (size_t d = 0; d < GetDepth(); d++)
+				for (size_t r = 0; r < GetRows(); r++)
+					loss -= Target.At(b, d, r, 0) * std::log(At(b, d, r, 0) + epsilon);
 
 		return Tensor4D({ 1 }, { loss / GetBatches() });
 	}
@@ -769,10 +792,7 @@ inline void Tensor4D::operator+=(const Tensor4D& rhs)
 
 	Shape outShape = BroadcastedShape(m_Shape, rhs.m_Shape);
 
-	if (GetShape() != outShape)
-		throw std::runtime_error("incompatible shapes");
-
-	size_t total = GetShape().ComputeSize();
+	size_t total = outShape.ComputeSize();
 
 	for (size_t idx = 0; idx < total; idx++)
 	{
@@ -830,6 +850,36 @@ inline void Tensor4D::operator-=(const Tensor4D& right)
 
 
 
+static inline Tensor4D operator-(float s, const Tensor4D& t)
+{
+	Tensor4D out(t.GetShape());
+
+	for (size_t b = 0; b < t.GetBatches(); b++)
+		for (size_t d = 0; d < t.GetDepth(); d++)
+			for (size_t r = 0; r < t.GetRows(); r++)
+				for (size_t c = 0; c < t.GetColumns(); c++)
+					out.At(b, d, r, c) = s - t.At(b, d, r, c);
+
+	return out;
+}
+
+
+
+static inline Tensor4D operator*(float s, const Tensor4D &t)
+{
+	Tensor4D out(t.GetShape());
+
+	for (size_t b = 0; b < t.GetBatches(); b++)
+		for (size_t d = 0; d < t.GetDepth(); d++)
+			for (size_t r = 0; r < t.GetRows(); r++)
+				for (size_t c = 0; c < t.GetColumns(); c++)
+					out.At(b, d, r, c) = t.At(b, d, r, c) * s;
+
+	return out;
+}
+
+
+
 inline Tensor4D Tensor4D::operator*(const Tensor4D& rhs) const
 {
 	Shape outShape = BroadcastedShape(m_Shape, rhs.m_Shape);
@@ -853,29 +903,42 @@ inline Tensor4D Tensor4D::operator*(const Tensor4D& rhs) const
 
 inline Tensor4D Tensor4D::operator%(const Tensor4D& rhs) const
 {
-	if (GetBatches() != rhs.GetBatches())
+	if (GetBatches() != rhs.GetBatches() && GetBatches() != 1 && rhs.GetBatches() != 1)
 		throw std::runtime_error("batch mismatch");
 
-	if (GetDepth() != rhs.GetDepth())
+	if (GetDepth() != rhs.GetDepth() && GetDepth() != 1 && rhs.GetDepth() != 1)
 		throw std::runtime_error("depth mismatch");
 
 	if (GetColumns() != rhs.GetRows())
 		throw std::runtime_error("matrix dimension mismatch");
 
-	Tensor4D out({ GetBatches(), GetDepth(), GetRows(), rhs.GetColumns() });
+	size_t outB = std::max(GetBatches(), rhs.GetBatches());
+	size_t outD = std::max(GetDepth(), rhs.GetDepth());
 
-	for (size_t b = 0; b < GetBatches(); b++)
-		for (size_t d = 0; d < GetDepth(); d++)
+	Tensor4D out({ outB, outD, GetRows(), rhs.GetColumns() });
+
+	for (size_t b = 0; b < outB; b++)
+	{
+		size_t lhsB = (GetBatches() == 1) ? 0 : b;
+		size_t rhsB = (rhs.GetBatches() == 1) ? 0 : b;
+
+		for (size_t d = 0; d < outD; d++)
+		{
+			size_t lhsD = (GetDepth() == 1) ? 0 : d;
+			size_t rhsD = (rhs.GetDepth() == 1) ? 0 : d;
+
 			for (size_t i = 0; i < GetRows(); i++)
 				for (size_t j = 0; j < rhs.GetColumns(); j++)
 				{
 					float sum = 0.0f;
 
 					for (size_t k = 0; k < GetColumns(); k++)
-						sum += At(b, d, i, k) * rhs.At(b, d, k, j);
+						sum += At(lhsB, lhsD, i, k) * rhs.At(rhsB, rhsD, k, j);
 
 					out.At(b, d, i, j) = sum;
 				}
-
+		}
+	}
+	
 	return out;
 }

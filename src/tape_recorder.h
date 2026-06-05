@@ -85,17 +85,7 @@ public:
     {
         values.push_back(v);
 
-        if constexpr (std::is_same_v<T, Tensor>)
-        {
-            T new_grad(v.Shape());
-            grads.push_back(new_grad);
-        }
-        else
-        {
-            T new_grad(v);//initialize gradient with same length
-            new_grad.SetZero();
-            grads.push_back(new_grad);
-        }
+        grads.push_back(v.Clone());
 
         trainable.push_back(Trainable);
 
@@ -352,7 +342,8 @@ inline void TapeRecorder<T>::Backward()
             }
             else if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                throw std::runtime_error("Unsupported Operation");
+                grads[entry.a] += outer_grad % values[entry.b].Transpose();
+                grads[entry.b] += values[entry.a].Transpose() % outer_grad;
             }
             else
             {
@@ -366,10 +357,7 @@ inline void TapeRecorder<T>::Backward()
             else if constexpr (std::is_same_v<T, Tensor4D>)
                 grads[entry.a] += outer_grad;
             else
-            {
-                //grads[entry.a] = grads[entry.a].ElementwiseAdd(outer_grad);
                 grads[entry.a] += outer_grad;
-            }
             break;
 
         case Operator::ElementwiseAdd:
@@ -424,26 +412,17 @@ inline void TapeRecorder<T>::Backward()
             if constexpr (std::is_same_v<T, Tensor>)
                 Kernels::Tanh_Backward(grads[entry.a], values[entry.out], outer_grad);
             else if constexpr (std::is_same_v<T, Tensor4D>)
-            {
-                throw std::runtime_error("Unsupported Operation");
-            }
+                grads[entry.a] += (1.0f - values[entry.out] * values[entry.out]) * outer_grad;//tanh' = 1 - tanh^2
             else
                 grads[entry.a] += (1.0f - values[entry.out].ElementwiseMul(values[entry.out])).ElementwiseMul(outer_grad);//tanh' = 1 - tanh^2
             break;
         case Operator::ReLU:
             if constexpr (std::is_same_v<T, Tensor>)
-            {
                 grads[entry.a] += values[entry.out].Heaviside().ElementwiseMul(outer_grad);//ReLU' = 1 if x > 0 else 0
-                //throw std::runtime_error("Unsupported Operation");
-            }
             else if constexpr (std::is_same_v<T, Tensor4D>)
-            {
-                throw std::runtime_error("Unsupported Operation");
-            }
+                grads[entry.a] += values[entry.out].Heaviside() * outer_grad;//ReLU' = 1 if x > 0 else 0
             else
-            {
                 grads[entry.a] += values[entry.out].Heaviside().ElementwiseMul(outer_grad);//ReLU' = 1 if x > 0 else 0
-            }
             break;
 
         case Operator::Softmax_CrossEntropy:
@@ -481,7 +460,34 @@ inline void TapeRecorder<T>::Backward()
             }
             else if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                throw std::runtime_error("Unsupported Operation");
+                // logits are stored in "left"
+                T& logits = values[entry.a];
+                T& grad_logits = grads[entry.a];
+
+                const int target = (int)values[entry.b].Data()[0];
+
+                // forward softmax recomputation
+                // (oder cached probabilities!)
+                float max_val = logits.Max(); // numerical stability
+
+                float sum = 0.0f;
+                std::vector<float> probs(logits.GetSize());
+
+                for (size_t i = 0; i < logits.GetSize(); i++)
+                {
+                    probs[i] = std::exp(logits.Data()[i] - max_val);
+                    sum += probs[i];
+                }
+
+                for (float& p : probs)
+                    p /= sum;
+
+                // backward: dL/dlogits = p - y
+                for (size_t i = 0; i < logits.GetSize(); i++)
+                {
+                    float y = (i == (size_t)target) ? 1.0f : 0.0f;
+                    grad_logits.Data()[i] += (probs[i] - y) * outer_grad.Data()[0];
+                }
             }
             else
             {

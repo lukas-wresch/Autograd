@@ -2,6 +2,7 @@
 #include <vector>
 #include "node.h"
 #include "tape_recorder.h"
+#include "tensor4d.h"
 
 
 
@@ -36,7 +37,7 @@ public:
             {
                 values.push_back(Tape.SetValue(i));
                 grads.push_back(Tape.SetGradient(i));
-                velocity.push_back(*Tape.SetValue(i));
+                velocity.push_back(Tape.SetValue(i)->Clone());
                 velocity.back().SetZero();
             }
         }
@@ -54,7 +55,8 @@ public:
                     Kernels::SGD_Update(*values[i], *grads[i], velocity[i], m_LR * Scale, m_Momentum);
                 else if constexpr (std::is_same_v<T, Tensor4D>)
                 {
-                    throw std::runtime_error("Unsupported Operation");
+                    velocity[i] = m_Momentum * velocity[i] - m_LR * Scale * (*grads[i]);
+                    *values[i] += velocity[i];
                 }
                 else
                 {

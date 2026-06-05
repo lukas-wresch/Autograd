@@ -45,7 +45,7 @@ class Node : public std::enable_shared_from_this<Node<T>>
 public:
     Node() {}
 
-    Node(const T& value, const std::string& Label = "") : value(value), grad(value), label(Label)
+    Node(const T& value, const std::string& Label = "") : value(value), grad(value.Clone()), label(Label)
     {}
 
     Node(size_t Length1, size_t Length2, const std::string& Label = "") : value(Length1, Length2), grad(Length1, Length2), label(Label)
@@ -88,12 +88,12 @@ public:
         if (!label.empty())
             printf("%s: ", label.c_str());
         printf("Value: ");
-        for (size_t i = 0; i < value.GetLength(); i++)
-            printf("%.4f ", value.GetValue()[i]);
+        for (size_t i = 0; i < value.GetSize(); i++)
+            printf("%.4f ", value.Data()[i]);
         printf("\nGradient: ");
-        for (size_t i = 0; i < grad.GetLength(); i++)
-            printf("%.4f ", grad.GetValue()[i]);
-        printf("\n");
+        for (size_t i = 0; i < grad.GetSize(); i++)
+            printf("%.4f ", grad.Data()[i]);
+        printf("\n\n");
 	}
 
 
@@ -141,11 +141,18 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
         right->grad -= grad;
         break;
     case Operator::Multiply:
-        left->grad += grad * right->value.Transpose();
-        right->grad += left->value.Transpose() * grad;
+        if constexpr (std::is_same_v<T, Tensor4D>)
+        {
+            left->grad += grad % right->value.Transpose();
+            right->grad += left->value.Transpose() % grad;
+        }
+        else
+        {
+            left->grad += grad * right->value.Transpose();
+            right->grad += left->value.Transpose() * grad;
+        }
         break;
     case Operator::Sum:
-        //left->grad = left->grad.ElementwiseAdd(grad);
         left->grad += grad;
         break;
     case Operator::ElementwiseAdd:
@@ -153,69 +160,94 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
         right->grad += grad.Sum();
         break;
     case Operator::ElementwiseMul:
-        left->grad += right->value.ElementwiseMul(grad);
-        right->grad += left->value.ElementwiseMul(grad);
+        if constexpr (std::is_same_v<T, Tensor4D>)
+        {
+            left->grad += right->value * grad;
+            right->grad += left->value * grad;
+        }
+        else
+        {
+            left->grad += right->value.ElementwiseMul(grad);
+            right->grad += left->value.ElementwiseMul(grad);
+        }
         break;
     case Operator::Pack:
-        for (size_t i = 0; i < inputs.size(); i++)
-            inputs[i]->grad += grad.GetValue()[i];
+        if constexpr (std::is_same_v<T, Tensor4D>)
+            throw std::runtime_error("Unsupported Operation");
+        else
+        {
+            for (size_t i = 0; i < inputs.size(); i++)
+                inputs[i]->grad += grad.GetValue()[i];
+        }
         break;
     case Operator::Tanh:
-        left->grad += (1.0f - value.ElementwiseMul(value)).ElementwiseMul(grad);//tanh' = 1 - tanh^2
+        if constexpr (std::is_same_v<T, Tensor4D>)
+            left->grad += (1.0f - value * value) * grad;//tanh' = 1 - tanh^2
+        else
+            left->grad += (1.0f - value.ElementwiseMul(value)).ElementwiseMul(grad);//tanh' = 1 - tanh^2
         break;
     case Operator::ReLU:
-        left->grad += value.Heaviside().ElementwiseMul(grad);//ReLU' = 1 if x > 0 else 0
+        if constexpr (std::is_same_v<T, Tensor4D>)
+            left->grad += value.Heaviside() * grad;//ReLU' = 1 if x > 0 else 0
+        else
+            left->grad += value.Heaviside().ElementwiseMul(grad);//ReLU' = 1 if x > 0 else 0
         break;
     case Operator::Softmax:
     {
-        float dot = 0.0f;
+        {
+            float dot = 0.0f;
 
-        for (size_t i = 0; i < grad.GetSize(); i++)
-            dot += grad[i] * value[i];
+            for (size_t i = 0; i < grad.GetSize(); i++)
+                dot += grad[i] * value[i];
 
-        for (size_t i = 0; i < grad.GetSize(); i++)
-            left->grad.SetValue()[i] += value[i] * (grad[i] - dot);
+            for (size_t i = 0; i < grad.GetSize(); i++)
+                left->grad.Data()[i] += value[i] * (grad[i] - dot);
+        }
         break;
     }
     case Operator::CrossEntropy:
     {
-        T& probs = left->value;
-        T& grad_probs = left->grad;
+        {
+            T& probs = left->value;
+            T& grad_probs = left->grad;
 
-        const int target = (int)right->value.GetValue()[0];
+            const int target = (int)right->value.Data()[0];
 
-        grad_probs.SetValue()[target] += (-1.0f / probs[target]) * grad[0];
+            grad_probs.Data()[target] += (-1.0f / probs[target]) * grad[0];
+        }
         break;
     }
     case Operator::Softmax_CrossEntropy:
     {
-        // logits are stored in "left"
-        T& logits = left->value;
-        T& grad_logits = left->grad;
-
-        const int target = (int)right->value.GetValue()[0];
-
-        // forward softmax recomputation
-        // (oder cached probabilities!)
-        float max_val = logits.Max(); // numerical stability
-
-        float sum = 0.0f;
-        std::vector<float> probs(logits.GetLength());
-
-        for (size_t i = 0; i < logits.GetLength(); i++)
         {
-            probs[i] = std::exp(logits[i] - max_val);
-            sum += probs[i];
-        }
+            // logits are stored in "left"
+            T& logits = left->value;
+            T& grad_logits = left->grad;
 
-        for (float& p : probs)
-            p /= sum;
+            const int target = (int)right->value.Data()[0];
 
-        // backward: dL/dlogits = p - y
-        for (size_t i = 0; i < logits.GetLength(); i++)
-        {
-            float y = (i == (size_t)target) ? 1.0f : 0.0f;
-            grad_logits.SetValue()[i] += (probs[i] - y) * grad[0];
+            // forward softmax recomputation
+            // (oder cached probabilities!)
+            float max_val = logits.Max(); // numerical stability
+
+            float sum = 0.0f;
+            std::vector<float> probs(logits.GetSize());
+
+            for (size_t i = 0; i < logits.GetSize(); i++)
+            {
+                probs[i] = std::exp(logits[i] - max_val);
+                sum += probs[i];
+            }
+
+            for (float& p : probs)
+                p /= sum;
+
+            // backward: dL/dlogits = p - y
+            for (size_t i = 0; i < logits.GetSize(); i++)
+            {
+                float y = (i == (size_t)target) ? 1.0f : 0.0f;
+                grad_logits.Data()[i] += (probs[i] - y) * grad[0];
+            }
         }
         break;
     }
@@ -404,18 +436,18 @@ NodePtr<T> Node<T>::ElementwiseMul(const NodePtr<T>& other)
 {
     if constexpr (std::is_same_v<T, Tensor4D>)
     {
-        auto out = std::make_shared<Node<T>>(left->value * right->value);
-        out->op = Operator::ElementwiseMul;
-        out->left = this->shared_from_this();
+        auto out   = std::make_shared<Node<T>>(this->value * other->value);
+        out->op    = Operator::ElementwiseMul;
+        out->left  = this->shared_from_this();
         out->right = other;
 
         return out;
     }
     else
     {
-        auto out = std::make_shared<Node<T>>(left->value.ElementwiseMul(right->value));
-        out->op = Operator::ElementwiseMul;
-        out->left = this->shared_from_this();
+        auto out   = std::make_shared<Node<T>>(this->value.ElementwiseMul(other->value));
+        out->op    = Operator::ElementwiseMul;
+        out->left  = this->shared_from_this();
         out->right = other;
 
         return out;

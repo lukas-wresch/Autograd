@@ -113,6 +113,11 @@ public:
 		m_Strides = ComputeStrides(m_Shape);
 	}
 
+	Tensor Clone() const
+	{
+		return Tensor(m_Shape, m_Storage->GetData());
+	}
+
 	/*Tensor(const Matrix& Mat)
 	{
 		shape_ = std::vector<size_t>{ Mat.GetRows(), Mat.GetColumns() };

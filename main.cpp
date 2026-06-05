@@ -84,11 +84,11 @@ void MNist_Tensor4D()
 
 	auto tape = TapeRecorder<Tensor4D>();
 	SGD<Tensor4D> sgd(0.03f, 0.7f);
-	const int batch_size = 2;
+	const int batch_size = 1;
 
 	{
-		auto x = Node<Tensor4D>::Create(Tensor4D({ 28 * 28, batch_size }), "input");
-		auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size }), "label");
+		auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 28 * 28, 1 }), "input");
+		auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 1, 1 }), "label");
 
 		Layer4D L1(784, 128, Activation::ReLU,     InitType::Xavier);
 		Layer4D L2(128,  10, Activation::Identity, InitType::Xavier);
@@ -125,8 +125,8 @@ void MNist_Tensor4D()
 
 			while (actual_batch_size < batch_size && i + actual_batch_size < xs_train.size())
 			{
-				input->SetRow(actual_batch_size, 0, 0, xs_train[i + actual_batch_size]);
-				label->SetRow(actual_batch_size, 0, 0, { labels_train[i + actual_batch_size] });
+				input->SetColumn(actual_batch_size, 0, 0, xs_train[i + actual_batch_size]);
+				label->SetColumn(actual_batch_size, 0, 0, { labels_train[i + actual_batch_size] });
 				actual_batch_size++;
 			}
 
@@ -134,13 +134,13 @@ void MNist_Tensor4D()
 
 			for (size_t j = 0; j < actual_batch_size; j++)
 			{
-				input->Print();
-				output->Print();
-				auto output_row = output->ViewRow(0, 0, j);
-				output_row.Print();
+				//input->Print();
+				//output->Print();
+				//auto output_row = output->ViewRow(j, 0, 0);
+				//output_row.Print();
 
 				//Convert one hot to class index
-				int pred_class = (int)output_row.ArgMax(j, 0);
+				int pred_class = (int)output->ArgMax(j, 0);
 				int target_class = (int)labels_train[i + j];
 
 				if (pred_class == target_class) correct++;
@@ -156,8 +156,8 @@ void MNist_Tensor4D()
 
 			while (actual_batch_size < batch_size && i + actual_batch_size < xs_val.size())
 			{
-				input->SetRow(actual_batch_size, 0, 0, xs_val[i + actual_batch_size]);
-				label->SetRow(actual_batch_size, 0, 0,{ labels_val[i + actual_batch_size] });
+				input->SetColumn(actual_batch_size, 0, 0, xs_val[i + actual_batch_size]);
+				label->SetColumn(actual_batch_size, 0, 0,{ labels_val[i + actual_batch_size] });
 				actual_batch_size++;
 			}
 
@@ -165,10 +165,8 @@ void MNist_Tensor4D()
 
 			for (size_t j = 0; j < actual_batch_size; j++)
 			{
-				auto output_row = output->ViewColumn(j);
-
 				//Convert one hot to class index
-				int pred_class = (int)output_row.ArgMax(j, 0);
+				int pred_class = (int)output->ArgMax(j, 0);
 				int target_class = (int)labels_val[i + j];
 
 				if (pred_class == target_class) val_correct++;
@@ -178,7 +176,7 @@ void MNist_Tensor4D()
 		}
 
 		return std::tuple{ (float)correct * 100.0f / xs_train.size(), (float)val_correct * 100.0f / xs_val.size() };
-		};
+	};
 
 
 	//Training loop
@@ -204,8 +202,8 @@ void MNist_Tensor4D()
 
 			for (size_t j = i; j < end; j++)
 			{
-				input->SetRow(actual_batch_size, 0, 0, xs_train[j]);
-				label->SetRow(actual_batch_size, 0, 0, { labels_train[j] });
+				input->SetColumn(actual_batch_size, 0, 0, xs_train[j]);
+				label->SetColumn(actual_batch_size, 0, 0, { labels_train[j] });
 				actual_batch_size++;
 			}
 
@@ -1131,7 +1129,7 @@ int main()
 
 
 	//MNist_Tensor();
-	MNist_Tensor4D();
+	//MNist_Tensor4D();
 
 
 	return 0;

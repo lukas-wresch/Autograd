@@ -20,6 +20,13 @@ public:
 		value = rhs;
 	}
 
+	Scalar Clone() const
+	{
+		return Scalar(*this);
+	}
+
+	const float* Data() const { return &value; }
+	float* Data() { return &value; }
 	const float* GetValue() const { return &value; }
 	void   SetValue(float Value) { value = Value; }
 	float* SetValue() { return &value; }

@@ -98,6 +98,11 @@ public:
 		return *this;
 	}
 
+	Matrix Clone() const
+	{
+		return Matrix(*this);
+	}
+
 	Matrix& operator=(Matrix&& other) noexcept
 	{
 		if (this == &other)
@@ -155,6 +160,9 @@ public:
 
 	size_t GetLength() const { return m_Rows * m_Columns; }//DEPRECATED
 	size_t GetSize() const { return m_Rows * m_Columns; }
+
+	const float* Data() const { return m_pValues; }
+	float* Data() { return m_pValues; }
 
 	const float* GetValue() const { return m_pValues; }
 	float* SetValue() { return m_pValues; }
