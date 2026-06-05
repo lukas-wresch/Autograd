@@ -73,6 +73,20 @@ TEST(Matrix, SetOne)
     m.SetOne();
 
     EXPECT_FLOAT_EQ(m.At(0, 0), 1.0f);
+    EXPECT_FLOAT_EQ(m.At(0, 1), 1.0f);
+    EXPECT_FLOAT_EQ(m.At(1, 0), 1.0f);
+    EXPECT_FLOAT_EQ(m.At(1, 1), 1.0f);
+}
+
+
+
+TEST(Matrix, SetIdentity)
+{
+    Matrix m(2, 2);
+
+    m.SetIdentity();
+
+    EXPECT_FLOAT_EQ(m.At(0, 0), 1.0f);
     EXPECT_FLOAT_EQ(m.At(0, 1), 0.0f);
     EXPECT_FLOAT_EQ(m.At(1, 0), 0.0f);
     EXPECT_FLOAT_EQ(m.At(1, 1), 1.0f);
@@ -120,8 +134,8 @@ TEST(Matrix, Addition)
     Matrix a(2, 2);
     Matrix b(2, 2);
 
-    a.SetOne();
-    b.SetOne();
+    a.SetIdentity();
+    b.SetIdentity();
 
     Matrix c = a + b;
 
@@ -138,8 +152,8 @@ TEST(Matrix, AdditionAssignment)
     Matrix a(2, 2);
     Matrix b(2, 2);
 
-    a.SetOne();
-    b.SetOne();
+    a.SetIdentity();
+    b.SetIdentity();
 
     a += b;
 
@@ -171,7 +185,7 @@ TEST(Matrix, ScalarMultiplication)
 {
     Matrix a(2, 2);
 
-    a.SetOne();
+    a.SetIdentity();
 
     Matrix b = 5.0f * a;
 

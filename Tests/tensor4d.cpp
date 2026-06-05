@@ -225,10 +225,10 @@ TEST(Tensor4D, ElementwiseMultiplication)
 
 
 
-/*TEST(Tensor4D, MatrixMultiplication)
+TEST(Tensor4D, MatrixMultiplication)
 {
-    Tensor4D a(2, 3);
-    Tensor4D b(3, 2);
+    Tensor4D a({ 2, 3 });
+    Tensor4D b({ 3, 2 });
 
     // A =
     // [1 2 3]
@@ -246,7 +246,7 @@ TEST(Tensor4D, ElementwiseMultiplication)
     b[2] = 9;  b[3] = 10;
     b[4] = 11; b[5] = 12;
 
-    Tensor4D c = a * b;
+    Tensor4D c = a % b;
 
     EXPECT_EQ(c.GetRows(), 2);
     EXPECT_EQ(c.GetColumns(), 2);
@@ -261,8 +261,8 @@ TEST(Tensor4D, ElementwiseMultiplication)
 
 TEST(Tensor4D, MatrixMultiplication2)
 {
-    Tensor4D a(2, 2);
-    Tensor4D b(2, 2);
+    Tensor4D a({ 2, 2 });
+    Tensor4D b({ 2, 2 });
 
     // A =
     // [1 2 3]
@@ -279,7 +279,7 @@ TEST(Tensor4D, MatrixMultiplication2)
     b[0] = 4;  b[1] = 2;
     b[2] = 3;  b[3] = 7;
 
-    Tensor4D c = a * b;
+    Tensor4D c = a % b;
 
     EXPECT_EQ(c.GetRows(), 2);
     EXPECT_EQ(c.GetColumns(), 2);
@@ -294,17 +294,14 @@ TEST(Tensor4D, MatrixMultiplication2)
 
 TEST(Tensor4D, Tensor4DMultiplication3)
 {
-    Tensor4D a(1, 3);
-    Tensor4D b(1, 1);
+    Tensor4D a({ 1, 3 });
+    Tensor4D b({ 1, 1 });
 
-    float* av = a.SetValue();
-    float* bv = b.SetValue();
+    a[0] =  1.0f;
+    a[1] = -0.5f;
+    a[2] =  2.0f;
 
-    av[0] =  1.0f;
-    av[1] = -0.5f;
-    av[2] =  2.0f;
-
-    bv[0] = 2.0f;
+    b[0] = 2.0f;
 
     Tensor4D c = a * b;
 
@@ -320,24 +317,21 @@ TEST(Tensor4D, Tensor4DMultiplication3)
 
 TEST(Tensor4D, Tensor4DVectorMultiplication)
 {
-    Tensor4D a(2, 2);
-    Tensor4D b(2, 1);
+    Tensor4D a({ 2, 2 });
+    Tensor4D b({ 2, 1 });
 
     EXPECT_EQ(a.GetRows(),    2);
     EXPECT_EQ(a.GetColumns(), 2);
     EXPECT_EQ(b.GetRows(),    2);
     EXPECT_EQ(b.GetColumns(), 1);
 
-    float* av = a.SetValue();
-    float* bv = b.SetValue();
+    a[0] = 1; a[1] = 0;
+    a[2] = 0; a[3] = 1;
 
-    av[0] = 1; av[1] = 0;
-    av[2] = 0; av[3] = 1;
+    b[0] = 13;
+    b[1] = -7;
 
-    bv[0] = 13;
-    bv[1] = -7;
-
-    Tensor4D c = a * b;
+    Tensor4D c = a % b;
 
     EXPECT_EQ(c.GetRows(), 2);
     EXPECT_EQ(c.GetColumns(), 1);
@@ -350,14 +344,12 @@ TEST(Tensor4D, Tensor4DVectorMultiplication)
 
 TEST(Tensor4D, ReLU)
 {
-    Tensor4D m(1, 4);
+    Tensor4D m({ 1, 4 });
 
-    float* v = m.SetValue();
-
-    v[0] = -1.0f;
-    v[1] = 0.0f;
-    v[2] = 2.0f;
-    v[3] = -5.0f;
+    m[0] = -1.0f;
+    m[1] = 0.0f;
+    m[2] = 2.0f;
+    m[3] = -5.0f;
 
     Tensor4D r = m.ReLU();
 
@@ -371,14 +363,12 @@ TEST(Tensor4D, ReLU)
 
 TEST(Tensor4D, Heaviside)
 {
-    Tensor4D m(1, 4);
+    Tensor4D m({ 1, 4 });
 
-    float* v = m.SetValue();
-
-    v[0] = -1.0f;
-    v[1] = 0.0f;
-    v[2] = 3.0f;
-    v[3] = 10.0f;
+    m[0] = -1.0f;
+    m[1] = 0.0f;
+    m[2] = 3.0f;
+    m[3] = 10.0f;
 
     Tensor4D h = m.Heaviside();
 
@@ -392,7 +382,7 @@ TEST(Tensor4D, Heaviside)
 
 TEST(Tensor4D, OutOfRangeThrows)
 {
-    Tensor4D m(2, 2);
+    Tensor4D m({ 2, 2 });
 
     EXPECT_THROW(
     {
@@ -405,8 +395,8 @@ TEST(Tensor4D, OutOfRangeThrows)
 
 TEST(Tensor4D, AdditionSizeMismatchThrows)
 {
-    Tensor4D a(2, 2);
-    Tensor4D b(3, 3);
+    Tensor4D a({ 2, 2 });
+    Tensor4D b({ 3, 3 });
 
     EXPECT_THROW(
     {
@@ -418,8 +408,8 @@ TEST(Tensor4D, AdditionSizeMismatchThrows)
 
 TEST(Tensor4D, MultiplicationSizeMismatchThrows)
 {
-    Tensor4D a(2, 3);
-    Tensor4D b(4, 2);
+    Tensor4D a({ 2, 3 });
+    Tensor4D b({ 4, 2 });
 
     EXPECT_THROW(
     {
@@ -429,15 +419,26 @@ TEST(Tensor4D, MultiplicationSizeMismatchThrows)
 
 
 
+TEST(Tensor4D, MatrixMultiplicationSizeMismatchThrows)
+{
+    Tensor4D a({ 2, 3 });
+    Tensor4D b({ 4, 2 });
+
+    EXPECT_THROW(
+        {
+            Tensor4D c = a % b;
+        }, std::runtime_error);
+}
+
+
+
 TEST(Tensor4D, SoftmaxBasic)
 {
-    Tensor4D m(3, 1);
+    Tensor4D m({ 3, 1 });
 
-    float* v = m.SetValue();
-
-    v[0] = 1.0f;
-    v[1] = 2.0f;
-    v[2] = 3.0f;
+    m[0] = 1.0f;
+    m[1] = 2.0f;
+    m[2] = 3.0f;
 
     Tensor4D s = m.Softmax();
 
@@ -459,13 +460,11 @@ TEST(Tensor4D, SoftmaxBasic)
 
 TEST(Tensor4D, SoftmaxOrdering)
 {
-    Tensor4D m(3, 1);
+    Tensor4D m({ 3, 1 });
 
-    float* v = m.SetValue();
-
-    v[0] = 0.0f;
-    v[1] = 1.0f;
-    v[2] = 2.0f;
+    m[0] = 0.0f;
+    m[1] = 1.0f;
+    m[2] = 2.0f;
 
     Tensor4D s = m.Softmax();
 
@@ -477,13 +476,9 @@ TEST(Tensor4D, SoftmaxOrdering)
 
 TEST(Tensor4D, CrossEntropyBasic)
 {
-    Tensor4D pred({
-        { 0.7f, 0.2f, 0.1f }
-        });
+	Tensor4D pred({ 3, 1 }, { 0.7f, 0.2f, 0.1f });
 
-    Tensor4D target({
-        { 1.0f, 0.0f, 0.0f }
-        });
+	Tensor4D target({ 3, 1 }, { 1.0f, 0.0f, 0.0f });
 
     Tensor4D loss = pred.CrossEntropy(target);
 
@@ -497,13 +492,9 @@ TEST(Tensor4D, CrossEntropyBasic)
 
 TEST(Tensor4D, CrossEntropyOneHot)
 {
-    Tensor4D pred({
-        { 0.1f, 0.8f, 0.1f }
-        });
+	Tensor4D pred({ 3,1 }, { 0.1f, 0.8f, 0.1f });
 
-    Tensor4D target({
-        { 0.0f, 1.0f, 0.0f }
-        });
+    Tensor4D target({ 1 },  { 1.0f });
 
     Tensor4D loss = pred.CrossEntropy(target);
 
@@ -516,13 +507,9 @@ TEST(Tensor4D, CrossEntropyOneHot)
 
 TEST(Tensor4D, CrossEntropyZeroClamp)
 {
-    Tensor4D pred({
-        { 0.0f, 1.0f, 0.0f }
-        });
+	Tensor4D pred({ 3,1 }, { 0.0f, 1.0f, 0.0f });
 
-    Tensor4D target({
-        { 1.0f, 0.0f, 0.0f }
-        });
+    Tensor4D target({ 3, 1 }, { 1.0f, 0.0f, 0.0f });
 
     Tensor4D loss = pred.CrossEntropy(target);
 
@@ -532,4 +519,4 @@ TEST(Tensor4D, CrossEntropyZeroClamp)
 
     // should be large but finite
     EXPECT_GT(loss.At(0, 0), 0.0f);
-}*/
+}

@@ -3,8 +3,8 @@
 #include <memory>
 #include <vector>
 #include <unordered_set>
-#include "scalar.h"
 #include "vector.h"
+#include "tensor4d.h"
 
 
 
@@ -325,13 +325,49 @@ NodePtr<T> operator-(const NodePtr<T>& left, const NodePtr<T>& right)
 template<typename T>
 NodePtr<T> operator*(const NodePtr<T>& left, const NodePtr<T>& right)
 {
-    auto out = std::make_shared<Node<T>>(left->value * right->value);
+    if constexpr (std::is_same_v<T, Tensor4D>)
+    {
+        auto out = std::make_shared<Node<T>>(left->value % right->value);
+        out->op = Operator::Multiply;
+        out->left = left;
+        out->right = right;
 
-    out->op    = Operator::Multiply;
-    out->left  = left;
-    out->right = right;
+        return out;
+    }
+    else
+    {
+        auto out = std::make_shared<Node<T>>(left->value * right->value);
+        out->op = Operator::Multiply;
+        out->left = left;
+        out->right = right;
 
-    return out;
+        return out;
+    }
+}
+
+
+
+template<typename T>
+NodePtr<T> operator%(const NodePtr<T>& left, const NodePtr<T>& right)
+{
+    if constexpr (std::is_same_v<T, Tensor4D>)
+    {
+        auto out = std::make_shared<Node<T>>(left->value % right->value);
+        out->op = Operator::Multiply;
+        out->left = left;
+        out->right = right;
+
+        return out;
+    }
+    else
+    {
+        auto out = std::make_shared<Node<T>>(left->value * right->value);
+        out->op = Operator::Multiply;
+        out->left = left;
+        out->right = right;
+
+        return out;
+    }
 }
 
 
@@ -340,8 +376,6 @@ template<typename T>
 NodePtr<T> Node<T>::Sum()
 {
     auto out = Node<T>::Create(value.Sum());
-
-    //out->grad.SetLength(1);
 
     out->op    = Operator::Sum;
     out->left  = this->shared_from_this();
@@ -368,13 +402,24 @@ NodePtr<T> Node<T>::ElementwiseAdd(const NodePtr<T>& other)
 template<typename T>
 NodePtr<T> Node<T>::ElementwiseMul(const NodePtr<T>& other)
 {
-    auto out = std::make_shared<Node<T>>(this->value.ElementwiseMul(other->value));
+    if constexpr (std::is_same_v<T, Tensor4D>)
+    {
+        auto out = std::make_shared<Node<T>>(left->value * right->value);
+        out->op = Operator::ElementwiseMul;
+        out->left = this->shared_from_this();
+        out->right = other;
 
-    out->op = Operator::ElementwiseMul;
-    out->left = this->shared_from_this();
-    out->right = other;
+        return out;
+    }
+    else
+    {
+        auto out = std::make_shared<Node<T>>(left->value.ElementwiseMul(right->value));
+        out->op = Operator::ElementwiseMul;
+        out->left = this->shared_from_this();
+        out->right = other;
 
-    return out;
+        return out;
+    }
 }
 
 

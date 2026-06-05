@@ -224,6 +224,8 @@ void TapeRecorder<T>::Forward()
         case Operator::Multiply:
             if constexpr (std::is_same_v<T, Tensor>)
                 Kernels::MatMul_Forward(values[entry.out], values[entry.a], values[entry.b]);
+            else if constexpr (std::is_same_v<T, Tensor4D>)
+                values[entry.out] = values[entry.a] % values[entry.b];
             else
                 values[entry.out] = values[entry.a] * values[entry.b];
             break;
@@ -233,13 +235,9 @@ void TapeRecorder<T>::Forward()
             break;
         case Operator::ElementwiseAdd:
             if constexpr (std::is_same_v<T, Tensor>)
-            {
-                throw std::runtime_error("Unsupported Operation");
-            }
+                values[entry.out] = values[entry.a] + values[entry.b];
             else if constexpr (std::is_same_v<T, Tensor4D>)
-            {
-                throw std::runtime_error("Unsupported Operation");
-            }
+                values[entry.out] = values[entry.a] + values[entry.b];
             else
                 values[entry.out] = values[entry.a].ElementwiseAdd(values[entry.b]);
             break;
@@ -248,7 +246,7 @@ void TapeRecorder<T>::Forward()
                 Kernels::Multiply_Forward(values[entry.out], values[entry.a], values[entry.b]);
             else if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                throw std::runtime_error("Unsupported Operation");
+                values[entry.out] = values[entry.a] * values[entry.b];
             }
             else
                 values[entry.out] = values[entry.a].ElementwiseMul(values[entry.b]);
@@ -330,8 +328,8 @@ inline void TapeRecorder<T>::Backward()
             }
             else
             {
-                //grads[entry.a] += outer_grad;
-                //grads[entry.b] += outer_grad;
+                grads[entry.a] += outer_grad;
+                grads[entry.b] += outer_grad;
             }
             break;
         case Operator::Subtract:
@@ -342,8 +340,8 @@ inline void TapeRecorder<T>::Backward()
             }
             else
             {
-                //grads[entry.a] += outer_grad;
-                //grads[entry.b] -= outer_grad;
+                grads[entry.a] += outer_grad;
+                grads[entry.b] -= outer_grad;
             }
             break;
         case Operator::Multiply:
@@ -364,14 +362,9 @@ inline void TapeRecorder<T>::Backward()
             break;
         case Operator::Sum:
             if constexpr (std::is_same_v<T, Tensor>)
-            {
                 grads[entry.a] += outer_grad;
-                //throw std::runtime_error("Unsupported Operation");
-            }
             else if constexpr (std::is_same_v<T, Tensor4D>)
-            {
-                throw std::runtime_error("Unsupported Operation");
-            }
+                grads[entry.a] += outer_grad;
             else
             {
                 //grads[entry.a] = grads[entry.a].ElementwiseAdd(outer_grad);
@@ -402,7 +395,8 @@ inline void TapeRecorder<T>::Backward()
             }
             else if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                throw std::runtime_error("Unsupported Operation");
+                grads[entry.a] += values[entry.b] * outer_grad;
+                grads[entry.b] += values[entry.a] * outer_grad;
             }
             else
             {

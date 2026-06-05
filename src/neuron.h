@@ -1,5 +1,6 @@
 #pragma once
 #include "node.h"
+#include "scalar.h"
 
 
 

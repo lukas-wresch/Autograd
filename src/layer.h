@@ -210,7 +210,7 @@ private:
 
 NodePtr<Tensor4D> Layer4D::Forward(const NodePtr<Tensor4D>& Input) const
 {
-	auto pre_activation = m_Weights * Input + m_Biases;
+	auto pre_activation = m_Weights % Input + m_Biases;
 
 	switch (m_Activation)
 	{

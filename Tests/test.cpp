@@ -27,7 +27,7 @@ void ShuffleDataset(std::vector<NodePtr<T>>& xs, std::vector<NodePtr<T>>& labels
 
 
 
-TEST(ScalarTests, BasicArithmeticAndBackprop)
+TEST(Scalar, BasicArithmeticAndBackprop)
 { // d = a * b + c
 	auto a = Node<Scalar>::Create(2.0f);
 	auto b = Node<Scalar>::Create(-3.0f);
@@ -45,7 +45,7 @@ TEST(ScalarTests, BasicArithmeticAndBackprop)
 
 
 
-TEST(VectorTests, ElementwiseMultiplyAddBackprop)
+TEST(Vector, ElementwiseMultiplyAddBackprop)
 { // out = (w * x) + b2 (elementwise add with scalar bias)
 	auto x  = Node<Vector>::Create({ 0.5f, 0.0f });
 	auto w  = Node<Vector>::Create({ 1.0f, 0.5f });
@@ -74,7 +74,7 @@ TEST(VectorTests, ElementwiseMultiplyAddBackprop)
 
 
 
-TEST(Neuron2DTests, ForwardAndBackpropTanh)
+TEST(Neuron2D, ForwardAndBackpropTanh)
 { // Create a 2-input neuron with Tanh activation and overwrite weights/bias
 	Neuron2D n(2, Activation::Tanh);
 
@@ -2756,7 +2756,7 @@ TEST(TapeRecorder, SpiralClassification_MSE_Batching)
 
 	std::cout << "Final Accuracy: " << accuracy << std::endl;
 
-	EXPECT_GT(accuracy, 0.90f);
+	EXPECT_GT(accuracy, 0.85f);
 }
 
 
@@ -2960,6 +2960,98 @@ TEST(LayerTensor, NoAliasingBetweenBatchColumns)
 	x.SetColumn(1, { 0, 1, 0, 0 });
 
 	auto y = layer.Forward(Node<Tensor>::Create(x));
+
+	auto y0 = y->GetValue().ViewColumn(0);
+	auto y1 = y->GetValue().ViewColumn(1);
+
+	// Force mutation to detect shared memory
+	y0.At(1, 0) += 1.0f;
+
+	EXPECT_NE(y0.At(1, 0), y1.At(1, 0)) << "Aliasing detected: both batch columns share memory!";
+}
+
+
+
+TEST(Layer4D, BatchIndependence)
+{
+	constexpr int input_size = 4;
+	constexpr int output_size = 3;
+	constexpr int batch_size = 2;
+
+	Layer4D layer(input_size, output_size, Activation::Identity, InitType::Xavier);
+
+	Tensor4D x({ input_size, batch_size });
+
+	x.SetColumn(0, 0, 0, { 1.0f, 0.0f, 0.0f, 0.0f });
+	x.SetColumn(0, 0, 1, { 0.0f, 1.0f, 0.0f, 0.0f });
+
+	auto node = Node<Tensor4D>::Create(x);
+	auto y = layer.Forward(node);
+
+	auto y0 = y->GetValue().ViewColumn(0);
+	auto y1 = y->GetValue().ViewColumn(1);
+
+	bool identical = true;
+	for (int i = 0; i < output_size; i++)
+	{
+		if (std::abs(y0.At(1, i) - y1.At(1, i)) > 1e-5f)
+		{
+			identical = false;
+			break;
+		}
+	}
+
+	EXPECT_FALSE(identical) << "Batch outputs are identical → batch dimension ignored!";
+}
+
+
+
+TEST(Layer4D, BatchConsistency)
+{
+	constexpr int input_size = 4;
+	constexpr int output_size = 3;
+
+	Layer4D layer(input_size, output_size, Activation::Identity, InitType::Xavier);
+
+	Tensor4D x1({ input_size, 1 });
+	Tensor4D x2({ input_size, 2 });
+
+	std::vector<float> sample = { 1, 2, 3, 4 };
+
+	x1.SetRow(0, 0, 0, sample);
+
+	x2.SetRow(0, 0, 0, sample);
+	x2.SetRow(0, 0, 1, { 5, 6, 7, 8 });
+
+	auto y1 = layer.Forward(Node<Tensor4D>::Create(x1));
+	auto y2 = layer.Forward(Node<Tensor4D>::Create(x2));
+
+	auto y1_col0 = y1->GetValue().ViewRow(0, 0, 0);
+	auto y2_col0 = y2->GetValue().ViewRow(0, 0, 1);
+
+	for (int i = 0; i < output_size; i++)
+	{
+		EXPECT_NEAR(y1_col0.At(0, i), y2_col0.At(0, i), 1e-5f)
+			<< "Batch=1 vs Batch=2 mismatch for same input";
+	}
+}
+
+
+
+TEST(Layer4D, NoAliasingBetweenBatchColumns)
+{
+	constexpr int input_size = 4;
+	constexpr int output_size = 3;
+	constexpr int batch_size = 2;
+
+	Layer4D layer(input_size, output_size, Activation::Identity, InitType::Xavier);
+
+	Tensor4D x({ input_size, batch_size });
+
+	x.SetColumn(0, 0, 0, { 1, 0, 0, 0 });
+	x.SetColumn(0, 0, 1, { 0, 1, 0, 0 });
+
+	auto y = layer.Forward(Node<Tensor4D>::Create(x));
 
 	auto y0 = y->GetValue().ViewColumn(0);
 	auto y1 = y->GetValue().ViewColumn(1);

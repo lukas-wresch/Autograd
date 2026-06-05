@@ -931,6 +931,18 @@ inline void operator-=(Tensor& left, const Tensor& right)
 
 inline Tensor Tensor::ElementwiseMul(const Tensor& rhs) const
 {
+	if (rhs.GetSize() == 1)
+	{
+		Tensor result(Shape());
+
+		ForEachIndex(result, [&](const std::vector<size_t>& idx)
+		{
+			result.At(idx) = At(idx) * rhs.At({ 0 });
+		});
+
+		return result;
+	}
+
 	if (Shape() != rhs.Shape())
 		throw std::runtime_error("Tensor elementwise multiplication shape mismatch");
 

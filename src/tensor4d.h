@@ -183,11 +183,12 @@ public:
 	~Tensor4D()
 	{}
 
-	void operator=(const Tensor4D& T)
+	Tensor4D& operator=(const Tensor4D& T)
 	{
 		m_Storage = T.m_Storage;
 		m_Shape   = T.m_Shape;
 		m_Offset  = T.m_Offset;
+		return *this;
 	}
 
 	Tensor4D(Tensor4D&&) noexcept = default;
@@ -365,6 +366,11 @@ public:
 		return At(0, 0, r, c);
 	}
 
+	float& At(size_t r, size_t c)
+	{
+		return At(0, 0, r, c);
+	}
+
 	float At(size_t b, size_t d, size_t r, size_t c) const
 	{
 		if (b >= m_Shape[0] || d >= m_Shape[1] || r >= m_Shape[2] || c >= m_Shape[3])
@@ -470,6 +476,9 @@ public:
 
 	Tensor4D Sum() const
 	{
+		if (!IsContiguous())
+			throw std::out_of_range("Not supported for non-contiguous tensors");
+
 		float sum = 0.0f;
 		for (size_t i = 0; i < GetSize(); i++)
 			sum += Data()[i];
@@ -478,6 +487,9 @@ public:
 
 	float Max() const
 	{
+		if (!IsContiguous())
+			throw std::out_of_range("Not supported for non-contiguous tensors");
+
 		float max = Data()[0];
 		for (size_t i = 1; i < GetSize(); i++)
 		{
@@ -611,6 +623,8 @@ public:
 
 	inline Tensor4D operator*( const Tensor4D& rhs) const;
 	inline void     operator*=(const Tensor4D& rhs);
+
+	inline Tensor4D operator%(const Tensor4D& rhs) const;
 
 	inline void ForEachIndex(std::function<void(size_t)> fn)
 	{
@@ -831,6 +845,37 @@ inline Tensor4D Tensor4D::operator*(const Tensor4D& rhs) const
 
 		out.Data()[idx] = Data()[lhs_index] * rhs.Data()[rhs_index];
 	}
+
+	return out;
+}
+
+
+
+inline Tensor4D Tensor4D::operator%(const Tensor4D& rhs) const
+{
+	if (GetBatches() != rhs.GetBatches())
+		throw std::runtime_error("batch mismatch");
+
+	if (GetDepth() != rhs.GetDepth())
+		throw std::runtime_error("depth mismatch");
+
+	if (GetColumns() != rhs.GetRows())
+		throw std::runtime_error("matrix dimension mismatch");
+
+	Tensor4D out({ GetBatches(), GetDepth(), GetRows(), rhs.GetColumns() });
+
+	for (size_t b = 0; b < GetBatches(); b++)
+		for (size_t d = 0; d < GetDepth(); d++)
+			for (size_t i = 0; i < GetRows(); i++)
+				for (size_t j = 0; j < rhs.GetColumns(); j++)
+				{
+					float sum = 0.0f;
+
+					for (size_t k = 0; k < GetColumns(); k++)
+						sum += At(b, d, i, k) * rhs.At(b, d, k, j);
+
+					out.At(b, d, i, j) = sum;
+				}
 
 	return out;
 }
