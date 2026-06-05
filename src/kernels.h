@@ -1,5 +1,6 @@
 #pragma once
 #include <stdexcept>
+#include "tensor4d.h"
 #include "tensor.h"
 
 
@@ -18,6 +19,9 @@ public:
     static void Tanh_Backward(Tensor& grad_in, const Tensor& out, const Tensor& outer_grad);
 
     static void SGD_Update(Tensor& param, const Tensor& grad, Tensor& velocity, float lr, float momentum);
+
+    static Tensor4D Conv2D_Forward(const Tensor4D& Input, const Tensor4D& Kernel, int Stride = 1, int Padding = 0);
+    static void Conv2D_Backward(Tensor4D& dInput, Tensor4D& dKernel, const Tensor4D& Input, const Tensor4D& Kernel, const Tensor4D& dOut, int Stride, int Padding);
 };
 
 
@@ -434,5 +438,165 @@ inline void Kernels::SGD_Update(Tensor& param, const Tensor& grad, Tensor& veloc
     {
         v[i] = momentum * v[i] - lr * g[i];
         p[i] += v[i];
+    }
+}
+
+
+
+inline Tensor4D Kernels::Conv2D_Forward(const Tensor4D& Input, const Tensor4D& Kernel, int Stride, int Padding)
+{
+    // Output shape berechnen
+    size_t N    = Input.GetShape()[0];
+    size_t C_in = Input.GetShape()[1];
+    size_t H    = Input.GetShape()[2];
+    size_t W    = Input.GetShape()[3];
+
+    size_t out_channels = Kernel.GetShape()[0];
+    size_t in_channels  = Kernel.GetShape()[1];
+    size_t kernel_size  = Kernel.GetShape()[2];
+
+    size_t H_out = (H + 2 * Padding - kernel_size) / Stride + 1;
+    size_t W_out = (W + 2 * Padding - kernel_size) / Stride + 1;
+
+    auto output = Tensor4D({ N, out_channels, H_out, W_out });
+
+    for (size_t n = 0; n < N; n++)
+    {
+        for (size_t oc = 0; oc < out_channels; oc++)
+        {
+            for (size_t oh = 0; oh < H_out; oh++)
+            {
+                for (size_t ow = 0; ow < W_out; ow++)
+                {
+                    float sum = 0.0f;
+
+                    for (size_t ic = 0; ic < in_channels; ic++)
+                    {
+                        for (size_t kh = 0; kh < kernel_size; kh++)
+                        {
+                            for (size_t kw = 0; kw < kernel_size; kw++)
+                            {
+                                int ih = (int)(oh * Stride + kh - Padding);
+                                int iw = (int)(ow * Stride + kw - Padding);
+
+                                if (ih >= 0 && ih < (int)H && iw >= 0 && iw < (int)W)
+                                    sum += Input.At(n, ic, ih, iw) * Kernel.At(oc, ic, kh, kw);
+                            }
+                        }
+                    }
+
+                    output.At(n, oc, oh, ow) = sum;
+                }
+            }
+        }
+    }
+
+    return output;
+}
+
+
+
+inline void Kernels::Conv2D_Backward(Tensor4D& dInput, Tensor4D& dKernel, const Tensor4D& Input, const Tensor4D& Kernel, const Tensor4D& dOut, int Stride, int Padding)
+{
+    if (Input.GetShape()[0] != dOut.GetShape()[0])
+        throw std::runtime_error("Conv2D_Backward(): Batch size mismatch");
+    if (Input.GetShape()[1] != Kernel.GetShape()[1])
+        throw std::runtime_error("Conv2D_Backward(): Input channels != Kernel in_channels");
+    if (Kernel.GetShape()[0] != dOut.GetShape()[1])
+        throw std::runtime_error("Conv2D_Backward(): Kernel out_channels != dOut channels");
+    if (Input.GetShape()[2] == 0 || Input.GetShape()[3] == 0)
+        throw std::runtime_error("Conv2D_Backward(): Invalid input spatial size");
+    if (Kernel.GetShape()[2] == 0 || Kernel.GetShape()[3] == 0)
+        throw std::runtime_error("Conv2D_Backward(): Invalid kernel size");
+
+    dInput.SetZero();
+    dKernel.SetZero();
+
+    const size_t N = Input.GetShape()[0];
+    const size_t Cin = Input.GetShape()[1];
+    const size_t H = Input.GetShape()[2];
+    const size_t W = Input.GetShape()[3];
+
+    const size_t Cout = Kernel.GetShape()[0];
+    const size_t K = Kernel.GetShape()[2];
+
+    const size_t Hout = dOut.GetShape()[2];
+    const size_t Wout = dOut.GetShape()[3];
+
+    size_t expectedH = (H + 2 * Padding - K) / Stride + 1;
+    size_t expectedW = (W + 2 * Padding - K) / Stride + 1;
+
+    if (dOut.GetShape()[2] != expectedH || dOut.GetShape()[3] != expectedW)
+        throw std::runtime_error("Conv2D_Backward(): dOut spatial shape mismatch");
+
+    //----------------------------------------------------
+    // dKernel
+    //----------------------------------------------------
+
+    for (size_t n = 0; n < N; n++)
+    {
+        for (size_t oc = 0; oc < Cout; oc++)
+        {
+            for (size_t ic = 0; ic < Cin; ic++)
+            {
+                for (size_t kh = 0; kh < K; kh++)
+                {
+                    for (size_t kw = 0; kw < K; kw++)
+                    {
+                        float grad = 0.0f;
+
+                        for (size_t oh = 0; oh < Hout; oh++)
+                        {
+                            for (size_t ow = 0; ow < Wout; ow++)
+                            {
+                                int ih = (int)(oh * Stride + kh - Padding);
+                                int iw = (int)(ow * Stride + kw - Padding);
+
+                                if (ih >= 0 && ih < (int)H && iw >= 0 && iw < (int)W)
+                                {
+                                    grad += Input.At(n, ic, ih, iw) * dOut.At(n, oc, oh, ow);
+                                }
+                            }
+                        }
+
+                        dKernel.At(oc, ic, kh, kw) += grad;
+                    }
+                }
+            }
+        }
+    }
+
+    //----------------------------------------------------
+    // dInput
+    //----------------------------------------------------
+
+    for (size_t n = 0; n < N; n++)
+    {
+        for (size_t oc = 0; oc < Cout; oc++)
+        {
+            for (size_t oh = 0; oh < Hout; oh++)
+            {
+                for (size_t ow = 0; ow < Wout; ow++)
+                {
+                    const float grad =
+                        dOut.At(n, oc, oh, ow);
+
+                    for (size_t ic = 0; ic < Cin; ic++)
+                    {
+                        for (size_t kh = 0; kh < K; kh++)
+                        {
+                            for (size_t kw = 0; kw < K; kw++)
+                            {
+                                int ih = (int)(oh * Stride + kh - Padding);
+                                int iw = (int)(ow * Stride + kw - Padding);
+
+                                if (ih >= 0 && ih < (int)H && iw >= 0 && iw < (int)W)
+                                    dInput.At(n, ic, ih, iw) += grad * Kernel.At(oc, ic, kh, kw);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

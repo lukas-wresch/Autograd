@@ -17,6 +17,10 @@ struct TapeEntry
     std::vector<int> inputs;
 
     int out; // output tensor index
+
+    // Convolution
+    int stride  = 1;
+    int padding = 0;
 };
 
 

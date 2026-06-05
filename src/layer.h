@@ -74,9 +74,9 @@ public:
 		}
 
 		for (size_t i = 0; i < m_Weights->GetValue().GetSize(); i++)
-			m_Weights->GetValue().SetValue()[i] = RandomFloatMinus1To1() * scale;
+			m_Weights->GetValue().SetValue()[i] = RandomUniform() * scale;
 		for (size_t i = 0; i < m_Biases->GetValue().GetSize(); i++)
-			//m_Biases->GetValue().SetValue()[i]  = RandomFloatMinus1To1() * scale;
+			//m_Biases->GetValue().SetValue()[i]  = RandomUniform() * scale;
 			m_Biases->GetValue().SetValue()[i] = 0.0f;
 
 		m_Weights->SetAsTrainable();
@@ -181,9 +181,9 @@ public:
 		}
 
 		for (size_t i = 0; i < m_Weights->GetValue().GetSize(); i++)
-			m_Weights->GetValue().Data()[i] = RandomFloatMinus1To1() * scale;
+			m_Weights->GetValue().Data()[i] = RandomUniform() * scale;
 		for (size_t i = 0; i < m_Biases->GetValue().GetSize(); i++)
-			//m_Biases->GetValue().SetValue()[i]  = RandomFloatMinus1To1() * scale;
+			//m_Biases->GetValue().SetValue()[i]  = RandomUniform() * scale;
 			m_Biases->GetValue().Data()[i] = 0.0f;
 
 		m_Weights->SetAsTrainable();
@@ -261,9 +261,9 @@ public:
 		}
 
 		for (size_t i = 0; i < m_Weights->GetValue().Size(); i++)
-			m_Weights->GetValue().Data()[i] = RandomFloatMinus1To1() * scale;
+			m_Weights->GetValue().Data()[i] = RandomUniform() * scale;
 		for (size_t i = 0; i < m_Biases->GetValue().Size(); i++)
-			//m_Biases->GetValue().SetValue()[i]  = RandomFloatMinus1To1() * scale;
+			//m_Biases->GetValue().SetValue()[i]  = RandomUniform() * scale;
 			m_Biases->GetValue().Data()[i] = 0.0f;
 
 		m_Weights->SetAsTrainable();

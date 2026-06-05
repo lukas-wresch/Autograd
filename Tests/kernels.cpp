@@ -1077,3 +1077,190 @@ TEST(Kernels, Backward_Overall_Sanity)
     for (size_t i = 0; i < gradA.Size(); i++)
         EXPECT_GT(gradA.Data()[i], 0.0f);
 }
+
+
+
+TEST(Kernels, Conv2D_Forward_1x1)
+{
+    Tensor4D input(
+        { 1,1,2,2 },
+        {
+            1,2,
+            3,4
+        });
+
+        Tensor4D kernel(
+            { 1,1,1,1 },
+        {
+            2
+        });
+
+        auto out = Kernels::Conv2D_Forward(input, kernel, 1, 0);
+
+        EXPECT_EQ(out.GetShape()[0], 1);
+        EXPECT_EQ(out.GetShape()[1], 1);
+        EXPECT_EQ(out.GetShape()[2], 2);
+        EXPECT_EQ(out.GetShape()[3], 2);
+
+        EXPECT_FLOAT_EQ(out.At(0, 0, 0, 0), 2);
+        EXPECT_FLOAT_EQ(out.At(0, 0, 0, 1), 4);
+        EXPECT_FLOAT_EQ(out.At(0, 0, 1, 0), 6);
+        EXPECT_FLOAT_EQ(out.At(0, 0, 1, 1), 8);
+}
+
+
+
+TEST(Kernels, Conv2D_Forward_2x2)
+{
+    Tensor4D input(
+        { 1,1,3,3 },
+        {
+            1,2,3,
+            4,5,6,
+            7,8,9
+        });
+
+        Tensor4D kernel(
+            { 1,1,2,2 },
+        {
+            1,0,
+            0,1
+        });
+
+        auto out = Kernels::Conv2D_Forward(input, kernel, 1, 0);
+
+        EXPECT_EQ(out.GetShape()[2], 2);
+        EXPECT_EQ(out.GetShape()[3], 2);
+
+        EXPECT_FLOAT_EQ(out.At(0, 0, 0, 0), 6);
+        EXPECT_FLOAT_EQ(out.At(0, 0, 0, 1), 8);
+        EXPECT_FLOAT_EQ(out.At(0, 0, 1, 0), 12);
+        EXPECT_FLOAT_EQ(out.At(0, 0, 1, 1), 14);
+}
+
+
+
+TEST(Kernels, Conv2D_Forward_PaddingShape)
+{
+    Tensor4D input({ 1,1,3,3 });
+    Tensor4D kernel({ 1,1,3,3 });
+
+    auto out = Kernels::Conv2D_Forward(input, kernel, 1, 1);
+
+    EXPECT_EQ(out.GetShape()[2], 3);
+    EXPECT_EQ(out.GetShape()[3], 3);
+}
+
+
+
+TEST(Kernels, Conv2D_Forward_StrideShape)
+{
+    Tensor4D input({ 1,1,5,5 });
+    Tensor4D kernel({ 1,1,3,3 });
+
+    auto out = Kernels::Conv2D_Forward(input, kernel, 2, 0);
+
+    EXPECT_EQ(out.GetShape()[2], 2);
+    EXPECT_EQ(out.GetShape()[3], 2);
+}
+
+
+
+TEST(Kernels, Conv2D_Backward_Kernel_1x1)
+{
+    Tensor4D input({ 1,1,2,2 }, { 1,2,3,4 });
+
+    Tensor4D kernel({ 1,1,1,1 });
+
+    Tensor4D dOut({ 1,1,2,2 }, { 1,1,1,1});
+
+    Tensor4D gradInput  = input.Clone();
+    Tensor4D gradKernel = kernel.Clone();
+
+    Kernels::Conv2D_Backward(gradInput, gradKernel, input, kernel, dOut, 1, 0);
+
+    EXPECT_FLOAT_EQ(gradKernel.At(0, 0, 0, 0), 10.0f);
+}
+
+
+
+TEST(Kernels, Conv2D_Backward_Input_1x1)
+{
+    Tensor4D input(
+        { 1,1,2,2 },
+        {
+            1,2,
+            3,4
+        });
+
+    Tensor4D kernel(
+        { 1,1,1,1 },
+        {
+            2
+        });
+
+        Tensor4D dOut(
+            { 1,1,2,2 },
+        {
+            1,1,
+            1,1
+        });
+
+        Tensor4D gradInput({ 1,1,2,2 });
+        Tensor4D gradKernel({ 1,1,1,1 });
+
+        Kernels::Conv2D_Backward(gradInput, gradKernel, input, kernel, dOut, 1, 0);
+
+        EXPECT_FLOAT_EQ(gradInput.At(0, 0, 0, 0), 2);
+        EXPECT_FLOAT_EQ(gradInput.At(0, 0, 0, 1), 2);
+        EXPECT_FLOAT_EQ(gradInput.At(0, 0, 1, 0), 2);
+        EXPECT_FLOAT_EQ(gradInput.At(0, 0, 1, 1), 2);
+}
+
+
+
+TEST(Kernels, Conv2D_Backward_Numerical)
+{
+    constexpr float eps = 1e-3f;
+
+    Tensor4D input({ 1,1,2,2 }, { 1,2,3,4 });
+
+    Tensor4D kernel({ 1,1,1,1 }, { 2.0f });
+
+    //-----------------------------------
+    // analytischer Gradient
+    //-----------------------------------
+
+    auto out = Kernels::Conv2D_Forward(input, kernel, 1, 0);
+
+    Tensor4D dOut(out.GetShape());
+    dOut.SetOne(); // Loss = Sum(output)
+
+    Tensor4D gradInput(input.GetShape());
+    Tensor4D gradKernel(kernel.GetShape());
+
+    Kernels::Conv2D_Backward(gradInput, gradKernel, input, kernel, dOut, 1, 0);
+
+    for (size_t i = 0; i < kernel.GetSize(); i++)
+    {
+        float analytic = gradKernel[i];
+
+        Tensor4D kernel_plus = kernel.Clone();
+        kernel_plus[i] += eps;
+
+        auto out_plus = Kernels::Conv2D_Forward(input, kernel_plus, 1, 0);
+
+        float loss_plus = out_plus.Sum().At(0, 0, 0, 0);
+
+        Tensor4D kernel_minus = kernel.Clone();
+        kernel_minus[i] -= eps;
+
+        auto out_minus = Kernels::Conv2D_Forward(input, kernel_minus, 1, 0);
+
+        float loss_minus = out_minus.Sum().At(0, 0, 0, 0);
+
+        float numerical = (loss_plus - loss_minus) / (2.0f * eps);
+
+        EXPECT_NEAR(analytic, numerical, 1e-3f) << "Kernel index " << i;
+    }
+}

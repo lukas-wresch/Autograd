@@ -13,6 +13,7 @@
 #include "src/layer.h"
 #include "src/sgd.h"
 #include "src/tensor4d.h"
+#include "src/conv2d.h"
 #include "mnist.h"
 #include "cifar.h"
 

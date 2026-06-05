@@ -135,6 +135,7 @@
   <ItemGroup>
     <ClInclude Include="cifar.h" />
     <ClInclude Include="mnist.h" />
+    <ClInclude Include="src\conv2d.h" />
     <ClInclude Include="src\kernels.h" />
     <ClInclude Include="src\layer.h" />
     <ClInclude Include="src\matrix.h" />

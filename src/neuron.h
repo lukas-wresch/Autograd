@@ -103,7 +103,7 @@ inline std::mt19937& GlobalRNG()
 
 
 
-inline float RandomFloatMinus1To1()
+inline float RandomUniform()
 {
 	static thread_local std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
 	return dist(GlobalRNG());
@@ -126,11 +126,11 @@ Neuron2D::Neuron2D(size_t InputLength, Activation Activation) : m_Activation(Act
 
 	for (size_t i = 0; i < InputLength; i++)
 	{
-		m_Weight->value.m_pValues[i] = RandomFloatMinus1To1();
+		m_Weight->value.m_pValues[i] = RandomUniform();
 		m_Weight->SetAsTrainable();
 	}
 
-	m_Bias->value.m_pValues[0] = RandomFloatMinus1To1();
+	m_Bias->value.m_pValues[0] = RandomUniform();
 	m_Bias->SetAsTrainable();
 }
 

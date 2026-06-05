@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include "vector.h"
 #include "tensor4d.h"
+#include "kernels.h"
 
 
 
@@ -26,6 +27,8 @@ enum class Operator
     Softmax,
     CrossEntropy,
     Softmax_CrossEntropy,
+
+    Conv2D,
 };
 
 
@@ -75,6 +78,7 @@ public:
     NodePtr<T> Softmax();
     NodePtr<T> CrossEntropy(NodePtr<T> Target);
     NodePtr<T> Softmax_CrossEntropy(NodePtr<T> Target);
+    NodePtr<T> Conv2D(NodePtr<T> Kernel, int Stride = 1, int Padding = 0);
 
     void Backwards();
 
@@ -103,6 +107,10 @@ public:
     bool trainable = false;
 
     Operator op = Operator::Undefined;
+
+    // Convolution
+    int stride  = 1;
+    int padding = 0;
 
     NodePtr<T> left  = nullptr;
     NodePtr<T> right = nullptr;
@@ -133,11 +141,11 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
     switch (op)
     {
     case Operator::Add:
-        left->grad += grad;
+        left->grad  += grad;
         right->grad += grad;
         break;
     case Operator::Subtract:
-        left->grad += grad;
+        left->grad  += grad;
         right->grad -= grad;
         break;
     case Operator::Multiply:
@@ -517,5 +525,20 @@ NodePtr<T> Node<T>::Softmax_CrossEntropy(NodePtr<T> Target)
     out->op = Operator::Softmax_CrossEntropy;
     out->left = this->shared_from_this();
     out->right = Target;
+    return out;
+}
+
+
+
+template<typename T>
+NodePtr<T> Node<T>::Conv2D(NodePtr<T> Kernel, int Stride, int Padding)
+{
+    auto out = std::make_shared<Node<T>>(Kernels::Conv2D_Forward(this->value, Kernel->value, Stride, Padding));
+
+    out->op      = Operator::Conv2D;
+    out->left    = this->shared_from_this();
+    out->right   = Kernel;
+	out->stride  = Stride;
+    out->padding = Padding;
     return out;
 }
