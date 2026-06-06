@@ -118,10 +118,10 @@ public:
     int kernel_size = 1;
 
     // Flatten
-    size_t B;
-    size_t C;
-    size_t H;
-    size_t W;
+    size_t B = 0;
+    size_t C = 0;
+    size_t H = 0;
+    size_t W = 0;
 
     NodePtr<T> left  = nullptr;
     NodePtr<T> right = nullptr;
@@ -270,6 +270,12 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
         }
         break;
     }
+    case Operator::MaxPool2D:
+        if constexpr (std::is_same_v<T, Tensor4D>)
+            Kernels::MaxPool2D_Backward(left->grad, left->value, grad, right->value, this->kernel_size, this->stride);
+        else
+            throw std::runtime_error("Unsupported Operation");
+        break;
     default:
         throw std::runtime_error("Unsupported Operation");
         break;

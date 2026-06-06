@@ -14,6 +14,7 @@ struct TapeEntry
 
     int a;   // input tensor index
     int b;   // optional
+    int c;   // optional, used for cache
     std::vector<int> inputs;
 
     int out; // output tensor index
@@ -107,12 +108,12 @@ public:
 
 	void AddOpEntry(Operator op, int a, int b, int out)
 	{
-        tape.push_back({ op, a, b, {}, out });
+        tape.push_back({ op, a, b, -1, {}, out });
 	}
 
     void AddOpEntryConv2D(Operator op, int a, int b, int out, int stride, int padding)
     {
-        TapeEntry new_entry({ op, a, b, {}, out, stride, padding });
+        TapeEntry new_entry({ op, a, b, -1, {}, out, stride, padding });
         new_entry.stride = stride;
         new_entry.padding = padding;
         tape.push_back(new_entry);
@@ -120,7 +121,7 @@ public:
 
     void AddOpEntryMaxPool(Operator op, int a, int b, int out, int KernelSize, int Stride)
     {
-        TapeEntry new_entry({ op, a, b, {}, out, Stride, 0 });
+        TapeEntry new_entry({ op, a, b, -1, {}, out, Stride, 0 });
         new_entry.kernel_size = KernelSize;
         new_entry.stride = Stride;
         tape.push_back(new_entry);
@@ -128,7 +129,7 @@ public:
 
     void AddOpEntry(Operator op, int a, int out, size_t B, size_t C, size_t H, size_t W)
     {
-        TapeEntry new_entry({ op, a, -1, {}, out, 1, 0 });
+        TapeEntry new_entry({ op, a, -1, -1, {}, out, 1, 0 });
         new_entry.B = B;
         new_entry.C = C;
         new_entry.H = H;
@@ -138,7 +139,7 @@ public:
 
     void AddOpEntry(Operator op, const std::vector<int>& inputs, int out)
     {
-        tape.push_back({ op, -1, -1, inputs, out });
+        tape.push_back({ op, -1, -1, -1, inputs, out });
     }
 
     void PrintTape() const;
@@ -220,8 +221,11 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
 
     // Max Pool
     case Operator::MaxPool2D:
-        AddOpEntryMaxPool(node->op, GetID(node->left), GetID(node->right), node_id, node->kernel_size, node->stride);
+    {
+        auto cache_id = AddDataEntry(node->GetValue());
+        AddOpEntryMaxPool(node->op, GetID(node->left), cache_id, node_id, node->kernel_size, node->stride);
         break;
+    }
 
     // Flatten
     case Operator::Flatten:
@@ -335,13 +339,16 @@ void TapeRecorder<T>::Forward()
             break;
         case Operator::MaxPool2D:
             if constexpr (std::is_same_v<T, Tensor4D>)
-                values[entry.out] = Kernels::MaxPool2D_Forward(values[entry.a], entry.kernel_size, entry.stride, nullptr);
+                values[entry.out] = Kernels::MaxPool2D_Forward(values[entry.a], entry.kernel_size, entry.stride, &values[entry.b]);
             else
                 throw std::runtime_error("Unsupported Operation");
             break;
         case Operator::Flatten:
             if constexpr (std::is_same_v<T, Tensor4D>)
-                values[entry.out] = values[entry.a].Reshape({ entry.B, 1, entry.C*entry.H*entry.W, 1 });
+            {
+                values[entry.out].CopyFrom(values[entry.a]);
+                values[entry.out] = values[entry.out].Reshape({ entry.B, 1, entry.C * entry.H * entry.W, 1 });
+            }
             else
                 throw std::runtime_error("Unsupported Operation");
             break;
@@ -596,21 +603,22 @@ inline void TapeRecorder<T>::Backward()
         }
         case Operator::Conv2D:
             if constexpr (std::is_same_v<T, Tensor4D>)
-                //values[entry.out] = Kernels::Conv2D_Backward(values[entry.a], values[entry.b], entry.stride, entry.padding);
-                throw std::runtime_error("Unsupported Operation");
+                Kernels::Conv2D_Backward(grads[entry.a], grads[entry.b], values[entry.a], values[entry.b], outer_grad, entry.stride, entry.padding);
             else
                 throw std::runtime_error("Unsupported Operation");
             break;
         case Operator::MaxPool2D:
             if constexpr (std::is_same_v<T, Tensor4D>)
-                //values[entry.out] = Kernels::MaxPool2D_Backward(values[entry.a], entry.kernel_size, entry.stride, nullptr);
-                throw std::runtime_error("Unsupported Operation");
+                Kernels::MaxPool2D_Backward(grads[entry.a], values[entry.a], outer_grad, values[entry.b], entry.kernel_size, entry.stride);
             else
                 throw std::runtime_error("Unsupported Operation");
             break;
         case Operator::Flatten:
             if constexpr (std::is_same_v<T, Tensor4D>)
-                values[entry.out] = values[entry.a].Reshape({ entry.B, entry.C, entry.H, entry.W });
+            {
+                grads[entry.a].CopyFrom(grads[entry.out]);
+                grads[entry.a] = grads[entry.a].Reshape({ entry.B, entry.C, entry.H, entry.W });
+            }
             else
                 throw std::runtime_error("Unsupported Operation");
             break;
@@ -630,6 +638,24 @@ inline void TapeRecorder<T>::PrintTape() const
 
     for (const auto& entry : tape)
     {
+        std::string out_label = "t" + std::to_string(entry.out);
+        std::string a_label   = "t" + std::to_string(entry.a);
+        std::string b_label   = "t" + std::to_string(entry.b);
+        std::string c_label   = "t" + std::to_string(entry.c);
+
+        auto it = id_to_label.find(entry.out);
+        if (it != id_to_label.end())
+            out_label = it->second;
+        it = id_to_label.find(entry.a);
+        if (it != id_to_label.end())
+            a_label = it->second;
+        it = id_to_label.find(entry.b);
+        if (it != id_to_label.end())
+            b_label = it->second;
+        it = id_to_label.find(entry.c);
+        if (it != id_to_label.end())
+            c_label = it->second;
+
         std::string op_text = "???";
         std::string op_sign = "";
 
@@ -658,54 +684,57 @@ inline void TapeRecorder<T>::PrintTape() const
         case Operator::Tanh:
             op_text = "Tanh";
             op_sign = "tanh";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("tanh(%s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str());
             break;
         case Operator::ReLU:
             op_text = "ReLU";
             op_sign = "relu";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("ReLU(%s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str());
             break;
         case Operator::Sum:
             op_text = "Sum";
             op_sign = "sum";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("Sum(%s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str());
             break;
         case Operator::Softmax:
             op_text = "Softmax";
             op_sign = "softmax";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("softmax(%s [%s], %s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::CrossEntropy:
             op_text = "CrossEntropy";
             op_sign = "crossentropy";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("CE(%s [%s], %s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::Softmax_CrossEntropy:
             op_text = "Softmax_CrossEntropy";
             op_sign = "smce";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("SMCE(%s [%s], %s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::Conv2D:
             op_text = "Conv2D";
             op_sign = "conv2d";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("Conv2D(%s [%s], %s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::MaxPool2D:
             op_text = "MaxPool2D";
-            op_sign = "maxpool2d";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("MaxPool2d(%s [%s]) -> %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::Flatten:
             op_text = "Flatten";
             op_sign = "flatten";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("Flatten(%s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str());
             break;
         }
-
-        std::string out_label = "t" + std::to_string(entry.out);
-        std::string a_label   = "t" + std::to_string(entry.a);
-        std::string b_label   = "t" + std::to_string(entry.b);
-
-        auto it = id_to_label.find(entry.out);
-        if (it != id_to_label.end())
-            out_label = it->second;
-        it = id_to_label.find(entry.a);
-        if (it != id_to_label.end())
-            a_label = it->second;
-        it = id_to_label.find(entry.b);
-        if (it != id_to_label.end())
-            b_label = it->second;
 
 
         if (entry.a < 0)
@@ -719,11 +748,19 @@ inline void TapeRecorder<T>::PrintTape() const
                 op_sign.c_str(),
                 a_label.c_str(), values[entry.a].Shape2String().c_str());
         
-        else
+        else if (entry.c < 0)
             printf("%.02d: %s: %s [%s] = %s [%s] %s %s [%s]\n", ++i, op_text.c_str(),
                 out_label.c_str(), values[entry.out].Shape2String().c_str(),
                 a_label.c_str(), values[entry.a].Shape2String().c_str(),
                 op_sign.c_str(),
                 b_label.c_str(), values[entry.b].Shape2String().c_str());
+
+        else
+            printf("%.02d: %s: %s [%s] = %s [%s] %s %s [%s] -> %s [%s]\n", ++i, op_text.c_str(),
+                out_label.c_str(), values[entry.out].Shape2String().c_str(),
+                a_label.c_str(), values[entry.a].Shape2String().c_str(),
+                op_sign.c_str(),
+                b_label.c_str(), values[entry.b].Shape2String().c_str(),
+                c_label.c_str(), values[entry.c].Shape2String().c_str());
     }
 }

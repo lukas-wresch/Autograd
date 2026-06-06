@@ -111,7 +111,7 @@ inline float RandomUniform()
 
 
 
-inline float RandNormal(float stddev = 1.0f)
+inline float RandomNormal(float stddev = 1.0f)
 {
 	static thread_local std::normal_distribution<float> dist(0.0f, stddev);
 	return dist(GlobalRNG());

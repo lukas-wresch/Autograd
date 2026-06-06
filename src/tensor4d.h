@@ -191,6 +191,20 @@ public:
 		return *this;
 	}
 
+	void CopyFrom(const Tensor4D& src)
+	{
+		if (GetSize() != src.GetSize())
+			throw std::runtime_error("Size does not match data size");
+
+		if (!IsContiguous())
+			throw std::out_of_range("Not supported for non-contiguous tensors");
+		if (!src.IsContiguous())
+			throw std::out_of_range("Not supported for non-contiguous tensors");
+
+		// assumes contiguous storage
+		std::copy(src.Data(), src.Data() + GetSize(), Data());
+	}
+
 	Tensor4D(Tensor4D&&) noexcept = default;
 	Tensor4D& operator=(Tensor4D&&) noexcept = default;
 
@@ -289,7 +303,7 @@ public:
 
 		// neue Shape: 1 x cols (eine Zeile)
 		Shape new_shape = Shape({ 1, GetDepth(), GetRows(), GetColumns()}, // New shape
-			{ 0, m_Shape.stride[1], m_Shape.stride[2], m_Shape.stride[3] }); // New strides
+			{ m_Shape.stride[0], m_Shape.stride[1], m_Shape.stride[2], m_Shape.stride[3] }); // New strides
 
 		// Offset springt auf die gewünschte Zeile
 		size_t new_offset = m_Offset + batch * m_Shape.stride[0];
@@ -932,13 +946,27 @@ inline Tensor4D Tensor4D::operator*(const Tensor4D& rhs) const
 inline Tensor4D Tensor4D::operator%(const Tensor4D& rhs) const
 {
 	if (GetBatches() != rhs.GetBatches() && GetBatches() != 1 && rhs.GetBatches() != 1)
-		throw std::runtime_error("batch mismatch");
+		throw std::runtime_error("Tensor4D::operator%() batch mismatch");
 
 	if (GetDepth() != rhs.GetDepth() && GetDepth() != 1 && rhs.GetDepth() != 1)
-		throw std::runtime_error("depth mismatch");
+		throw std::runtime_error("Tensor4D::operator%() depth mismatch");
+
+	// Scalar case
+	if (rhs.GetSize() == 1)
+	{
+		Tensor4D out({ GetBatches(), GetDepth(), GetRows(), rhs.GetColumns()});
+
+		for (size_t b = 0; b < GetBatches(); b++)
+			for (size_t d = 0; d < GetDepth(); d++)
+				for (size_t i = 0; i < GetRows(); i++)
+					for (size_t j = 0; j < rhs.GetColumns(); j++)
+						out.At(b, d, i, j) *= rhs.Data()[0];
+
+		return out;
+	}
 
 	if (GetColumns() != rhs.GetRows())
-		throw std::runtime_error("matrix dimension mismatch");
+		throw std::runtime_error("Tensor4D::operator%() matrix dimension mismatch");
 
 	size_t outB = std::max(GetBatches(), rhs.GetBatches());
 	size_t outD = std::max(GetDepth(), rhs.GetDepth());

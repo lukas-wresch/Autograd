@@ -5,6 +5,7 @@
 #include "../src/layer.h"
 #include "../src/sgd.h"
 #include "../src/tape_recorder.h"
+#include "../src/conv2d.h"
 #include "../mnist.h"
 
 
@@ -2787,6 +2788,89 @@ TEST(TapeRecorder, XOR)
 
 
 
+TEST(TapeRecorder, Tensor4D_FlattenBackward)
+{
+	TapeRecorder<Tensor4D> tape;
+
+	// -----------------------------
+	// Input Tensor (B, C, H, W)
+	// -----------------------------
+	auto x = Node<Tensor4D>::Create(
+		Tensor4D({ 2, 1, 2, 2 },
+		{
+			1.0f, 2.0f,
+			3.0f, 4.0f,
+
+			5.0f, 6.0f,
+			7.0f, 8.0f
+		}),
+		"x"
+	);
+
+	// Flatten operation
+	auto flat = x->Flatten();
+	flat->SetLabel("flat");
+
+	// Loss: sum over flattened output
+	auto loss = flat->Sum();
+	loss->SetLabel("loss");
+
+	// -----------------------------
+	// Compile graph into tape
+	// -----------------------------
+	tape.Compile(loss);
+
+	auto tx = tape.SetValue("x");
+
+	tape.ZeroGradients();
+
+	// -----------------------------
+	// Forward pass
+	// -----------------------------
+	tape.Forward();
+
+	// -----------------------------
+	// Backward pass
+	// -----------------------------
+	tape.Backward();
+
+	// -----------------------------
+	// Forward sanity check
+	// -----------------------------
+	EXPECT_NEAR(loss->GetValue().At(0, 0), 36.0f, 1e-5f);
+
+	// -----------------------------
+	// Gradient check (flat)
+	// -----------------------------
+	auto gflat = flat->GetGradient();
+
+	for (int i = 0; i < 8; i++)
+		EXPECT_NEAR(gflat[i], 1.0f, 1e-5f);
+
+	// -----------------------------
+	// Gradient back to input
+	// -----------------------------
+	auto gx = x->GetGradient();
+
+	EXPECT_EQ(gx.GetBatches(), 2);
+	EXPECT_EQ(gx.GetRows(), 2);
+	EXPECT_EQ(gx.GetColumns(), 2);
+
+	// Batch 0
+	EXPECT_NEAR(gx.At(0, 0, 0, 0), 1.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 0, 1), 1.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 1, 0), 1.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 1, 1), 1.0f, 1e-5f);
+
+	// Batch 1
+	EXPECT_NEAR(gx.At(1, 0, 0, 0), 1.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(1, 0, 0, 1), 1.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(1, 0, 1, 0), 1.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(1, 0, 1, 1), 1.0f, 1e-5f);
+}
+
+
+
 TEST(TapeRecorder, XOR_Tensor4D)
 {
 	Tensor4D data({ 4, 1, 2, 1 });
@@ -2812,6 +2896,78 @@ TEST(TapeRecorder, XOR_Tensor4D)
 	auto out_ = L2.Forward(l1_out);
 
 	auto diff = out_ - label_;
+	auto loss_ = diff->ElementwiseMul(diff)->Sum();
+	out_->SetLabel("output");
+	loss_->SetLabel("loss");
+
+	auto tape = TapeRecorder<Tensor4D>();
+	tape.Compile(loss_);
+
+	sgd.SetTrainableParams(tape);
+
+	auto input = tape.SetValue("x");
+	auto label = tape.SetValue("label");
+	auto output = tape.SetValue("output");
+	auto loss = tape.SetValue("loss");
+
+	float lr = 0.1f;
+	float epoch_loss = 0.0f;
+
+	*input = xs->GetValue();
+	*label = labels->GetValue();
+
+	for (size_t epoch = 0; epoch < 350; epoch++)
+	{
+		epoch_loss = 0.0f;
+
+		tape.Forward();
+
+		tape.ZeroGradients();
+		tape.Backward();
+
+		sgd.Step();
+
+		epoch_loss += loss->Data()[0];
+	}
+
+	EXPECT_NEAR(epoch_loss, 0.0f, 0.1f);
+
+	*input = xs->GetValue();
+	tape.Forward();
+
+	for (size_t i = 0; i < xs->GetValue().GetBatches(); i++)
+		EXPECT_NEAR(output->Data()[i], labels->GetValue().Data()[i], 0.1f);
+}
+
+
+
+TEST(TapeRecorder, XOR_Tensor4D_Flatten)
+{
+	Tensor4D data({ 4, 1, 2, 1 });
+	data.SetColumn(0, 0, 0, { 0,0 });
+	data.SetColumn(1, 0, 0, { 0,1 });
+	data.SetColumn(2, 0, 0, { 1,0 });
+	data.SetColumn(3, 0, 0, { 1,1 });
+
+	Tensor4D data_labels({ 4, 1, 1, 1 }, { 0, 1, 1, 0 });
+
+
+	NodePtr<Tensor4D> xs = Node<Tensor4D>::Create(data);
+	NodePtr<Tensor4D> labels = Node<Tensor4D>::Create(data_labels);
+
+	Layer4D L1(2, 3, Activation::Tanh);
+	Layer4D L2(3, 1, Activation::Tanh);
+
+	SGD<Tensor4D> sgd(0.1f);
+
+	auto x_ = Node<Tensor4D>::Create(Tensor4D({ 4, 1, 2, 1 }), "x");
+	auto label_ = Node<Tensor4D>::Create(Tensor4D({ 4, 1, 1, 1 }), "label");
+	auto l1_out = L1.Forward(x_);
+	auto out_ = L2.Forward(l1_out);
+
+	auto out2_ = out_->Flatten();
+
+	auto diff = out2_ - label_;
 	auto loss_ = diff->ElementwiseMul(diff)->Sum();
 	out_->SetLabel("output");
 	loss_->SetLabel("loss");
@@ -2923,6 +3079,258 @@ TEST(TapeRecorder, XOR_Tensor)
 
 	for (size_t i = 0; i < xs->GetValue().GetColumns(); i++)
 		EXPECT_NEAR(output->Data()[i], labels->GetValue().Data()[i], 0.1f);
+}
+
+
+
+TEST(TapeRecorder, Conv2D_LearnsScalar)
+{
+	auto x = Node<Tensor4D>::Create(Tensor4D({ 1,1,1,1 }, { 2.0f }), "x");
+
+	auto target = Node<Tensor4D>::Create(Tensor4D({ 1,1,1,1 }, { 10.0f }), "target");
+
+	auto w = Node<Tensor4D>::Create(Tensor4D({ 1,1,1,1 }, { 1.0f }), "w");
+
+	w->SetAsTrainable();
+
+	auto y = x->Conv2D(w, 1, 0);
+
+	auto diff = y - target;
+	auto loss = diff * diff;
+
+	TapeRecorder<Tensor4D> tape;
+	tape.Compile(loss);
+
+	SGD<Tensor4D> sgd(0.01f);
+	sgd.SetTrainableParams(tape);
+
+	for (int i = 0;i < 500;i++)
+	{
+		tape.Forward();
+
+		tape.ZeroGradients();
+		tape.Backward();
+
+		sgd.Step();
+	}
+
+	EXPECT_NEAR(w->GetValue()[0], 5.0f, 0.1f);
+}
+
+
+
+TEST(TapeRecorder, ConvPoolLearnsSimplePattern)
+{
+	std::vector<NodePtr<Tensor4D>> xs =
+	{
+		Node<Tensor4D>::Create(
+			Tensor4D({1,1,4,4},
+			{
+				1,0,0,0,
+				0,0,0,0,
+				0,0,0,0,
+				0,0,0,0
+			})),
+
+		Node<Tensor4D>::Create(
+			Tensor4D({1,1,4,4},
+			{
+				0,0,0,0,
+				0,0,0,0,
+				0,0,0,0,
+				0,0,0,1
+			}))
+	};
+
+	std::vector<NodePtr<Tensor4D>> ys =
+	{
+		Node<Tensor4D>::Create(
+			Tensor4D({1,1,1,1},{0.0f})),
+
+		Node<Tensor4D>::Create(
+			Tensor4D({1,1,1,1},{1.0f}))
+	};
+
+	Conv2D conv(1, 1, 2, 1, 0, Activation::Tanh);
+
+	Layer4D fc(4, 1, Activation::Identity);
+
+	auto input = Node<Tensor4D>::Create(Tensor4D({ 1,1,4,4 }), "input");
+
+	auto label = Node<Tensor4D>::Create(Tensor4D({ 1,1,1,1 }), "label");
+
+	auto y = conv.Conv(input)->MaxPool2D(2, 2)->Flatten();
+
+	auto out = fc.Forward(y);
+
+	auto diff = out - label;
+	auto loss = diff * diff;
+
+	TapeRecorder<Tensor4D> tape;
+	tape.Compile(loss);
+
+	SGD<Tensor4D> sgd(0.05f);
+	sgd.SetTrainableParams(tape);
+
+	auto tInput = tape.SetValue("input");
+	auto tLabel = tape.SetValue("label");
+
+	for (int epoch = 0; epoch < 500; epoch++)
+	{
+		for (size_t i = 0; i < xs.size(); i++)
+		{
+			*tInput = xs[i]->GetValue();
+			*tLabel = ys[i]->GetValue();
+
+			tape.Forward();
+
+			tape.ZeroGradients();
+			tape.Backward();
+
+			sgd.Step();
+		}
+	}
+
+	// -----------------------
+	// Evaluation
+	// -----------------------
+
+	*tInput = xs[0]->GetValue();
+	tape.Forward();
+
+	float pred0 = out->GetValue()[0];
+
+	*tInput = xs[1]->GetValue();
+	tape.Forward();
+
+	float pred1 = out->GetValue()[0];
+
+	EXPECT_LT(pred0, 0.2f);
+	EXPECT_GT(pred1, 0.8f);
+}
+
+
+
+TEST(TapeRecorder, MaxPool2DGradientCheck)
+{
+	TapeRecorder<Tensor4D> tape;
+
+	// Input: 1x1x4x4
+	auto x = Node<Tensor4D>::Create(
+		Tensor4D({ 1,1,4,4 },
+		{
+			1, 2, 3, 4,
+			5, 6, 7, 8,
+			9,10,11,12,
+			13,14,15,16
+		}),
+		"x"
+	);
+
+	// IMPORTANT: make x visible to tape
+	tape.Compile(x);
+
+	auto tx = tape.SetValue("x");
+
+	tape.ZeroGradients();
+
+	// Forward graph inside tape
+	auto y = x->MaxPool2D(2, 2);
+	auto loss = y->Sum();
+
+	tape.Compile(loss);
+
+	tape.Forward();
+	tape.Backward();
+
+	auto gx = x->GetGradient();
+
+	// -------------------------
+	// Expected gradient pattern:
+	// -------------------------
+	// Max per 2x2 block:
+	//
+	// Block1 -> 6
+	// Block2 -> 8
+	// Block3 -> 14
+	// Block4 -> 16
+	//
+	// Gradient should be 1 at max positions only
+
+	EXPECT_NEAR(gx.At(0, 0, 0, 0), 0.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 0, 1), 0.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 0, 2), 0.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 0, 3), 0.0f, 1e-5f);
+
+	EXPECT_NEAR(gx.At(0, 0, 1, 0), 0.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 1, 1), 1.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 1, 2), 0.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 1, 3), 1.0f, 1e-5f);
+
+	EXPECT_NEAR(gx.At(0, 0, 2, 0), 0.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 2, 1), 0.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 2, 2), 0.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 2, 3), 0.0f, 1e-5f);
+
+	EXPECT_NEAR(gx.At(0, 0, 3, 0), 0.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 3, 1), 1.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 3, 2), 0.0f, 1e-5f);
+	EXPECT_NEAR(gx.At(0, 0, 3, 3), 1.0f, 1e-5f);
+}
+
+
+
+TEST(TapeRecorder, MaxPool2DGradientCheck2)
+{
+	TapeRecorder<Tensor4D> tape;
+
+	// Input: 1 sample, 1 channel, 2x2 kernel covers full 4x4 grid
+	auto x = Node<Tensor4D>::Create(
+		Tensor4D({ 1,1,4,4 },
+		{
+			1, 2, 3, 4,
+			5, 6, 7, 8,
+			9,10,11,12,
+			13,14,15,16
+		}), "x");
+
+		x->SetAsTrainable(true);
+
+		// MaxPool 2x2 stride 2 => output 2x2
+		auto y = x->MaxPool2D(2, 2);
+
+		// Simple loss: sum of all outputs
+		auto loss = y->Sum();
+
+		tape.Compile(loss);
+
+		tape.ZeroGradients();
+		tape.Forward();
+		tape.Backward();
+
+		auto gx = tape.GetGradient("x");
+
+		// Expected:
+		// each output picks max of each 2x2 block:
+		//
+		// blocks:
+		// [1 2; 5 6]   -> 6
+		// [3 4; 7 8]   -> 8
+		// [9 10; 13 14] -> 14
+		// [11 12; 15 16] -> 16
+		//
+		// So gradient is:
+		// only max positions get 1
+
+		std::vector<float> expected = {
+			0,0,0,0,
+			0,1,0,1,
+			0,0,0,0,
+			0,1,0,1
+		};
+
+		for (int i = 0; i < 16; i++)
+			EXPECT_NEAR(gx->Data()[i], expected[i], 1e-5f);
 }
 
 

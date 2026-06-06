@@ -102,21 +102,24 @@ void MNist_Tensor4D()
 
 	auto tape = TapeRecorder<Tensor4D>();
 	SGD<Tensor4D> sgd(0.03f, 0.7f);
-	const int batch_size = 10;
+	const int batch_size = 1;
 
 	{
 		auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 28, 28 }), "input");
 		auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 1, 1 }), "label");
 
 		Conv2D conv1(1,  8, 3, 1, 1, Activation::ReLU);
-		Conv2D conv2(8, 16, 3, 1, 1, Activation::ReLU);
-		Layer4D L1(784, 128, Activation::ReLU,     InitType::Xavier);
+		//Conv2D conv2(8, 16, 3, 1, 1, Activation::ReLU);
+		//Layer4D L1(784, 128, Activation::ReLU,     InitType::Xavier);
+		Layer4D L1(6272, 128, Activation::ReLU, InitType::Xavier);
 		Layer4D L2(128,  10, Activation::Identity, InitType::Xavier);
 
-		auto out_conv1 = conv1.Conv(x)->MaxPool2D(2, 2);
-		auto out_conv2 = conv2.Conv(out_conv1)->MaxPool2D(2, 2);
+		//auto out_conv1 = conv1.Conv(x)->MaxPool2D(2, 2);
+		//auto out_conv2 = conv2.Conv(out_conv1)->MaxPool2D(2, 2);
 
-		auto flattened = out_conv2->Flatten();
+		auto out_conv1 = conv1.Conv(x);
+
+		auto flattened = out_conv1->Flatten();
 
 		auto h1 = L1.Forward(flattened);
 		auto pred = L2.Forward(h1);
@@ -158,11 +161,6 @@ void MNist_Tensor4D()
 
 			for (size_t j = 0; j < actual_batch_size; j++)
 			{
-				//input->Print();
-				//output->Print();
-				//auto output_row = output->ViewRow(j, 0, 0);
-				//output_row.Print();
-
 				//Convert one hot to class index
 				int pred_class = (int)output->ArgMax(j, 0);
 				int target_class = (int)labels_train[i + j];
@@ -207,7 +205,7 @@ void MNist_Tensor4D()
 
 	float epoch_loss = 0.0f;
 
-	for (size_t epoch = 0; epoch < 3; epoch++)
+	for (size_t epoch = 0; epoch < 5; epoch++)
 	{
 		ShuffleDataset(xs_train, labels_train);
 
@@ -226,10 +224,13 @@ void MNist_Tensor4D()
 
 			for (size_t j = i; j < end; j++)
 			{
-				input->ViewBatch(actual_batch_size) = xs_train[j];
+				input->ViewBatch(actual_batch_size).CopyFrom(xs_train[j]);
 				label->SetColumn(actual_batch_size, 0, 0, { labels_train[j] });
 				actual_batch_size++;
 			}
+
+			if (actual_batch_size != batch_size)
+				continue;
 
 			tape.Forward();
 			tape.ZeroGradients();

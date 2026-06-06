@@ -13,11 +13,14 @@ public:
         m_Weights = Node<Tensor4D>::Create(Tensor4D({ out_channels, in_channels, kernel_size, kernel_size }), "conv_weights");
 
         m_Biases = Node<Tensor4D>::Create(Tensor4D({ 1, out_channels, 1, 1 }), "conv_bias");
-        
-        float scale = 1.0f;
+
+		float fan_in = static_cast<float>(in_channels * kernel_size * kernel_size);
+		float fan_out = static_cast<float>(out_channels * kernel_size * kernel_size);
+
+		float gain = std::sqrt(6.0f / (fan_in + fan_out));
 
         for (size_t i = 0; i < m_Weights->GetValue().GetSize(); i++)
-            m_Weights->GetValue().Data()[i] = RandomUniform() * scale;
+            m_Weights->GetValue().Data()[i] = RandomNormal() * gain;
         m_Biases->GetValue().SetZero();
 
         m_Weights->SetAsTrainable();
