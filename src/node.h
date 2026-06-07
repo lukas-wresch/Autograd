@@ -583,7 +583,7 @@ NodePtr<T> Node<T>::Flatten()
     size_t H = value.GetShape()[2];
     size_t W = value.GetShape()[3];
 
-    auto out = std::make_shared<Node<T>>(this->value.Reshape({ this->value.GetBatches(), 1, C*H*W, 1 }  ));
+    auto out = std::make_shared<Node<T>>(this->value.Reshape({ this->value.GetBatches(), 1, C*H*W, 1 } ));
 
     out->op = Operator::Flatten;
     out->left = this->shared_from_this();

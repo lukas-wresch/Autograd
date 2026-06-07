@@ -500,9 +500,27 @@ public:
 		std::cout << "[flattened]\n[ ";
 		for (size_t i = 0; i < GetSize(); i++)
 		{
-			std::cout << std::fixed << std::setprecision(4) << Data()[i] << " ";
+			std::cout << std::fixed << std::setprecision(2) << Data()[i] << " ";
 		}
 		std::cout << "]\n\n";
+	}
+
+	void PrintAsImage() const
+	{
+		for (size_t r = 0; r < GetRows(); r++)
+		{
+			for (size_t c = 0; c < GetColumns(); c++)
+			{
+				if (At(0, 0, r, c) > 0.5f)
+					printf("#");
+				else
+					printf(" ");
+			}
+
+			printf("\n");
+		}
+
+		printf("\n");
 	}
 
 	void SetRow(size_t batch, size_t depth, size_t row, const std::vector<float>& vec)

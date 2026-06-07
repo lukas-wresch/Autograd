@@ -97,7 +97,7 @@ public:
 
     int AddDataEntry(const T& v, bool Trainable = false)
     {
-        values.push_back(v);
+        values.push_back(v.Clone());
 
         grads.push_back(v.Clone());
 
@@ -273,7 +273,11 @@ void TapeRecorder<T>::Forward()
             if constexpr (std::is_same_v<T, Tensor>)
                 Kernels::MatMul_Forward(values[entry.out], values[entry.a], values[entry.b]);
             else if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                //values[entry.a].Print();
+                //values[entry.b].Print();
                 values[entry.out] = values[entry.a] % values[entry.b];
+            }
             else
                 values[entry.out] = values[entry.a] * values[entry.b];
             break;
@@ -333,7 +337,12 @@ void TapeRecorder<T>::Forward()
             break;
         case Operator::Conv2D:
             if constexpr (std::is_same_v<T, Tensor4D>)
+            {
                 values[entry.out] = Kernels::Conv2D_Forward(values[entry.a], values[entry.b], entry.stride, entry.padding);
+                //values[entry.a].Print();
+                //values[entry.b].Print();
+                //values[entry.out].Print();
+            }
             else
                 throw std::runtime_error("Unsupported Operation");
             break;
@@ -346,8 +355,10 @@ void TapeRecorder<T>::Forward()
         case Operator::Flatten:
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
+                //values[entry.a].Print();
                 values[entry.out].CopyFrom(values[entry.a]);
                 values[entry.out] = values[entry.out].Reshape({ entry.B, 1, entry.C * entry.H * entry.W, 1 });
+                //values[entry.out].Print();
             }
             else
                 throw std::runtime_error("Unsupported Operation");
@@ -423,6 +434,9 @@ inline void TapeRecorder<T>::Backward()
             {
                 grads[entry.a] += outer_grad % values[entry.b].Transpose();
                 grads[entry.b] += values[entry.a].Transpose() % outer_grad;
+                //values[entry.b].Print();
+                //grads[entry.a].Print();
+                //grads[entry.b].Print();
             }
             else
             {
@@ -512,7 +526,7 @@ inline void TapeRecorder<T>::Backward()
                 T& logits = values[entry.a];
                 T& grad_logits = grads[entry.a];
 
-                const int target = (int)values[entry.b].Data()[0];
+                const int target = (int)values[entry.b].Data()[0];// Works only with batch size 1
 
                 // forward softmax recomputation
                 // (oder cached probabilities!)
@@ -543,7 +557,7 @@ inline void TapeRecorder<T>::Backward()
                 T& logits = values[entry.a];
                 T& grad_logits = grads[entry.a];
 
-                const int target = (int)values[entry.b].Data()[0];
+				const int target = (int)values[entry.b].Data()[0];// Works only with batch size 1
 
                 // forward softmax recomputation
                 // (oder cached probabilities!)
@@ -603,7 +617,10 @@ inline void TapeRecorder<T>::Backward()
         }
         case Operator::Conv2D:
             if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                //outer_grad.Print();
                 Kernels::Conv2D_Backward(grads[entry.a], grads[entry.b], values[entry.a], values[entry.b], outer_grad, entry.stride, entry.padding);
+            }
             else
                 throw std::runtime_error("Unsupported Operation");
             break;
@@ -616,8 +633,10 @@ inline void TapeRecorder<T>::Backward()
         case Operator::Flatten:
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
+                //grads[entry.out].Print();
                 grads[entry.a].CopyFrom(grads[entry.out]);
                 grads[entry.a] = grads[entry.a].Reshape({ entry.B, entry.C, entry.H, entry.W });
+                //grads[entry.a].Print();
             }
             else
                 throw std::runtime_error("Unsupported Operation");

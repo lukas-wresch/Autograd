@@ -1149,7 +1149,6 @@ TEST(Training, MNist_Tensor4D)
 
 	for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
 	{
-		//xs.push_back(Node<Tensor>::Create(Tensor({ 28*28, 1 }, mnist.GetTrainingImageData(i))));
 		xs_train.push_back(mnist.GetTrainingImageData(i));
 		labels_train.push_back((float)mnist.GetTrainingLabelData(i));
 	}
@@ -2943,11 +2942,11 @@ TEST(TapeRecorder, XOR_Tensor4D)
 
 TEST(TapeRecorder, XOR_Tensor4D_Flatten)
 {
-	Tensor4D data({ 4, 1, 2, 1 });
-	data.SetColumn(0, 0, 0, { 0,0 });
-	data.SetColumn(1, 0, 0, { 0,1 });
-	data.SetColumn(2, 0, 0, { 1,0 });
-	data.SetColumn(3, 0, 0, { 1,1 });
+	Tensor4D data({ 4, 1, 1, 2 });
+	data.SetRow(0, 0, 0, { 0,0 });
+	data.SetRow(1, 0, 0, { 0,1 });
+	data.SetRow(2, 0, 0, { 1,0 });
+	data.SetRow(3, 0, 0, { 1,1 });
 
 	Tensor4D data_labels({ 4, 1, 1, 1 }, { 0, 1, 1, 0 });
 
@@ -2960,14 +2959,12 @@ TEST(TapeRecorder, XOR_Tensor4D_Flatten)
 
 	SGD<Tensor4D> sgd(0.1f);
 
-	auto x_ = Node<Tensor4D>::Create(Tensor4D({ 4, 1, 2, 1 }), "x");
+	auto x_ = Node<Tensor4D>::Create(Tensor4D({ 4, 1, 1, 2 }), "x");
 	auto label_ = Node<Tensor4D>::Create(Tensor4D({ 4, 1, 1, 1 }), "label");
-	auto l1_out = L1.Forward(x_);
+	auto l1_out = L1.Forward(x_->Flatten());
 	auto out_ = L2.Forward(l1_out);
 
-	auto out2_ = out_->Flatten();
-
-	auto diff = out2_ - label_;
+	auto diff = out_ - label_;
 	auto loss_ = diff->ElementwiseMul(diff)->Sum();
 	out_->SetLabel("output");
 	loss_->SetLabel("loss");
