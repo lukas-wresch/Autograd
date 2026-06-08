@@ -683,22 +683,32 @@ inline void TapeRecorder<T>::PrintTape() const
         case Operator::Add:
             op_text = "Add";
             op_sign = "+";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("%s [%s] + %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::Subtract:
             op_text = "Subtract";
             op_sign = "-";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("%s [%s] - %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::Multiply:
             op_text = "Multiply";
             op_sign = "*";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("%s [%s] %% %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::ElementwiseAdd:
             op_text = "Elementwise-Add";
             op_sign = "+";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("%s [%s] + %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::ElementwiseMul:
             op_text = "Elementwise-Multiply";
             op_sign = "*";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("%s [%s] * %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::Tanh:
             op_text = "Tanh";
@@ -753,33 +763,32 @@ inline void TapeRecorder<T>::PrintTape() const
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("Flatten(%s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str());
             break;
+        default:
+            if (entry.a < 0)
+                printf("%.02d: %s: %s [%s] %s\n", ++i, op_text.c_str(),
+                    out_label.c_str(), values[entry.out].Shape2String().c_str(),
+                    op_sign.c_str());
+
+            else if (entry.b < 0)
+                printf("%.02d: %s: %s [%s] = %s(%s [%s])\n", ++i, op_text.c_str(),
+                    out_label.c_str(), values[entry.out].Shape2String().c_str(),
+                    op_sign.c_str(),
+                    a_label.c_str(), values[entry.a].Shape2String().c_str());
+
+            else if (entry.c < 0)
+                printf("%.02d: %s: %s [%s] = %s [%s] %s %s [%s]\n", ++i, op_text.c_str(),
+                    out_label.c_str(), values[entry.out].Shape2String().c_str(),
+                    a_label.c_str(), values[entry.a].Shape2String().c_str(),
+                    op_sign.c_str(),
+                    b_label.c_str(), values[entry.b].Shape2String().c_str());
+
+            else
+                printf("%.02d: %s: %s [%s] = %s [%s] %s %s [%s] -> %s [%s]\n", ++i, op_text.c_str(),
+                    out_label.c_str(), values[entry.out].Shape2String().c_str(),
+                    a_label.c_str(), values[entry.a].Shape2String().c_str(),
+                    op_sign.c_str(),
+                    b_label.c_str(), values[entry.b].Shape2String().c_str(),
+                    c_label.c_str(), values[entry.c].Shape2String().c_str());
         }
-
-
-        if (entry.a < 0)
-            printf("%.02d: %s: %s [%s] %s\n", ++i, op_text.c_str(),
-                out_label.c_str(), values[entry.out].Shape2String().c_str(),
-                op_sign.c_str());
-
-        else if (entry.b < 0)
-            printf("%.02d: %s: %s [%s] = %s(%s [%s])\n", ++i, op_text.c_str(),
-                out_label.c_str(), values[entry.out].Shape2String().c_str(),
-                op_sign.c_str(),
-                a_label.c_str(), values[entry.a].Shape2String().c_str());
-        
-        else if (entry.c < 0)
-            printf("%.02d: %s: %s [%s] = %s [%s] %s %s [%s]\n", ++i, op_text.c_str(),
-                out_label.c_str(), values[entry.out].Shape2String().c_str(),
-                a_label.c_str(), values[entry.a].Shape2String().c_str(),
-                op_sign.c_str(),
-                b_label.c_str(), values[entry.b].Shape2String().c_str());
-
-        else
-            printf("%.02d: %s: %s [%s] = %s [%s] %s %s [%s] -> %s [%s]\n", ++i, op_text.c_str(),
-                out_label.c_str(), values[entry.out].Shape2String().c_str(),
-                a_label.c_str(), values[entry.a].Shape2String().c_str(),
-                op_sign.c_str(),
-                b_label.c_str(), values[entry.b].Shape2String().c_str(),
-                c_label.c_str(), values[entry.c].Shape2String().c_str());
     }
 }

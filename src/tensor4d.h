@@ -667,19 +667,20 @@ public:
 
 		if (GetBatches() != Target.GetBatches())
 			throw std::runtime_error("Tensor4D CrossEntropy size mismatch");
+		if (GetDepth() != 1)
+			throw std::runtime_error("Tensor4D CrossEntropy depth must be 1");
 
 		// Target only contains the label (Sparse)
 		if (Target.GetRows() == 1)
 		{
 			for (size_t b = 0; b < GetBatches(); b++)
-				for (size_t d = 0; d < GetDepth(); d++)
 			{
-				int label = (int)Target.At(b, d, 0, 0);
+				int label = (int)Target.At(b, 0, 0, 0);
 
 				if (label < 0 || label >= (int)GetRows())
 					throw std::runtime_error("Tensor4D CrossEntropy invalid label index");
 
-				float p = At(b, d, (size_t)label, 0);
+				float p = At(b, 0, (size_t)label, 0);
 				loss -= std::log(p + epsilon);
 			}
 
@@ -691,9 +692,8 @@ public:
 			throw std::runtime_error("Tensor4D CrossEntropy size mismatch");
 
 		for (size_t b = 0; b < GetBatches(); b++)
-			for (size_t d = 0; d < GetDepth(); d++)
 				for (size_t r = 0; r < GetRows(); r++)
-					loss -= Target.At(b, d, r, 0) * std::log(At(b, d, r, 0) + epsilon);
+					loss -= Target.At(b, 0, r, 0) * std::log(At(b, 0, r, 0) + epsilon);
 
 		return Tensor4D({ 1 }, { loss / GetBatches() });
 	}
