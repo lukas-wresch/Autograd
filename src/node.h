@@ -90,6 +90,7 @@ public:
 
     const std::string& GetLabel() const { return label;  }
     void SetLabel(const std::string& Label) { label = Label; }
+    size_t GetSize() const { return value.GetSize(); }
 
     void Print() const
     {

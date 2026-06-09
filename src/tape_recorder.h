@@ -90,6 +90,11 @@ public:
         return trainable[Index];
     }
 
+    bool RequiresGradient(size_t Index) const
+    {
+        return requires_grad[Index];
+    }
+
     size_t GetNumberOfValues() const
     {
         return values.size();
@@ -102,6 +107,7 @@ public:
         grads.push_back(v.Clone());
 
         trainable.push_back(Trainable);
+        requires_grad.push_back(false);
 
         return (int)values.size() - 1;
     }
@@ -152,6 +158,7 @@ private:
     std::vector<T> values;
     std::vector<T> grads;
     std::vector<bool> trainable;
+    std::vector<bool> requires_grad;
 
     std::unordered_map<std::string, int> label_to_id;
     std::unordered_map<int, std::string> id_to_label;
@@ -252,6 +259,32 @@ inline void TapeRecorder<T>::Compile(const NodePtr<T>& root)
 {
     std::unordered_map<NodePtr<T>, int> node_to_id;
     Visit(root, node_to_id);
+
+    // Mark trainable tensors as requiring gradients
+    for (size_t i = 0; i < grads.size() - 1; i++)
+        if (trainable[i])
+            requires_grad[i] = true;
+
+    // Calculate all tensors that require gradients
+
+    bool any_change;
+
+    do
+    {
+        any_change = false;
+
+        for (size_t i = 0; i < tape.size(); i++)
+        {
+            if (requires_grad[i])
+            {
+                if (!requires_grad[tape[i].out])
+                {
+                    requires_grad[tape[i].out] = true;
+                    any_change = true;
+                }
+            }
+        }
+    } while (any_change);
 }
 
 
@@ -355,10 +388,9 @@ void TapeRecorder<T>::Forward()
         case Operator::Flatten:
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                //values[entry.a].Print();
-                values[entry.out].CopyFrom(values[entry.a]);
-                values[entry.out] = values[entry.out].Reshape({ entry.B, 1, entry.C * entry.H * entry.W, 1 });
-                //values[entry.out].Print();
+                //values[entry.out].CopyFrom(values[entry.a]);
+                //values[entry.out] = values[entry.out].Reshape({ entry.B, 1, entry.C * entry.H * entry.W, 1 });
+                values[entry.out] = values[entry.a].Reshape({ entry.B, 1, entry.C * entry.H * entry.W, 1 });
             }
             else
                 throw std::runtime_error("Unsupported Operation");
@@ -432,8 +464,8 @@ inline void TapeRecorder<T>::Backward()
             }
             else if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                grads[entry.a] += outer_grad % values[entry.b].Transpose();
-                grads[entry.b] += values[entry.a].Transpose() % outer_grad;
+                grads[entry.a] += outer_grad % values[entry.b].Transpose();//Move to kernel
+                grads[entry.b] += values[entry.a].Transpose() % outer_grad;//Move to kernel
                 //values[entry.b].Print();
                 //grads[entry.a].Print();
                 //grads[entry.b].Print();
@@ -619,6 +651,7 @@ inline void TapeRecorder<T>::Backward()
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
                 //outer_grad.Print();
+                //TODO optimize
                 Kernels::Conv2D_Backward(grads[entry.a], grads[entry.b], values[entry.a], values[entry.b], outer_grad, entry.stride, entry.padding);
             }
             else
@@ -633,10 +666,9 @@ inline void TapeRecorder<T>::Backward()
         case Operator::Flatten:
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                //grads[entry.out].Print();
-                grads[entry.a].CopyFrom(grads[entry.out]);
-                grads[entry.a] = grads[entry.a].Reshape({ entry.B, entry.C, entry.H, entry.W });
-                //grads[entry.a].Print();
+                //grads[entry.a].CopyFrom(grads[entry.out]);
+                //grads[entry.a] = grads[entry.a].Reshape({ entry.B, entry.C, entry.H, entry.W });
+                grads[entry.a] = grads[entry.out].Reshape({ entry.B, entry.C, entry.H, entry.W });
             }
             else
                 throw std::runtime_error("Unsupported Operation");
@@ -791,4 +823,28 @@ inline void TapeRecorder<T>::PrintTape() const
                     c_label.c_str(), values[entry.c].Shape2String().c_str());
         }
     }
+
+    printf("\n---Data---\n\n");
+
+
+    for (size_t i = 0; i < values.size(); i++)
+    {
+        std::string label = "t" + std::to_string(i);
+
+        auto it = id_to_label.find((int)i);
+        if (it != id_to_label.end())
+            label = it->second;
+
+        std::string trainable = "Trainable";
+        std::string requires_gradient = "Requires_Gradient";
+
+        if (!IsTrainable(i))
+            trainable = "";
+        if (!RequiresGradient(i))
+            requires_gradient = "";
+
+        printf("%.02d: %s %s: %s %s\n", (int)i, label.c_str(), values[i].Shape2String().c_str(), trainable.c_str(), requires_gradient.c_str());
+    }
+
+    printf("\n");
 }

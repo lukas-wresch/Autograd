@@ -71,10 +71,214 @@ void ShuffleDataset(std::vector<Tensor4D>& xs, std::vector<float>& labels)
 
 
 
+void Cifar10_Tensor4D()
+{
+	Cifar cifar = Cifar("cifar-10");
+
+	cifar.PrintTrainImage(0);
+	cifar.PrintTrainImage(1);
+	cifar.PrintTrainImage(2);
+
+	std::vector<Tensor4D> xs_train;
+	std::vector<float> labels_train;
+
+	std::vector<Tensor4D> xs_val;
+	std::vector<float> labels_val;
+
+	for (size_t i = 0; i < cifar.GetTrainingNumberOfImages(); i++)
+	{
+		//xs_train.push_back(cifar.GetTrainImageTensor(i));
+		xs_train.push_back(Tensor4D({ 1, 3, 32 * 32, 1 }, cifar.GetTrainingImageData(i)));
+		labels_train.push_back((float)cifar.GetTrainingLabelData(i));
+	}
+
+	for (size_t i = 0; i < cifar.GetValidationNumberOfImages(); i++)
+	{
+		xs_val.push_back(Tensor4D({ 1, 3, 32 * 32, 1 }, cifar.GetValidationImageData(i)));
+		//xs_val.push_back(mnist.GetValidationImageTensor(i));
+		labels_val.push_back((float)cifar.GetValidationLabelData(i));
+	}
+
+
+	auto tape = TapeRecorder<Tensor4D>();
+	SGD<Tensor4D> sgd(0.001f, 0.3f);
+	const int batch_size = 1;
+
+	{
+		auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 3, 32, 32 }), "input");
+		auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 1, 1 }), "label");
+
+		Conv2D conv1(3, 32, 3, 1, 1, Activation::ReLU);
+		Conv2D conv2(32, 32, 3, 1, 1, Activation::ReLU);
+		
+		auto out_conv1 = conv1.Conv(x);
+		auto out_conv2 = conv2.Conv(out_conv1)->MaxPool2D(2, 2);
+		auto flattened = out_conv2->Flatten();
+
+		flattened->SetLabel("flattened");
+
+		Layer4D L1(flattened->GetSize() / batch_size, 128, Activation::ReLU, InitType::Xavier);
+		//Layer4D L1(1568, 128, Activation::ReLU, InitType::Xavier);
+		Layer4D L2(128, 10, Activation::Identity, InitType::Xavier);
+		
+
+		auto h1 = L1.Forward(flattened);
+		auto pred = L2.Forward(h1);
+		pred->SetLabel("output");
+
+		auto loss = pred->Softmax_CrossEntropy(label);
+		loss->SetLabel("loss");
+
+		tape.Compile(loss);
+		sgd.SetTrainableParams(tape);
+		std::cout << "Number of parameters: " << sgd.GetNumberOfParameters() << std::endl;
+	}
+
+	auto conv_weights = tape.SetValue("conv_weights");
+	auto dconv_weights = tape.GetGradient("conv_weights");
+	auto input = tape.SetValue("input");
+	auto dinput = tape.GetGradient("input");
+	auto flattened = tape.SetValue("flattened");
+	auto dflattened = tape.GetGradient("flattened");
+	auto label = tape.SetValue("label");
+	auto output = tape.SetValue("output");
+	auto loss = tape.SetValue("loss");
+
+	tape.PrintTape();
+
+	size_t train_size = xs_train.size() / 20;
+
+
+	// Forward pass
+	auto calculate_acc = [&]() {
+		int correct = 0;
+		int val_correct = 0;
+
+		for (size_t i = 0; i < train_size;)
+		{
+			size_t actual_batch_size = 0;
+
+			while (actual_batch_size < batch_size && i + actual_batch_size < xs_train.size())
+			{
+				input->ViewBatch(actual_batch_size).CopyFrom(xs_train[i + actual_batch_size]);
+				label->SetColumn(actual_batch_size, 0, 0, { labels_train[i + actual_batch_size] });
+				actual_batch_size++;
+			}
+
+			tape.Forward();
+
+			for (size_t j = 0; j < actual_batch_size; j++)
+			{
+				//Convert one hot to class index
+				int pred_class = (int)output->ArgMax(j, 0);
+				int target_class = (int)labels_train[i + j];
+
+				if (pred_class == target_class) correct++;
+			}
+
+			i += actual_batch_size;
+		}
+
+
+		for (size_t i = 0; i < xs_val.size();)
+		{
+			size_t actual_batch_size = 0;
+
+			while (actual_batch_size < batch_size && i + actual_batch_size < xs_val.size())
+			{
+				input->ViewBatch(actual_batch_size).CopyFrom(xs_val[i + actual_batch_size]);
+				label->SetColumn(actual_batch_size, 0, 0, { labels_val[i + actual_batch_size] });
+				actual_batch_size++;
+			}
+
+			tape.Forward();
+
+			for (size_t j = 0; j < actual_batch_size; j++)
+			{
+				//Convert one hot to class index
+				int pred_class = (int)output->ArgMax(j, 0);
+				int target_class = (int)labels_val[i + j];
+
+				if (pred_class == target_class) val_correct++;
+			}
+
+			i += actual_batch_size;
+		}
+
+		return std::tuple{ (float)correct * 100.0f / train_size, (float)val_correct * 100.0f / xs_val.size() };
+		};
+
+
+	//Training loop
+
+	float epoch_loss = 0.0f;
+
+	for (size_t epoch = 0; epoch < 10; epoch++)
+	{
+		ShuffleDataset(xs_train, labels_train);
+
+
+		epoch_loss = 0.0f;
+
+		DWORD start_time = timeGetTime();
+
+		for (size_t i = 0; i < train_size; i += batch_size)
+		{
+			size_t end = std::min(i + batch_size, xs_train.size());
+
+			float batch_loss = 0.0f;
+
+			size_t actual_batch_size = 0;
+
+			for (size_t j = i; j < end; j++)
+			{
+				input->ViewBatch(actual_batch_size).CopyFrom(xs_train[i + actual_batch_size]);
+				label->SetColumn(actual_batch_size, 0, 0, { labels_train[i + actual_batch_size] });
+				actual_batch_size++;
+			}
+
+			if (actual_batch_size != batch_size)
+				continue;
+
+			tape.Forward();
+			tape.ZeroGradients();
+			tape.Backward();
+
+			epoch_loss += loss->At(0, 0, 0, 0) * actual_batch_size;
+			batch_loss += loss->At(0, 0, 0, 0) * actual_batch_size;
+
+			if (i / batch_size % (train_size / 50) == 0)
+				std::cout << "Batch " << i / batch_size + 1 << " of " << train_size / batch_size << " batch_loss " << batch_loss / batch_size << std::endl;
+
+			sgd.Step();
+		}
+
+		epoch_loss /= train_size;
+
+		auto epoch_duration = timeGetTime() - start_time;
+		auto samples_per_second = (float)train_size / epoch_duration * 1000.0f;
+
+		std::cout << "batch_size: " << batch_size << std::endl;
+		std::cout << "samples_per_second: " << samples_per_second << std::endl;
+		std::cout << "Epoch " << epoch + 1 << " Loss: " << epoch_loss << std::endl;
+		auto [train_acc, val_acc] = calculate_acc();
+		std::cout << "Train Accuracy: " << train_acc << "%" << std::endl;
+		std::cout << "Valid Accuracy: " << val_acc << "%" << std::endl;
+
+		sgd.SetLearningRate(0.95f * sgd.GetLearningRate());
+	}
+
+	/*auto [train_acc, val_acc] = calculate_acc();
+	std::cout << "Final Train Accuracy: " << train_acc << "%" << std::endl;
+	std::cout << "Final Valid Accuracy: " << val_acc   << "%" << std::endl;*/
+}
+
+
+
 void MNist_Tensor4D()
 {
-	MNist mnist = MNist();
-	//MNist mnist = MNist("mnist-fashion");
+	//MNist mnist = MNist();
+	MNist mnist = MNist("mnist-fashion");
 
 	mnist.PrintTrainImage(0);
 	mnist.PrintTrainImage(1);
@@ -222,7 +426,7 @@ void MNist_Tensor4D()
 
 	float epoch_loss = 0.0f;
 
-	for (size_t epoch = 0; epoch < 5; epoch++)
+	for (size_t epoch = 0; epoch < 10; epoch++)
 	{
 		ShuffleDataset(xs_train, labels_train);
 
@@ -1171,7 +1375,9 @@ int main()
 
 
 	//MNist_Tensor();
-	MNist_Tensor4D();
+	//MNist_Tensor4D();
+
+	Cifar10_Tensor4D();
 
 
 	return 0;

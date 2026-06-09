@@ -19,6 +19,7 @@ public:
     static void Tanh_Backward(Tensor& grad_in, const Tensor& out, const Tensor& outer_grad);
 
     static void SGD_Update(Tensor& param, const Tensor& grad, Tensor& velocity, float lr, float momentum);
+    static void SGD_Update(Tensor4D& param, const Tensor4D& grad, Tensor4D& velocity, float lr, float momentum);
 
     static Tensor4D Conv2D_Forward(const Tensor4D& Input, const Tensor4D& Kernel, int Stride = 1, int Padding = 0);
     static void Conv2D_Backward(Tensor4D& dInput, Tensor4D& dKernel, const Tensor4D& Input, const Tensor4D& Kernel, const Tensor4D& dOut, int Stride, int Padding);
@@ -437,7 +438,24 @@ inline void Kernels::SGD_Update(Tensor& param, const Tensor& grad, Tensor& veloc
 
     const size_t n = param.Size();
 
-    for (size_t i = 0; i < n; ++i)
+    for (size_t i = 0; i < n; i++)
+    {
+        v[i] = momentum * v[i] - lr * g[i];
+        p[i] += v[i];
+    }
+}
+
+
+
+inline void Kernels::SGD_Update(Tensor4D& param, const Tensor4D& grad, Tensor4D& velocity, float lr, float momentum)
+{
+    float* p = param.Data();
+    const float* g = grad.Data();
+    float* v = velocity.Data();
+
+    const size_t n = param.GetSize();
+
+    for (size_t i = 0; i < n; i++)
     {
         v[i] = momentum * v[i] - lr * g[i];
         p[i] += v[i];

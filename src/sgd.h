@@ -54,10 +54,11 @@ public:
                 if constexpr (std::is_same_v<T, Tensor>)
                     Kernels::SGD_Update(*values[i], *grads[i], velocity[i], m_LR * Scale, m_Momentum);
                 else if constexpr (std::is_same_v<T, Tensor4D>)
-                {
+                    Kernels::SGD_Update(*values[i], *grads[i], velocity[i], m_LR * Scale, m_Momentum);
+                /* {
                     velocity[i] = m_Momentum * velocity[i] - m_LR * Scale * (*grads[i]);
                     *values[i] += velocity[i];
-                }
+                }*/
                 else
                 {
                     velocity[i] = m_Momentum * velocity[i] - m_LR * Scale * (*grads[i]);
