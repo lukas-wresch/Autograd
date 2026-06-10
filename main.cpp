@@ -71,6 +71,89 @@ void ShuffleDataset(std::vector<Tensor4D>& xs, std::vector<float>& labels)
 
 
 
+void ProgressBar(const std::string& label, int current, int total, int barWidth = 50)
+{
+	float progress = (float)(current) / total;
+	int pos = (int)(barWidth * progress);
+
+	std::cout << "\r" << label << " [";
+
+	for (int i = 0; i < barWidth; i++)
+	{
+		if (i < pos)
+			std::cout << "=";
+		else if (i == pos)
+			std::cout << ">";
+		else
+			std::cout << " ";
+	}
+
+	std::cout << "] " << (int)(progress * 100.0) << "%";
+	std::cout.flush();
+}
+
+
+
+void ClearProgressBar()
+{
+	std::cout << "\r\033[K";  // Zeile löschen
+	std::cout.flush();
+}
+
+
+
+class ProgressBar
+{
+public:
+	explicit ProgressBar(const std::string& label, int total, int width = 50)
+		: label_(label), total_(total), width_(width) {
+	}
+
+	ProgressBar(const ProgressBar&) = delete;
+	ProgressBar& operator=(const ProgressBar&) = delete;
+
+	void update(int current)
+	{
+		if (current == current_)
+			return;
+
+		current_ = current;
+		float progress = (float)(current) / total_;
+		int pos = (int)(progress * width_);
+
+		std::cout << "\r\033[K" << label_ << " [";
+
+		for (int i = 0; i < width_; ++i) {
+			if (i < pos)
+				std::cout << '=';
+			else if (i == pos)
+				std::cout << '>';
+			else
+				std::cout << ' ';
+		}
+
+		std::cout << "] " << (int)(progress * 100.0) << "%";
+		std::cout.flush();
+	}
+
+	~ProgressBar()
+	{
+		if (current_ >= 0)
+		{
+			std::cout << "\r\033[K";
+			std::cout.flush();
+		}
+	}
+
+private:
+	int total_;
+	int width_;
+	int current_ = -1;
+	std::string label_;
+};
+
+
+
 void Cifar10_Tensor4D()
 {
 	Cifar cifar = Cifar("cifar-10");
@@ -101,8 +184,8 @@ void Cifar10_Tensor4D()
 
 
 	auto tape = TapeRecorder<Tensor4D>();
-	SGD<Tensor4D> sgd(0.001f, 0.3f);
-	const int batch_size = 1;
+	SGD<Tensor4D> sgd(0.003f, 0.8f);
+	const int batch_size = 64;
 
 	{
 		auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 3, 32, 32 }), "input");
@@ -113,7 +196,14 @@ void Cifar10_Tensor4D()
 		
 		auto out_conv1 = conv1.Conv(x);
 		auto out_conv2 = conv2.Conv(out_conv1)->MaxPool2D(2, 2);
-		auto flattened = out_conv2->Flatten();
+
+		Conv2D conv3(32, 64, 3, 1, 1, Activation::ReLU);
+		Conv2D conv4(64, 64, 3, 1, 1, Activation::ReLU);
+
+		auto out_conv3 = conv3.Conv(out_conv2);
+		auto out_conv4 = conv4.Conv(out_conv3)->MaxPool2D(2, 2);
+
+		auto flattened = out_conv4->Flatten();
 
 		flattened->SetLabel("flattened");
 
@@ -146,7 +236,8 @@ void Cifar10_Tensor4D()
 
 	tape.PrintTape();
 
-	size_t train_size = xs_train.size() / 20;
+	size_t train_size = xs_train.size();
+	std::cout << "Training size: " << train_size << std::endl;
 
 
 	// Forward pass
@@ -177,6 +268,9 @@ void Cifar10_Tensor4D()
 			}
 
 			i += actual_batch_size;
+
+			if (i%100 == 0)
+				ProgressBar("Train Accuracy", i, train_size);
 		}
 
 
@@ -203,10 +297,13 @@ void Cifar10_Tensor4D()
 			}
 
 			i += actual_batch_size;
+
+			if (i % 100 == 0)
+				ProgressBar("Validation Accuracy", i, xs_val.size());
 		}
 
 		return std::tuple{ (float)correct * 100.0f / train_size, (float)val_correct * 100.0f / xs_val.size() };
-		};
+	};
 
 
 	//Training loop
@@ -215,7 +312,8 @@ void Cifar10_Tensor4D()
 
 	for (size_t epoch = 0; epoch < 10; epoch++)
 	{
-		ShuffleDataset(xs_train, labels_train);
+		if (train_size == xs_train.size())
+			ShuffleDataset(xs_train, labels_train);
 
 
 		epoch_loss = 0.0f;
@@ -247,8 +345,11 @@ void Cifar10_Tensor4D()
 			epoch_loss += loss->At(0, 0, 0, 0) * actual_batch_size;
 			batch_loss += loss->At(0, 0, 0, 0) * actual_batch_size;
 
-			if (i / batch_size % (train_size / 50) == 0)
+			if ((i / batch_size) % 50 == 0)
+			{
+				//ProgressBar(i, train_size);
 				std::cout << "Batch " << i / batch_size + 1 << " of " << train_size / batch_size << " batch_loss " << batch_loss / batch_size << std::endl;
+			}
 
 			sgd.Step();
 		}
@@ -277,8 +378,8 @@ void Cifar10_Tensor4D()
 
 void MNist_Tensor4D()
 {
-	//MNist mnist = MNist();
-	MNist mnist = MNist("mnist-fashion");
+	MNist mnist = MNist();
+	//MNist mnist = MNist("mnist-fashion");
 
 	mnist.PrintTrainImage(0);
 	mnist.PrintTrainImage(1);
@@ -314,13 +415,13 @@ void MNist_Tensor4D()
 		auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 28, 28 }), "input");
 		auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 1, 1 }), "label");
 
-		Conv2D conv1(1,  8, 3, 1, 1, Activation::ReLU);
-		Conv2D conv2(8, 16, 3, 1, 1, Activation::ReLU);
+		Conv2D conv1(1,  8, 3, 1, 1, Activation::ReLU, "conv1");
+		Conv2D conv2(8, 16, 3, 1, 1, Activation::ReLU, "conv2");
 		//Layer4D L1(900, 128, Activation::ReLU,     InitType::Xavier);
 		//Layer4D L1(28*28, 128, Activation::ReLU,     InitType::Xavier);
-		Layer4D L1(3136, 128, Activation::ReLU, InitType::Xavier);
+		Layer4D L1(3136, 128, Activation::ReLU, InitType::Xavier, "L1");
 		//Layer4D L1(1568, 128, Activation::ReLU, InitType::Xavier);
-		Layer4D L2(128,  10, Activation::Identity, InitType::Xavier);
+		Layer4D L2(128,  10, Activation::Identity, InitType::Xavier, "L2");
 
 		//auto out_conv1 = conv1.Conv(x)->MaxPool2D(2, 2);
 		//auto out_conv2 = conv2.Conv(out_conv1)->MaxPool2D(2, 2);
@@ -359,7 +460,7 @@ void MNist_Tensor4D()
 
 	tape.PrintTape();
 
-	size_t train_size = xs_train.size() / 1;
+	size_t train_size = xs_train.size() / 10;
 
 
 	// Forward pass
@@ -390,7 +491,12 @@ void MNist_Tensor4D()
 			}
 
 			i += actual_batch_size;
+
+			if (i/actual_batch_size % 100 == 0)
+				ProgressBar("Train Accuracy", i, train_size);
 		}
+
+		ClearProgressBar();
 
 
 		for (size_t i = 0; i < xs_val.size();)
@@ -416,7 +522,12 @@ void MNist_Tensor4D()
 			}
 
 			i += actual_batch_size;
+
+			if (i / actual_batch_size % 100 == 0)
+				ProgressBar("Validation Accuracy", i, xs_val.size());
 		}
+
+		ClearProgressBar();
 
 		return std::tuple{ (float)correct * 100.0f / train_size, (float)val_correct * 100.0f / xs_val.size() };
 	};
@@ -456,6 +567,14 @@ void MNist_Tensor4D()
 			tape.Forward();
 			tape.ZeroGradients();
 			tape.Backward();
+
+			//tape.GetValue("output")->Print();
+			//tape.GetValue("label")->Print();
+			//tape.GetValue("loss")->Print();
+			//tape.GetGradient("L1W")->Print();
+			//tape.GetGradient("output")->Print();
+			//tape.GetValue("L2W")->Print();
+			//tape.GetGradient("L2W")->Print();
 
 			epoch_loss += loss->At(0, 0, 0, 0) * actual_batch_size;
 			batch_loss += loss->At(0, 0, 0, 0) * actual_batch_size;

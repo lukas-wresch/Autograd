@@ -102,7 +102,7 @@ public:
 
     int AddDataEntry(const T& v, bool Trainable = false)
     {
-        values.push_back(v.Clone());
+        values.push_back(v);
 
         grads.push_back(v.Clone());
 
@@ -300,7 +300,15 @@ void TapeRecorder<T>::Forward()
             values[entry.out] = values[entry.a] + values[entry.b];
 			break;
 		case Operator::Subtract:
-            values[entry.out] = values[entry.a] - values[entry.b];
+            if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                //values[entry.a].Print();
+                //values[entry.b].Print();
+                values[entry.out] = values[entry.a] - values[entry.b];
+                //values[entry.out].Print();
+            }
+            else
+                values[entry.out] = values[entry.a] - values[entry.b];
             break;
         case Operator::Multiply:
             if constexpr (std::is_same_v<T, Tensor>)
@@ -310,6 +318,7 @@ void TapeRecorder<T>::Forward()
                 //values[entry.a].Print();
                 //values[entry.b].Print();
                 values[entry.out] = values[entry.a] % values[entry.b];
+                //values[entry.out].Print();
             }
             else
                 values[entry.out] = values[entry.a] * values[entry.b];
@@ -331,7 +340,10 @@ void TapeRecorder<T>::Forward()
                 Kernels::Multiply_Forward(values[entry.out], values[entry.a], values[entry.b]);
             else if constexpr (std::is_same_v<T, Tensor4D>)
             {
+                values[entry.a].Print();
+                values[entry.b].Print();
                 values[entry.out] = values[entry.a] * values[entry.b];
+                values[entry.out].Print();
             }
             else
                 values[entry.out] = values[entry.a].ElementwiseMul(values[entry.b]);
@@ -365,13 +377,15 @@ void TapeRecorder<T>::Forward()
             {
                 values[entry.out] = values[entry.a].Softmax().CrossEntropy(values[entry.b]);
             }
+            else if constexpr (std::is_same_v<T, Tensor4D>)
+                values[entry.out] = values[entry.a].Softmax_CrossEntropy(values[entry.b]);
             else
                 values[entry.out] = values[entry.a].Softmax().CrossEntropy(values[entry.b]);
             break;
         case Operator::Conv2D:
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                values[entry.out] = Kernels::Conv2D_Forward(values[entry.a], values[entry.b], entry.stride, entry.padding);
+                Kernels::Conv2D_Forward(values[entry.out], values[entry.a], values[entry.b], entry.stride, entry.padding);
                 //values[entry.a].Print();
                 //values[entry.b].Print();
                 //values[entry.out].Print();
@@ -388,8 +402,6 @@ void TapeRecorder<T>::Forward()
         case Operator::Flatten:
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                //values[entry.out].CopyFrom(values[entry.a]);
-                //values[entry.out] = values[entry.out].Reshape({ entry.B, 1, entry.C * entry.H * entry.W, 1 });
                 values[entry.out] = values[entry.a].Reshape({ entry.B, 1, entry.C * entry.H * entry.W, 1 });
             }
             else
@@ -466,6 +478,8 @@ inline void TapeRecorder<T>::Backward()
             {
                 grads[entry.a] += outer_grad % values[entry.b].Transpose();//Move to kernel
                 grads[entry.b] += values[entry.a].Transpose() % outer_grad;//Move to kernel
+                //Kernels::MatMul_Backward_A(grads[entry.a], outer_grad, values[entry.b]);//BUG
+                //Kernels::MatMul_Backward_B(grads[entry.b], values[entry.a], outer_grad);//BUG
                 //values[entry.b].Print();
                 //grads[entry.a].Print();
                 //grads[entry.b].Print();
@@ -585,34 +599,7 @@ inline void TapeRecorder<T>::Backward()
             }
             else if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                // logits are stored in "left"
-                T& logits = values[entry.a];
-                T& grad_logits = grads[entry.a];
-
-				const int target = (int)values[entry.b].Data()[0];// Works only with batch size 1
-
-                // forward softmax recomputation
-                // (oder cached probabilities!)
-                float max_val = logits.Max(); // numerical stability
-
-                float sum = 0.0f;
-                std::vector<float> probs(logits.GetSize());
-
-                for (size_t i = 0; i < logits.GetSize(); i++)
-                {
-                    probs[i] = std::exp(logits.Data()[i] - max_val);
-                    sum += probs[i];
-                }
-
-                for (float& p : probs)
-                    p /= sum;
-
-                // backward: dL/dlogits = p - y
-                for (size_t i = 0; i < logits.GetSize(); i++)
-                {
-                    float y = (i == (size_t)target) ? 1.0f : 0.0f;
-                    grad_logits.Data()[i] += (probs[i] - y) * outer_grad.Data()[0];
-                }
+                Kernels::Softmax_CrossEntropy_Backward(values[entry.a], grads[entry.a], values[entry.b], outer_grad);
             }
             else
             {
@@ -666,8 +653,6 @@ inline void TapeRecorder<T>::Backward()
         case Operator::Flatten:
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                //grads[entry.a].CopyFrom(grads[entry.out]);
-                //grads[entry.a] = grads[entry.a].Reshape({ entry.B, entry.C, entry.H, entry.W });
                 grads[entry.a] = grads[entry.out].Reshape({ entry.B, entry.C, entry.H, entry.W });
             }
             else

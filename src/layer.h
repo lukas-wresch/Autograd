@@ -159,7 +159,7 @@ NodePtr<Matrix> Layer3D::Forward(const NodePtr<Matrix>& Input) const
 class Layer4D
 {
 public:
-	Layer4D(size_t InputLength, size_t OutputLength, Activation Activation, InitType init = InitType::UniformSmall) : m_Activation(Activation), m_OutputLength(OutputLength)
+	Layer4D(size_t InputLength, size_t OutputLength, Activation Activation, InitType init = InitType::UniformSmall, std::string Label = "") : m_Activation(Activation), m_OutputLength(OutputLength)
 	{
 		m_Weights = Node<Tensor4D>::Create(Tensor4D({ OutputLength, InputLength }));
 		m_Biases  = Node<Tensor4D>::Create(Tensor4D({ OutputLength, 1 }));
@@ -188,8 +188,8 @@ public:
 
 		m_Weights->SetAsTrainable();
 		m_Biases->SetAsTrainable();
-		m_Weights->SetLabel("W");
-		m_Biases->SetLabel("B");
+		m_Weights->SetLabel(Label + "W");
+		m_Biases->SetLabel(Label  + "B");
 	}
 
 	NodePtr<Tensor4D> Forward(const NodePtr<Tensor4D>& Input) const;

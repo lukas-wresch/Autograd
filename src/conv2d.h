@@ -7,7 +7,7 @@
 class Conv2D
 {
 public:
-	Conv2D(size_t in_channels, size_t out_channels, size_t kernel_size, int stride = 1, int padding = 0, Activation Activation = Activation::Identity)
+	Conv2D(size_t in_channels, size_t out_channels, size_t kernel_size, int stride = 1, int padding = 0, Activation Activation = Activation::Identity, std::string Label = "")
         : m_Stride(stride), m_Padding(padding), m_Activation(Activation)
     {
         m_Weights = Node<Tensor4D>::Create(Tensor4D({ out_channels, in_channels, kernel_size, kernel_size }), "conv_weights");
@@ -25,6 +25,8 @@ public:
 
         m_Weights->SetAsTrainable();
         m_Biases->SetAsTrainable();
+		m_Weights->SetLabel(Label + "W");
+		m_Biases->SetLabel(Label + "B");
     }
 
     NodePtr<Tensor4D> Conv(const NodePtr<Tensor4D>& Input);

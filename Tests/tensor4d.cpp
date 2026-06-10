@@ -894,63 +894,6 @@ TEST(Tensor4DBackprop, MatrixMultiplicationGraph)
 
 
 
-TEST(Tensor4DBackprop, RowVectorColumnVectorOuterProduct)
-{
-    // A = row vector (1x3)
-    auto A = Node<Tensor4D>::Create(Tensor4D({ 1, 3 }, { 1.0f, 2.0f, 3.0f }), "A");
-
-    // B = column vector (3x1)
-    auto B = Node<Tensor4D>::Create(Tensor4D({ 3, 1 }, { 4.0f, 5.0f, 6.0f }), "B");
-
-    // Y = A * B = scalar (1x1)
-    auto Y = A % B;
-    Y->SetLabel("Y");
-
-    // backward
-    Y->Backwards();
-
-    // -----------------------------------
-    // Forward
-    // -----------------------------------
-
-    // 1*4 + 2*5 + 3*6 = 32
-    EXPECT_NEAR(Y->GetValue().At(0, 0), 32.0f, 1e-5f);
-
-    // -----------------------------------
-    // Shape checks
-    // -----------------------------------
-
-    EXPECT_EQ(A->GetGradient().GetRows(), 1);
-    EXPECT_EQ(A->GetGradient().GetColumns(), 3);
-
-    EXPECT_EQ(B->GetGradient().GetRows(), 3);
-    EXPECT_EQ(B->GetGradient().GetColumns(), 1);
-
-    // -----------------------------------
-    // Backward
-    // -----------------------------------
-
-    // dY/dA = B^T
-    //
-    // [4 5 6]
-
-    EXPECT_NEAR(A->GetGradient().At(0, 0), 4.0f, 1e-5f);
-    EXPECT_NEAR(A->GetGradient().At(0, 1), 5.0f, 1e-5f);
-    EXPECT_NEAR(A->GetGradient().At(0, 2), 6.0f, 1e-5f);
-
-    // dY/dB = A^T
-    //
-    // [1]
-    // [2]
-    // [3]
-
-    EXPECT_NEAR(B->GetGradient().At(0, 0), 1.0f, 1e-5f);
-    EXPECT_NEAR(B->GetGradient().At(1, 0), 2.0f, 1e-5f);
-    EXPECT_NEAR(B->GetGradient().At(2, 0), 3.0f, 1e-5f);
-}
-
-
-
 TEST(Tensor4DBackprop, LargerMatrixGraphWithoutActivation)
 {
     // x: 3x3

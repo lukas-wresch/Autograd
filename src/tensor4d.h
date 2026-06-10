@@ -687,13 +687,51 @@ public:
 			return Tensor4D({ 1 }, { loss / GetBatches() });
 		}
 
-		// Target is on-hot vector (Dense)
+		// Target is onn-hot vector (Dense)
 		if (GetRows() != Target.GetRows())
 			throw std::runtime_error("Tensor4D CrossEntropy size mismatch");
 
 		for (size_t b = 0; b < GetBatches(); b++)
 				for (size_t r = 0; r < GetRows(); r++)
 					loss -= Target.At(b, 0, r, 0) * std::log(At(b, 0, r, 0) + epsilon);
+
+		return Tensor4D({ 1 }, { loss / GetBatches() });
+	}
+
+	Tensor4D Softmax_CrossEntropy(const Tensor4D& Target) const
+	{
+		if (GetBatches() != Target.GetBatches())
+			throw std::runtime_error("Tensor4D Softmax_CrossEntropy(): size mismatch");
+		if (GetDepth() != 1)
+			throw std::runtime_error("Tensor4D Softmax_CrossEntropy depth must be 1");
+
+		// Target only contains the label (Sparse)
+		if (Target.GetRows() != 1)
+			throw std::runtime_error("Tensor4D CrossEntropy only support for sparse target");
+
+		float loss = 0.0f;
+
+		for (size_t b = 0; b < GetBatches(); b++)
+		{
+			float max_val = -std::numeric_limits<float>::infinity();
+
+			for (size_t r = 0; r < GetRows(); r++)
+				max_val = std::max(max_val, At(b, 0, r, 0));
+
+			float sum = 0.0f;
+
+			for (size_t r = 0; r < GetRows(); r++)
+				sum += std::exp(At(b, 0, r, 0) - max_val);
+
+			float log_sum_exp = max_val + std::log(sum);
+
+			int label = (int)Target.At(b, 0, 0, 0);
+
+			if (label < 0 || label >= (int)GetRows())
+				throw std::runtime_error("Tensor4D Softmax_CrossEntropy invalid label index");
+
+			loss += log_sum_exp - At(b, 0, label, 0);
+		}
 
 		return Tensor4D({ 1 }, { loss / GetBatches() });
 	}
@@ -732,28 +770,6 @@ private:
 	Shape m_Shape;
 	size_t m_Offset = 0;
 };
-
-
-
-/*inline std::vector<size_t> Tensor4D_BroadcastShape(const Tensor4D::Shape& a, const Tensor4D::Shape& b)
-{
-	Tensor4D::Shape out;
-
-	for (int i = 0; i < 4; i++)
-	{
-		if (a.size[i] == b.size[i])
-			out.size[i] = a.size[i];
-		else if (a.size[i] == 1)
-			out.size[i] = b.size[i];
-		else if (b.size[i] == 1)
-			out.size[i] = a.size[i];
-		else
-			throw std::runtime_error("Incompatible shapes");
-	}
-
-	out.ComputeStrides();
-	return out;
-}*/
 
 
 

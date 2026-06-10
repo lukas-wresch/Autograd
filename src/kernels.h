@@ -15,13 +15,18 @@ public:
     static void MatMul_Backward(Tensor& out, const Tensor& left, const Tensor& right);
     static inline void MatMul_Backward_A(Tensor& gradA, const Tensor& dOut, const Tensor& B);
     static inline void MatMul_Backward_B(Tensor& gradB, const Tensor& A, const Tensor& dOut);
+    static inline void MatMul_Backward_A(Tensor4D& out, const Tensor4D& A, const Tensor4D& B);
+    static inline void MatMul_Backward_B(Tensor4D& out, const Tensor4D& A, const Tensor4D& B);
 
     static void Tanh_Backward(Tensor& grad_in, const Tensor& out, const Tensor& outer_grad);
+
+    static Tensor4D Softmax_CrossEntropy(const Tensor4D& logits, const Tensor4D& Target, Tensor4D& SoftmaxCache);
+    static void Softmax_CrossEntropy_Backward(const Tensor4D& logits, Tensor4D& grad_logits, const Tensor4D& targets, const Tensor4D& outer);
 
     static void SGD_Update(Tensor& param, const Tensor& grad, Tensor& velocity, float lr, float momentum);
     static void SGD_Update(Tensor4D& param, const Tensor4D& grad, Tensor4D& velocity, float lr, float momentum);
 
-    static Tensor4D Conv2D_Forward(const Tensor4D& Input, const Tensor4D& Kernel, int Stride = 1, int Padding = 0);
+    static void Conv2D_Forward(Tensor4D& out, const Tensor4D& Input, const Tensor4D& Kernel, int Stride = 1, int Padding = 0);
     static void Conv2D_Backward(Tensor4D& dInput, Tensor4D& dKernel, const Tensor4D& Input, const Tensor4D& Kernel, const Tensor4D& dOut, int Stride, int Padding);
 
     static Tensor4D MaxPool2D_Forward(const Tensor4D& Input, int KernelSize, int Stride, Tensor4D* ArgMax = nullptr);
@@ -314,6 +319,107 @@ inline void Kernels::Tanh_Backward(Tensor& grad_in, const Tensor& out, const Ten
 
 
 
+//
+inline Tensor4D Kernels::Softmax_CrossEntropy(const Tensor4D& logits, const Tensor4D& Target, Tensor4D& SoftmaxCache)
+{
+    if (logits.GetBatches() != Target.GetBatches())
+        throw std::runtime_error("Tensor4D Softmax_CrossEntropy(): size mismatch");
+    if (logits.GetDepth() != 1)
+        throw std::runtime_error("Tensor4D Softmax_CrossEntropy depth must be 1");
+
+    // Target only contains the label (Sparse)
+    if (Target.GetRows() != 1)
+        throw std::runtime_error("Tensor4D CrossEntropy only support for sparse target");
+
+    float loss = 0.0f;
+
+    for (size_t b = 0; b < logits.GetBatches(); b++)
+    {
+        float max_val = -std::numeric_limits<float>::infinity();
+
+        for (size_t r = 0; r < logits.GetRows(); r++)
+            max_val = std::max(max_val, logits.At(b, 0, r, 0));
+
+        float sum = 0.0f;
+
+        for (size_t r = 0; r < logits.GetRows(); r++)
+        {
+            float val = std::exp(logits.At(b, 0, r, 0) - max_val);
+            SoftmaxCache.At(b, 0, r, 0) = val;
+            sum += val;
+        }
+
+        float inv_sum = 1.0f / sum;
+
+        for (size_t r = 0; r < logits.GetRows(); r++)
+            SoftmaxCache.At(b, 0, r, 0) *= inv_sum;
+
+        float log_sum_exp = max_val + std::log(sum);
+
+        int label = (int)Target.At(b, 0, 0, 0);
+
+        if (label < 0 || label >= (int)logits.GetRows())
+            throw std::runtime_error("Tensor4D Softmax_CrossEntropy invalid label index");
+
+        loss += log_sum_exp - logits.At(b, 0, label, 0);
+    }
+
+    return Tensor4D({ 1 }, { loss / logits.GetBatches() });
+}
+
+
+
+//
+inline void Kernels::Softmax_CrossEntropy_Backward(const Tensor4D& logits, Tensor4D& grad_logits, const Tensor4D& targets, const Tensor4D& outer)
+{
+    if (outer.GetBatches() != 1)
+        throw std::runtime_error("Softmax_CrossEntropy_Backward outer must be scalar");
+
+    const size_t N = logits.GetSize();
+    const size_t B = logits.GetBatches();
+    const size_t D = logits.GetDepth();
+
+    for (size_t b = 0; b < B; b++)
+        for (size_t d = 0; d < D; d++)
+        {
+            // ---- 1. max for numerical stability ----
+            float max_val = -std::numeric_limits<float>::infinity();
+            for (size_t i = 1; i < logits.GetRows(); i++)
+            {
+                float v = logits.At(b, d, i, 0);
+                if (v > max_val) max_val = v;
+            }
+
+            // ---- 2. softmax ----
+            float sum = 0.0f;
+            for (size_t i = 0; i < logits.GetRows(); ++i)
+            {
+                float e = std::exp(logits.At(b, d, i, 0) - max_val);
+                grad_logits.At(b, d, i, 0) = e; // reuse buffer temporarily
+                sum += e;
+            }
+
+            // ---- 3. normalize ----
+            float inv_sum = 1.0f / sum;
+
+            for (size_t i = 0; i < logits.GetRows(); ++i)
+                grad_logits.At(b, d, i, 0) *= inv_sum;
+
+            // ---- 4. backward: (p - y) * outer_grad ----
+            const int target = (int)targets.At(b, d, 0, 0);
+
+            float og = outer.At(0, 0, 0, 0);
+
+            for (size_t i = 0; i < logits.GetRows(); ++i)
+            {
+                float y = (i == (size_t)target) ? 1.0f : 0.0f;
+                grad_logits.At(b, d, i, 0) = (grad_logits.At(b, d, i, 0) - y) * og;
+            }
+        }
+}
+
+
+
 // dA += dOut @ B^T
 inline void Kernels::MatMul_Backward_A(Tensor& gradA, const Tensor& dOut, const Tensor& B)
 {
@@ -430,6 +536,85 @@ inline void Kernels::MatMul_Backward_B(
 
 
 
+//out = A * B^T
+inline void Kernels::MatMul_Backward_A(
+    Tensor4D& out,
+    const Tensor4D& A,
+    const Tensor4D& B)
+{
+    const size_t outB = out.GetBatches();
+    const size_t outD = out.GetDepth();
+
+    const size_t I = A.GetRows();
+    const size_t K = A.GetColumns();
+    const size_t J = B.GetRows();   // B is logically transposed in forward
+
+    for (size_t b = 0; b < outB; ++b)
+        for (size_t d = 0; d < outD; ++d)
+        {
+            size_t aB = (A.GetBatches() == 1) ? 0 : b;
+            size_t bB = (B.GetBatches() == 1) ? 0 : b;
+            size_t aD = (A.GetDepth() == 1) ? 0 : d;
+            size_t bD = (B.GetDepth() == 1) ? 0 : d;
+
+            for (size_t i = 0; i < I; ++i)
+                for (size_t j = 0; j < J; ++j)
+                {
+                    float sum = 0.0f;
+
+                    // B^T: B[j,k]
+                    for (size_t k = 0; k < K; ++k)
+                    {
+                        sum += A.At(aB, aD, i, k) *
+                            B.At(bB, bD, j, k);
+                    }
+
+                    out.At(b, d, i, j) += sum;
+                }
+        }
+}
+
+
+
+//out = A^T * B
+inline void Kernels::MatMul_Backward_B(
+    Tensor4D& out,
+    const Tensor4D& A,
+    const Tensor4D& B)
+{
+    const size_t outB = out.GetBatches();
+    const size_t outD = out.GetDepth();
+
+    const size_t I = A.GetColumns(); // rows of A^T
+    const size_t J = B.GetColumns();
+    const size_t K = A.GetRows();
+
+    for (size_t b = 0; b < outB; ++b)
+        for (size_t d = 0; d < outD; ++d)
+        {
+            size_t aB = (A.GetBatches() == 1) ? 0 : b;
+            size_t bB = (B.GetBatches() == 1) ? 0 : b;
+            size_t aD = (A.GetDepth() == 1) ? 0 : d;
+            size_t bD = (B.GetDepth() == 1) ? 0 : d;
+
+            for (size_t i = 0; i < I; ++i)
+                for (size_t j = 0; j < J; ++j)
+                {
+                    float sum = 0.0f;
+
+                    for (size_t k = 0; k < K; ++k)
+                    {
+                        sum += A.At(aB, aD, k, i) *
+                            B.At(bB, bD, k, j);
+                    }
+
+                    out.At(b, d, i, j) += sum;
+                }
+        }
+}
+
+
+
 inline void Kernels::SGD_Update(Tensor& param, const Tensor& grad, Tensor& velocity, float lr, float momentum)
 {
     float* p = param.Data();
@@ -464,7 +649,7 @@ inline void Kernels::SGD_Update(Tensor4D& param, const Tensor4D& grad, Tensor4D&
 
 
 
-inline Tensor4D Kernels::Conv2D_Forward(const Tensor4D& Input, const Tensor4D& Kernel, int Stride, int Padding)
+inline void Kernels::Conv2D_Forward(Tensor4D& out, const Tensor4D& Input, const Tensor4D& Kernel, int Stride, int Padding)
 {
     // Output shape berechnen
     size_t N    = Input.GetShape()[0];
@@ -479,7 +664,14 @@ inline Tensor4D Kernels::Conv2D_Forward(const Tensor4D& Input, const Tensor4D& K
     size_t H_out = (H + 2 * Padding - kernel_size) / Stride + 1;
     size_t W_out = (W + 2 * Padding - kernel_size) / Stride + 1;
 
-    auto output = Tensor4D({ N, out_channels, H_out, W_out });
+    if (out.GetShape()[0] != N)
+		throw std::runtime_error("Conv2D_Forward(): Output shape mismatch");
+    if (out.GetShape()[1] != out_channels)
+        throw std::runtime_error("Conv2D_Forward(): Output shape mismatch");
+    if (out.GetShape()[2] != H_out)
+        throw std::runtime_error("Conv2D_Forward(): Output shape mismatch");
+    if (out.GetShape()[3] != W_out)
+        throw std::runtime_error("Conv2D_Forward(): Output shape mismatch");
 
     for (size_t n = 0; n < N; n++)
     {
@@ -506,13 +698,11 @@ inline Tensor4D Kernels::Conv2D_Forward(const Tensor4D& Input, const Tensor4D& K
                         }
                     }
 
-                    output.At(n, oc, oh, ow) = sum;
+                    out.At(n, oc, oh, ow) = sum;
                 }
             }
         }
     }
-
-    return output;
 }
 
 

@@ -163,12 +163,12 @@ void Node<T>::_Backwards(std::unordered_set<Node<T>*>& Visited) const
     case Operator::Multiply:
         if constexpr (std::is_same_v<T, Tensor4D>)
         {
-            left->grad += grad % right->value.Transpose();
+            left->grad  += grad % right->value.Transpose();
             right->grad += left->value.Transpose() % grad;
         }
         else
         {
-            left->grad += grad * right->value.Transpose();
+            left->grad  += grad * right->value.Transpose();
             right->grad += left->value.Transpose() * grad;
         }
         break;
@@ -551,7 +551,20 @@ NodePtr<T> Node<T>::Softmax_CrossEntropy(NodePtr<T> Target)
 template<typename T>
 NodePtr<T> Node<T>::Conv2D(NodePtr<T> Kernel, int Stride, int Padding)
 {
-    auto out = std::make_shared<Node<T>>(Kernels::Conv2D_Forward(this->value, Kernel->value, Stride, Padding));
+    size_t N = this->GetValue().GetShape()[0];
+    size_t H = this->GetValue().GetShape()[2];
+    size_t W = this->GetValue().GetShape()[3];
+
+    size_t kernel_size = Kernel->GetValue().GetShape()[2];
+    size_t out_channels = Kernel->GetValue().GetShape()[0];
+    size_t H_out = (H + 2 * Padding - kernel_size) / Stride + 1;
+    size_t W_out = (W + 2 * Padding - kernel_size) / Stride + 1;
+
+    auto tensor = Tensor4D({ N, out_channels, H_out, W_out });
+
+    Kernels::Conv2D_Forward(tensor, this->value, Kernel->value, Stride, Padding);
+
+    auto out = std::make_shared<Node<T>>(tensor);
 
     out->op      = Operator::Conv2D;
     out->left    = this->shared_from_this();
