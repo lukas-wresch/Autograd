@@ -106,6 +106,26 @@ public:
 			return false;
 		}
 
+		void Save(std::ostream& os) const
+		{
+			// write shape
+			for (size_t i = 0; i < 4; i++)
+				os.write(reinterpret_cast<const char*>(&size[i]), sizeof(size_t));
+
+			for (size_t i = 0; i < 4; i++)
+				os.write(reinterpret_cast<const char*>(&stride[i]), sizeof(size_t));
+		}
+
+		Shape(std::istream& is)
+		{
+			// read shape
+			for (size_t i = 0; i < 4; i++)
+				is.read(reinterpret_cast<char*>(&size[i]), sizeof(size_t));
+
+			for (size_t i = 0; i < 4; i++)
+				is.read(reinterpret_cast<char*>(&stride[i]), sizeof(size_t));
+		}
+
 		size_t ComputeSize() const
 		{
 			size_t s = 1;
@@ -177,6 +197,8 @@ public:
 
 
 
+	Tensor4D() {}
+
 	Tensor4D(const Tensor4D& T) : m_Storage(T.m_Storage), m_Shape(T.m_Shape), m_Offset(T.m_Offset)
 	{}
 
@@ -203,6 +225,27 @@ public:
 
 		// assumes contiguous storage
 		std::copy(src.Data(), src.Data() + GetSize(), Data());
+	}
+
+	void Save(std::ostream& os) const
+	{
+		// write data
+		if (!m_Shape.IsContiguous())
+			throw std::runtime_error("Save only supports contiguous tensors");
+
+		os.write(reinterpret_cast<const char*>(m_Storage->GetData() + m_Offset), m_Shape.ComputeSize() * sizeof(float));
+	}
+
+	Tensor4D(Shape Shape, std::istream& is) : m_Shape(Shape)
+	{
+		size_t n = Shape.ComputeSize();
+
+		// allocate new storage
+		std::vector<float> buffer(n);
+		is.read(reinterpret_cast<char*>(buffer.data()), n * sizeof(float));
+
+		// replace storage
+		m_Storage = std::make_shared<Storage>(m_Shape.ComputeSize(), buffer.data());
 	}
 
 	Tensor4D(Tensor4D&&) noexcept = default;
@@ -757,7 +800,6 @@ public:
 	}
 
 private:
-	Tensor4D() {}
 	Tensor4D(std::shared_ptr<Storage> Storage, const Shape& Shape, size_t Offset = 0) : m_Storage(Storage), m_Shape(Shape), m_Offset(Offset)
 	{}
 

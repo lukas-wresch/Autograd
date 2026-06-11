@@ -2,9 +2,11 @@
 #include <unordered_map>
 #include <string>
 #include <stdio.h>
+#include <fstream>
 #include "node.h"
 #include "tensor4d.h"
 #include "kernels.h"
+#include "thread_pool.h"
 
 
 
@@ -31,6 +33,60 @@ struct TapeEntry
     size_t C;
     size_t H;
     size_t W;
+
+
+    void Save(std::ostream& os) const
+    {
+        os.write((char*)&op, sizeof(op));
+
+        os.write((char*)&a, sizeof(a));
+        os.write((char*)&b, sizeof(b));
+        os.write((char*)&c, sizeof(c));
+        os.write((char*)&out, sizeof(out));
+
+        os.write((char*)&stride, sizeof(stride));
+        os.write((char*)&padding, sizeof(padding));
+        os.write((char*)&kernel_size, sizeof(kernel_size));
+
+        os.write((char*)&B, sizeof(B));
+        os.write((char*)&C, sizeof(C));
+        os.write((char*)&H, sizeof(H));
+        os.write((char*)&W, sizeof(W));
+
+        size_t n = inputs.size();
+        os.write((char*)&n, sizeof(n));
+
+        if (n)
+            os.write((char*)inputs.data(), sizeof(int) * n);
+    }
+
+
+    void Load(std::istream& is)
+    {
+        is.read((char*)&op, sizeof(op));
+
+        is.read((char*)&a, sizeof(a));
+        is.read((char*)&b, sizeof(b));
+        is.read((char*)&c, sizeof(c));
+        is.read((char*)&out, sizeof(out));
+
+        is.read((char*)&stride, sizeof(stride));
+        is.read((char*)&padding, sizeof(padding));
+        is.read((char*)&kernel_size, sizeof(kernel_size));
+
+        is.read((char*)&B, sizeof(B));
+        is.read((char*)&C, sizeof(C));
+        is.read((char*)&H, sizeof(H));
+        is.read((char*)&W, sizeof(W));
+
+        size_t n;
+        is.read((char*)&n, sizeof(n));
+
+        inputs.resize(n);
+
+        if (n)
+            is.read((char*)inputs.data(), sizeof(int) * n);
+    }
 };
 
 
@@ -150,6 +206,9 @@ public:
 
     void PrintTape() const;
 
+    void SaveToFile(const std::string& filename) const;
+    bool LoadFromFile(const std::string& filename);
+
 private:
     void Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T>, int>& node_to_id);
 
@@ -159,6 +218,8 @@ private:
     std::vector<T> grads;
     std::vector<bool> trainable;
     std::vector<bool> requires_grad;
+
+    ThreadPool thread_pool = ThreadPool(4);
 
     std::unordered_map<std::string, int> label_to_id;
     std::unordered_map<int, std::string> id_to_label;
@@ -385,7 +446,7 @@ void TapeRecorder<T>::Forward()
         case Operator::Conv2D:
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                Kernels::Conv2D_Forward(values[entry.out], values[entry.a], values[entry.b], entry.stride, entry.padding);
+                Kernels::Conv2D_Forward(thread_pool, values[entry.out], values[entry.a], values[entry.b], entry.stride, entry.padding);
                 //values[entry.a].Print();
                 //values[entry.b].Print();
                 //values[entry.out].Print();
@@ -832,4 +893,160 @@ inline void TapeRecorder<T>::PrintTape() const
     }
 
     printf("\n");
+}
+
+
+
+template<typename T>
+inline void TapeRecorder<T>::SaveToFile(const std::string& filename) const
+{
+    std::ofstream file(filename, std::ios::binary);
+
+    if (!file)
+        throw std::runtime_error("Cannot open file");
+
+    uint32_t magic = 0x54415045; // "TAPE"
+
+    file.write((char*)&magic, sizeof(magic));
+
+    size_t tape_size = tape.size();
+    file.write((char*)&tape_size, sizeof(tape_size));
+
+    for (auto& e : tape)
+        e.Save(file);
+
+    size_t value_count = values.size();
+    file.write((char*)&value_count, sizeof(value_count));
+
+    for (size_t i = 0; i < values.size(); i++)
+    {
+        uint8_t t = trainable[i] ? 1 : 0;
+        file.write((char*)(&t), sizeof(uint8_t));
+        t = requires_grad[i] ? 1 : 0;
+        file.write((char*)(&t), sizeof(uint8_t));
+
+        values[i].GetShape().Save(file);
+
+        if (trainable[i])
+            values[i].Save(file);
+    }
+
+    size_t label_to_id_count = label_to_id.size();
+    file.write((char*)&label_to_id_count, sizeof(label_to_id_count));
+
+    for (auto& [label, id] : label_to_id)
+    {
+        file.write((char*)&id, sizeof(id));
+
+        size_t len = label.size();
+        file.write((char*)&len, sizeof(len));
+        file.write(label.data(), len);
+    }
+
+
+    size_t id_count = id_to_label.size();
+    file.write((char*)&id_count, sizeof(id_count));
+
+    for (auto& [id, label] : id_to_label)
+    {
+        file.write((char*)&id, sizeof(id));
+
+        size_t len = label.size();
+        file.write((char*)&len, sizeof(len));
+        file.write(label.data(), len);
+    }
+}
+
+
+
+template<typename T>
+inline bool TapeRecorder<T>::LoadFromFile(const std::string& filename)
+{
+    std::ifstream file(filename, std::ios::binary);
+
+    if (!file)
+        return false;
+
+    uint32_t magic;
+    file.read((char*)&magic, sizeof(magic));
+
+    if (magic != 0x54415045)
+        return false;
+
+    size_t tape_size;
+    file.read((char*)&tape_size, sizeof(tape_size));
+
+    tape.resize(tape_size);
+
+    for (auto& e : tape)
+        e.Load(file);
+
+    size_t value_count;
+    file.read((char*)&value_count, sizeof(value_count));
+
+    values.resize(value_count);
+    grads.resize(value_count);
+
+    trainable.resize(value_count);
+    requires_grad.resize(value_count);
+
+    for (size_t i = 0; i < value_count; i++)
+    {
+        uint8_t tmp;
+        file.read((char*)&tmp, sizeof(uint8_t));
+        trainable[i] = tmp == 1;
+        file.read((char*)&tmp, sizeof(uint8_t));
+        requires_grad[i] = tmp == 1;
+
+        Tensor4D::Shape shape(file);
+
+        if (trainable[i])
+            values[i] = Tensor4D(shape, file);
+        else
+            values[i] = Tensor4D(shape);
+
+        grads[i] = values[i].Clone();
+    }
+
+
+    size_t label_to_id_count;
+    file.read((char*)&label_to_id_count, sizeof(label_to_id_count));
+
+    label_to_id.clear();
+
+    for (size_t i = 0;i < label_to_id_count;i++)
+    {
+        int id;
+        file.read((char*)&id, sizeof(id));
+
+        size_t len;
+        file.read((char*)&len, sizeof(len));
+
+        std::string label(len, '\0');
+        file.read(label.data(), len);
+
+        label_to_id[label] = id;
+    }
+
+
+    size_t id_count;
+    file.read((char*)&id_count, sizeof(id_count));
+
+    id_to_label.clear();
+
+    for (size_t i = 0;i < id_count;i++)
+    {
+        int id;
+        file.read((char*)&id, sizeof(id));
+
+        size_t len;
+        file.read((char*)&len, sizeof(len));
+
+        std::string label(len, '\0');
+        file.read(label.data(), len);
+
+        id_to_label[id] = std::move(label);
+    }
+
+    return true;
 }
