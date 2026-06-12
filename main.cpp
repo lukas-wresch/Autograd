@@ -18,6 +18,7 @@
 #include "mnist.h"
 #include "cifar.h"
 #include "progressmanager.h"
+#include "trainer.h"
 
 
 
@@ -1530,7 +1531,79 @@ int main()
 	//MNist_Tensor();
 	//MNist_Tensor4D();
 
-	Cifar10_Tensor4D();
+	//Cifar10_Tensor4D();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	MNist mnist = MNist();
+	
+	Trainer::DataSet data;
+
+	for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
+	{
+		data.train_data.push_back(mnist.GetTrainImageTensor(i));
+		Tensor4D label({ 1,1,1,1 });
+		label.At(0, 0, 0, 0) = (float)mnist.GetTrainingLabelData(i);
+		data.train_labels.push_back(label);
+	}
+
+	for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
+	{
+		data.valid_data.push_back(Tensor4D({ 1, 1, 28 * 28, 1 }, mnist.GetValidationImageData(i)));
+		Tensor4D label({ 1,1,1,1 });
+		label.At(0, 0, 0, 0) = (float)mnist.GetValidationLabelData(i);
+		data.valid_labels.push_back(label);
+	}
+
+
+	auto tape = TapeRecorder<Tensor4D>();
+	SGD<Tensor4D> sgd(0.003f, 0.9f);
+	const int batch_size = 64;
+
+
+	auto input = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 28, 28 }), "input");
+	auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 1, 1 }),   "label");
+
+	Conv2D conv1(1, 8, 3, 1, 1, Activation::ReLU, "conv1");
+	Conv2D conv2(8, 16, 3, 1, 1, Activation::ReLU, "conv2");
+	Layer4D L1(3136, 128, Activation::ReLU, InitType::Xavier, "L1");
+	Layer4D L2(128,   10, Activation::Identity, InitType::Xavier, "L2");
+
+	auto out_conv1 = conv1.Conv(input);
+	auto out_conv2 = conv2.Conv(out_conv1)->MaxPool2D(2, 2);
+	auto flattened = out_conv2->Flatten();
+
+	flattened->SetLabel("flattened");
+
+	auto h1 = L1.Forward(flattened);
+	auto pred = L2.Forward(h1);
+	pred->SetLabel("output");
+
+	auto loss = pred->Softmax_CrossEntropy(label);
+	loss->SetLabel("loss");
+
+	tape.Compile(loss);
+	sgd.SetTrainableParams(tape);
+	std::cout << "Number of parameters: " << sgd.GetNumberOfParameters() << std::endl;
+
+	Trainer trainer(data, tape, sgd);
+
+	trainer.TrainingLoop();
 
 
 	return 0;

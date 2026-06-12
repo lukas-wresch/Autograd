@@ -31,6 +31,9 @@ enum class Operator
     Conv2D,
     MaxPool2D,
     Flatten,
+
+    BatchNorm,
+    BatchNorm2D,
 };
 
 
@@ -83,6 +86,8 @@ public:
     NodePtr<T> Conv2D(NodePtr<T> Kernel, int Stride = 1, int Padding = 0);
     NodePtr<T> MaxPool2D(int KernelSize, int Stride);
     NodePtr<T> Flatten();
+    NodePtr<T> BatchNorm();
+    NodePtr<T> BatchNorm2D();
 
     void Backwards();
 
@@ -605,5 +610,29 @@ NodePtr<T> Node<T>::Flatten()
 	out->C = C;
 	out->H = H;
     out->W = W;
+    return out;
+}
+
+
+
+template<typename T>
+NodePtr<T> Node<T>::BatchNorm()
+{
+    auto out = std::make_shared<Node<T>>(this->value.BatchNorm());
+
+    out->op = Operator::NatchNorm;
+    out->left = this->shared_from_this();
+    return out;
+}
+
+
+
+template<typename T>
+NodePtr<T> Node<T>::BatchNorm2D()
+{
+    auto out = std::make_shared<Node<T>>(this->value.BatchNorm2D());
+
+    out->op = Operator::NatchNorm;
+    out->left = this->shared_from_this();
     return out;
 }

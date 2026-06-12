@@ -815,6 +815,36 @@ public:
 		return Tensor4D({ 1 }, { loss / GetBatches() });
 	}
 
+	Tensor4D BatchNorm() const
+	{
+		const float eps = 0.001f;
+		Tensor4D out({ 1, GetDepth(), GetRows(), GetColumns() });
+
+		for (size_t d = 0; d < GetDepth(); d++)
+			for (size_t r = 0; r < GetRows(); r++)
+				for (size_t c = 0; c < GetColumns(); c++)
+				{
+					float sum = 0;
+
+					for (size_t b = 0; b < GetBatches(); b++)
+						sum += At(b, d, r, c);
+
+					float mean = sum / ( (float)GetBatches() );
+
+					sum = 0;
+
+					for (size_t b = 0; b < GetBatches(); b++)
+						sum += (At(b, d, r, c) - mean) * (At(b, d, r, c) - mean);
+
+					float std = sqrtf(sum / (float)GetBatches());
+
+					for (size_t b = 0; b < GetBatches(); b++)
+						out.At(b, d, r, c) = (At(b, d, r, c) - mean) / (std + eps);
+				}
+
+		return out;
+	}
+
 	inline Tensor4D operator+( const Tensor4D& rhs) const;
 	inline void     operator+=(const Tensor4D& rhs);
 

@@ -135,11 +135,13 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="mnist.cpp" />
     <ClCompile Include="progressmanager.cpp" />
+    <ClCompile Include="trainer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cifar.h" />
     <ClInclude Include="mnist.h" />
     <ClInclude Include="progressmanager.h" />
+    <ClInclude Include="src\batch_norm.h" />
     <ClInclude Include="src\conv2d.h" />
     <ClInclude Include="src\kernels.h" />
     <ClInclude Include="src\layer.h" />
@@ -153,6 +155,7 @@
     <ClInclude Include="src\tensor4d.h" />
     <ClInclude Include="src\thread_pool.h" />
     <ClInclude Include="src\vector.h" />
+    <ClInclude Include="trainer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

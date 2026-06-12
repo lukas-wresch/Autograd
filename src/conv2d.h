@@ -1,6 +1,5 @@
 #pragma once
 #include "tensor4d.h"
-#include "tensor4d.h"
 
 
 
@@ -10,9 +9,9 @@ public:
 	Conv2D(size_t in_channels, size_t out_channels, size_t kernel_size, int stride = 1, int padding = 0, Activation Activation = Activation::Identity, std::string Label = "")
         : m_Stride(stride), m_Padding(padding), m_Activation(Activation)
     {
-        m_Weights = Node<Tensor4D>::Create(Tensor4D({ out_channels, in_channels, kernel_size, kernel_size }), "conv_weights");
+        m_Weights = Node<Tensor4D>::Create(Tensor4D({ out_channels, in_channels, kernel_size, kernel_size }));
 
-        m_Biases = Node<Tensor4D>::Create(Tensor4D({ 1, out_channels, 1, 1 }), "conv_bias");
+        m_Biases = Node<Tensor4D>::Create(Tensor4D({ 1, out_channels, 1, 1 }));
 
 		float fan_in = static_cast<float>(in_channels * kernel_size * kernel_size);
 		float fan_out = static_cast<float>(out_channels * kernel_size * kernel_size);
