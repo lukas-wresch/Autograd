@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <iostream>
 #include <random>
+#include <format>
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -16,6 +17,11 @@
 #include "src/conv2d.h"
 #include "mnist.h"
 #include "cifar.h"
+#include "progressmanager.h"
+
+
+
+ProgressManager mgr;
 
 
 
@@ -184,9 +190,12 @@ void Cifar10_Tensor4D()
 
 
 	auto tape = TapeRecorder<Tensor4D>();
-	SGD<Tensor4D> sgd(0.003f, 0.8f);
+	SGD<Tensor4D> sgd(0.001f, 0.8f);
 	const int batch_size = 64;
 
+	if (tape.LoadFromFile("cifar-10.tape"))
+		std::cout << "Model loaded!" << std::endl;
+	else
 	{
 		auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 3, 32, 32 }), "input");
 		auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 1, 1 }), "label");
@@ -201,14 +210,14 @@ void Cifar10_Tensor4D()
 		Conv2D conv4(64, 64, 3, 1, 1, Activation::ReLU);
 
 		auto out_conv3 = conv3.Conv(out_conv2);
-		auto out_conv4 = conv4.Conv(out_conv3)->MaxPool2D(2, 2);
+		//auto out_conv4 = conv4.Conv(out_conv3)->MaxPool2D(2, 2);
+		auto out_conv4 = conv4.Conv(out_conv3);
 
 		auto flattened = out_conv4->Flatten();
 
 		flattened->SetLabel("flattened");
 
 		Layer4D L1(flattened->GetSize() / batch_size, 128, Activation::ReLU, InitType::Xavier);
-		//Layer4D L1(1568, 128, Activation::ReLU, InitType::Xavier);
 		Layer4D L2(128, 10, Activation::Identity, InitType::Xavier);
 		
 
@@ -238,12 +247,16 @@ void Cifar10_Tensor4D()
 
 	size_t train_size = xs_train.size();
 	std::cout << "Training size: " << train_size << std::endl;
+	std::cout << "batch_size: " << batch_size << std::endl;
 
 
 	// Forward pass
 	auto calculate_acc = [&]() {
 		int correct = 0;
 		int val_correct = 0;
+
+		auto task_train = mgr.createBar("Train Accuracy", (int)train_size);
+		auto task_valid = mgr.createBar("Validation Accuracy", (int)xs_val.size());
 
 		for (size_t i = 0; i < train_size;)
 		{
@@ -269,8 +282,8 @@ void Cifar10_Tensor4D()
 
 			i += actual_batch_size;
 
-			if (i%100 == 0)
-				ProgressBar("Train Accuracy", i, train_size);
+			task_train.description(std::format("Acc: {:.2f}%", (float)correct * 100.0f / i));
+			task_train.update(i);
 		}
 
 
@@ -298,19 +311,20 @@ void Cifar10_Tensor4D()
 
 			i += actual_batch_size;
 
-			if (i % 100 == 0)
-				ProgressBar("Validation Accuracy", i, xs_val.size());
+			task_valid.description(std::format("Acc: {:.2f}%", (float)val_correct * 100.0f / i));
+			task_valid.update(i);
 		}
 
 		return std::tuple{ (float)correct * 100.0f / train_size, (float)val_correct * 100.0f / xs_val.size() };
 	};
 
 
+
 	//Training loop
 
 	float epoch_loss = 0.0f;
 
-	for (size_t epoch = 0; epoch < 10; epoch++)
+	for (size_t epoch = 0; epoch < 5; epoch++)
 	{
 		if (train_size == xs_train.size())
 			ShuffleDataset(xs_train, labels_train);
@@ -319,6 +333,8 @@ void Cifar10_Tensor4D()
 		epoch_loss = 0.0f;
 
 		DWORD start_time = timeGetTime();
+
+		auto task = mgr.createBar("Epoch " + std::to_string(epoch+1), train_size);
 
 		for (size_t i = 0; i < train_size; i += batch_size)
 		{
@@ -338,17 +354,24 @@ void Cifar10_Tensor4D()
 			if (actual_batch_size != batch_size)
 				continue;
 
+			auto batch_start_time = timeGetTime();
 			tape.Forward();
 			tape.ZeroGradients();
 			tape.Backward();
+			auto batch_duration = timeGetTime() - batch_start_time;
 
 			epoch_loss += loss->At(0, 0, 0, 0) * actual_batch_size;
 			batch_loss += loss->At(0, 0, 0, 0) * actual_batch_size;
 
-			if ((i / batch_size) % 50 == 0)
+			//if ((i / batch_size) == 0)
 			{
 				//ProgressBar(i, train_size);
-				std::cout << "Batch " << i / batch_size + 1 << " of " << train_size / batch_size << " batch_loss " << batch_loss / batch_size << std::endl;
+				//std::cout << "Batch " << i / batch_size + 1 << " of " << train_size / batch_size << " batch_loss " << batch_loss / batch_size << std::endl;
+				task.update(i);
+				float passes_per_second = (float)batch_size / batch_duration * 1000.0f;
+				float eta = ((float)(train_size - i) / passes_per_second) / 60.0f;
+				std::string desc = std::format("passes/s: {:.2f} Loss: {:.4f} ETA: {:.1f}m", passes_per_second, loss->At(0, 0, 0, 0), eta);
+				task.description(desc);
 			}
 
 			sgd.Step();
@@ -362,11 +385,18 @@ void Cifar10_Tensor4D()
 		std::cout << "batch_size: " << batch_size << std::endl;
 		std::cout << "samples_per_second: " << samples_per_second << std::endl;
 		std::cout << "Epoch " << epoch + 1 << " Loss: " << epoch_loss << std::endl;
+
+		//tape.SaveToFile("cifar-10.tape");
+		std::cout << "Model saved" << std::endl;
+
+		std::cout << "\n\n" << std::endl;
+
 		auto [train_acc, val_acc] = calculate_acc();
 		std::cout << "Train Accuracy: " << train_acc << "%" << std::endl;
 		std::cout << "Valid Accuracy: " << val_acc << "%" << std::endl;
 
 		sgd.SetLearningRate(0.95f * sgd.GetLearningRate());
+		std::cout << "\n\n" << std::endl;
 	}
 
 	/*auto [train_acc, val_acc] = calculate_acc();
@@ -408,7 +438,7 @@ void MNist_Tensor4D()
 
 	auto tape = TapeRecorder<Tensor4D>();
 	SGD<Tensor4D> sgd(0.001f, 0.3f);
-	const int batch_size = 1;
+	const int batch_size = 64;
 
 	{
 		//auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 28, 28 }), "input");
@@ -460,7 +490,8 @@ void MNist_Tensor4D()
 
 	tape.PrintTape();
 
-	size_t train_size = xs_train.size() / 10;
+	size_t train_size = xs_train.size();
+	std::cout << "batch_size: " << batch_size << std::endl;
 
 
 	// Forward pass
@@ -492,8 +523,8 @@ void MNist_Tensor4D()
 
 			i += actual_batch_size;
 
-			if (i/actual_batch_size % 100 == 0)
-				ProgressBar("Train Accuracy", i, train_size);
+			//if (i/actual_batch_size % 100 == 0)
+				//ProgressBar("Train Accuracy", i, train_size);
 		}
 
 		ClearProgressBar();
@@ -524,7 +555,7 @@ void MNist_Tensor4D()
 			i += actual_batch_size;
 
 			if (i / actual_batch_size % 100 == 0)
-				ProgressBar("Validation Accuracy", i, xs_val.size());
+				ProgressBar("Validation Accuracy", (int)i, (int)xs_val.size());
 		}
 
 		ClearProgressBar();
@@ -579,16 +610,19 @@ void MNist_Tensor4D()
 			epoch_loss += loss->At(0, 0, 0, 0) * actual_batch_size;
 			batch_loss += loss->At(0, 0, 0, 0) * actual_batch_size;
 
-			if (i / batch_size % (train_size / 50) == 0)
-				std::cout << "Batch " << i / batch_size + 1 << " of " << train_size / batch_size << " batch_loss " << batch_loss / batch_size << std::endl;
+			//if (i / batch_size  == 0)
+			std::cout << "Batch " << i / batch_size + 1 << " of " << train_size / batch_size << " batch_loss " << batch_loss / batch_size << std::endl;
 
 			sgd.Step();
+			//tape.PrintTape();
 		}
 
 		epoch_loss /= train_size;
 
 		auto epoch_duration = timeGetTime() - start_time;
 		auto samples_per_second = (float)train_size / epoch_duration * 1000.0f;
+
+		tape.SaveToFile("mnist.tape");
 
 		std::cout << "batch_size: " << batch_size << std::endl;
 		std::cout << "samples_per_second: " << samples_per_second << std::endl;

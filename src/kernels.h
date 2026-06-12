@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include "tensor4d.h"
 #include "tensor.h"
+#include "thread_pool.h"
 
 
 
@@ -27,6 +28,7 @@ public:
     static void SGD_Update(Tensor4D& param, const Tensor4D& grad, Tensor4D& velocity, float lr, float momentum);
 
     static void Conv2D_Forward(Tensor4D& out, const Tensor4D& Input, const Tensor4D& Kernel, int Stride = 1, int Padding = 0);
+    static void Conv2D_Forward(ThreadPool& Pool, Tensor4D& out, const Tensor4D& Input, const Tensor4D& Kernel, int Stride, int Padding);
     static void Conv2D_Backward(Tensor4D& dInput, Tensor4D& dKernel, const Tensor4D& Input, const Tensor4D& Kernel, const Tensor4D& dOut, int Stride, int Padding);
 
     static Tensor4D MaxPool2D_Forward(const Tensor4D& Input, int KernelSize, int Stride, Tensor4D* ArgMax = nullptr);
@@ -672,6 +674,213 @@ inline void Kernels::Conv2D_Forward(Tensor4D& out, const Tensor4D& Input, const 
         throw std::runtime_error("Conv2D_Forward(): Output shape mismatch");
     if (out.GetShape()[3] != W_out)
         throw std::runtime_error("Conv2D_Forward(): Output shape mismatch");
+
+    // =========================================================
+    // FAST PATH: all tensors contiguous
+    // =========================================================
+
+    if (Input.IsContiguous() && Kernel.IsContiguous() && out.IsContiguous())
+    {
+        float* __restrict outPtr = out.Data();
+        const float* __restrict inPtr = Input.Data();
+        const float* __restrict kPtr = Kernel.Data();
+
+        const size_t in_HW = H * W;
+        const size_t out_HW = H_out * W_out;
+        const size_t k_HW = kernel_size * kernel_size;
+
+        for (size_t n = 0; n < N; n++)
+        {
+            const float* in_n = inPtr + n * C_in * in_HW;
+            float* out_n = outPtr + n * out_channels * out_HW;
+
+            for (size_t oc = 0; oc < out_channels; oc++)
+            {
+                const float* k_oc = kPtr + oc * C_in * k_HW;
+                float* out_oc = out_n + oc * out_HW;
+
+                for (size_t oh = 0; oh < H_out; oh++)
+                {
+                    for (size_t ow = 0; ow < W_out; ow++)
+                    {
+                        float sum = 0.0f;
+
+                        const int ih_base = (int)oh * Stride - Padding;
+                        const int iw_base = (int)ow * Stride - Padding;
+
+                        for (size_t ic = 0; ic < C_in; ic++)
+                        {
+                            const float* in_ic = in_n + ic * in_HW;
+                            const float* k_ic = k_oc + ic * k_HW;
+
+                            for (size_t kh = 0; kh < kernel_size; kh++)
+                            {
+                                const int ih = ih_base + (int)kh;
+                                if (ih < 0 || ih >= (int)H) continue;
+
+                                const float* in_row = in_ic + ih * W;
+
+                                for (size_t kw = 0; kw < kernel_size; kw++)
+                                {
+                                    const int iw = iw_base + (int)kw;
+                                    if (iw < 0 || iw >= (int)W) continue;
+
+                                    sum += in_row[iw] * k_ic[kh * kernel_size + kw];
+                                }
+                            }
+                        }
+
+                        out_oc[oh * W_out + ow] = sum;
+                    }
+                }
+            }
+        }
+
+        return;
+    }
+
+    // =========================================================
+    // SLOW PATH
+    // =========================================================
+
+    for (size_t n = 0; n < N; n++)
+    {
+        for (size_t oc = 0; oc < out_channels; oc++)
+        {
+            for (size_t oh = 0; oh < H_out; oh++)
+            {
+                for (size_t ow = 0; ow < W_out; ow++)
+                {
+                    float sum = 0.0f;
+
+                    for (size_t ic = 0; ic < in_channels; ic++)
+                    {
+                        for (size_t kh = 0; kh < kernel_size; kh++)
+                        {
+                            for (size_t kw = 0; kw < kernel_size; kw++)
+                            {
+                                int ih = (int)(oh * Stride + kh - Padding);
+                                int iw = (int)(ow * Stride + kw - Padding);
+
+                                if (ih >= 0 && ih < (int)H && iw >= 0 && iw < (int)W)
+                                    sum += Input.At(n, ic, ih, iw) * Kernel.At(oc, ic, kh, kw);
+                            }
+                        }
+                    }
+
+                    out.At(n, oc, oh, ow) = sum;
+                }
+            }
+        }
+    }
+}
+
+
+
+inline void Kernels::Conv2D_Forward(ThreadPool& Pool, Tensor4D& out, const Tensor4D& Input, const Tensor4D& Kernel, int Stride, int Padding)
+{
+    // Output shape berechnen
+    size_t N = Input.GetShape()[0];
+    size_t C_in = Input.GetShape()[1];
+    size_t H = Input.GetShape()[2];
+    size_t W = Input.GetShape()[3];
+
+    size_t out_channels = Kernel.GetShape()[0];
+    size_t in_channels = Kernel.GetShape()[1];
+    size_t kernel_size = Kernel.GetShape()[2];
+
+    size_t H_out = (H + 2 * Padding - kernel_size) / Stride + 1;
+    size_t W_out = (W + 2 * Padding - kernel_size) / Stride + 1;
+
+    if (out.GetShape()[0] != N)
+        throw std::runtime_error("Conv2D_Forward(): Output shape mismatch");
+    if (out.GetShape()[1] != out_channels)
+        throw std::runtime_error("Conv2D_Forward(): Output shape mismatch");
+    if (out.GetShape()[2] != H_out)
+        throw std::runtime_error("Conv2D_Forward(): Output shape mismatch");
+    if (out.GetShape()[3] != W_out)
+        throw std::runtime_error("Conv2D_Forward(): Output shape mismatch");
+
+    // =========================================================
+    // FAST PATH: all tensors contiguous
+    // =========================================================
+
+    if (Input.IsContiguous() && Kernel.IsContiguous())
+    {
+        float* __restrict outPtr = out.Data();
+        const float* __restrict inPtr = Input.Data();
+        const float* __restrict kPtr = Kernel.Data();
+
+        const size_t in_HW = H * W;
+        const size_t out_HW = H_out * W_out;
+        const size_t k_HW = kernel_size * kernel_size;
+
+        size_t chunk = N / Pool.GetWorkerCount();
+        if (chunk == 0)
+            chunk = 1;
+
+        for (size_t n0 = 0; n0 < N; n0 += chunk)
+        {
+            size_t n1 = std::min(N, n0 + chunk);
+
+            Pool.Enqueue([=]()
+            {
+                for (size_t n = n0; n < n1; n++)
+                {
+                    const float* in_n = inPtr + n * C_in * in_HW;
+                    float* out_n = outPtr + n * out_channels * out_HW;
+
+                    for (size_t oc = 0; oc < out_channels; oc++)
+                    {
+                        const float* k_oc = kPtr + oc * C_in * k_HW;
+                        float* out_oc = out_n + oc * out_HW;
+
+                        for (size_t oh = 0; oh < H_out; oh++)
+                        {
+                            for (size_t ow = 0; ow < W_out; ow++)
+                            {
+                                float sum = 0.0f;
+
+                                const int ih_base = (int)oh * Stride - Padding;
+                                const int iw_base = (int)ow * Stride - Padding;
+
+                                for (size_t ic = 0; ic < C_in; ic++)
+                                {
+                                    const float* in_ic = in_n + ic * in_HW;
+                                    const float* k_ic = k_oc + ic * k_HW;
+
+                                    for (size_t kh = 0; kh < kernel_size; kh++)
+                                    {
+                                        const int ih = ih_base + (int)kh;
+                                        if (ih < 0 || ih >= (int)H) continue;
+
+                                        const float* in_row = in_ic + ih * W;
+
+                                        for (size_t kw = 0; kw < kernel_size; kw++)
+                                        {
+                                            const int iw = iw_base + (int)kw;
+                                            if (iw < 0 || iw >= (int)W) continue;
+
+                                            sum += in_row[iw] * k_ic[kh * kernel_size + kw];
+                                        }
+                                    }
+                                }
+
+                                out_oc[oh * W_out + ow] = sum;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        Pool.Wait();
+        return;
+    }
+
+    // =========================================================
+    // SLOW PATH
+    // =========================================================
 
     for (size_t n = 0; n < N; n++)
     {

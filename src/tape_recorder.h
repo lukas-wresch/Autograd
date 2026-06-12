@@ -219,7 +219,7 @@ private:
     std::vector<bool> trainable;
     std::vector<bool> requires_grad;
 
-    ThreadPool thread_pool = ThreadPool(4);
+    ThreadPool thread_pool = ThreadPool(8);
 
     std::unordered_map<std::string, int> label_to_id;
     std::unordered_map<int, std::string> id_to_label;
@@ -446,7 +446,8 @@ void TapeRecorder<T>::Forward()
         case Operator::Conv2D:
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                Kernels::Conv2D_Forward(thread_pool, values[entry.out], values[entry.a], values[entry.b], entry.stride, entry.padding);
+                //Kernels::Conv2D_Forward(thread_pool, values[entry.out], values[entry.a], values[entry.b], entry.stride, entry.padding);
+                Kernels::Conv2D_Forward(values[entry.out], values[entry.a], values[entry.b], entry.stride, entry.padding);
                 //values[entry.a].Print();
                 //values[entry.b].Print();
                 //values[entry.out].Print();

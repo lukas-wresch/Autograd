@@ -24,6 +24,9 @@
     <ClCompile Include="cifar.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="progressmanager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\layer.h">
@@ -66,6 +69,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\conv2d.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="progressmanager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\thread_pool.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

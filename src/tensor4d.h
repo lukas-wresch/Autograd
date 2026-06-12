@@ -600,6 +600,42 @@ public:
 		return Tensor4D({ 1, 1, 1, 1 }, { sum });
 	}
 
+	float Mean() const
+	{
+		return Sum().At(0, 0, 0, 0) / (float)GetSize();
+	}
+
+	float Var() const
+	{
+		if (!IsContiguous())
+			throw std::out_of_range("Not supported for non-contiguous tensors");
+
+		float mean = Mean();
+		float sum = 0.0;
+		for (size_t i = 1; i < GetSize(); i++)
+			sum += (Data()[i] - mean) * (Data()[i] - mean);
+		return sum / (float)GetSize();
+	}
+
+	float Std() const
+	{
+		return sqrtf(Var());
+	}
+
+	float Min() const
+	{
+		if (!IsContiguous())
+			throw std::out_of_range("Not supported for non-contiguous tensors");
+
+		float min = Data()[0];
+		for (size_t i = 1; i < GetSize(); i++)
+		{
+			if (Data()[i] < min)
+				min = Data()[i];
+		}
+		return min;
+	}
+
 	float Max() const
 	{
 		if (!IsContiguous())

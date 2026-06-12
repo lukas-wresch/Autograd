@@ -105,6 +105,7 @@
     <ClCompile Include="tensor4d.cpp" />
     <ClCompile Include="tensor_backprop.cpp" />
     <ClCompile Include="test.cpp" />
+    <ClCompile Include="thread_pool.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Autograd.vcxproj">

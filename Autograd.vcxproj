@@ -70,6 +70,9 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>./</OutDir>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -131,10 +134,12 @@
     <ClCompile Include="cifar.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="mnist.cpp" />
+    <ClCompile Include="progressmanager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cifar.h" />
     <ClInclude Include="mnist.h" />
+    <ClInclude Include="progressmanager.h" />
     <ClInclude Include="src\conv2d.h" />
     <ClInclude Include="src\kernels.h" />
     <ClInclude Include="src\layer.h" />
@@ -146,6 +151,7 @@
     <ClInclude Include="src\tape_recorder.h" />
     <ClInclude Include="src\tensor.h" />
     <ClInclude Include="src\tensor4d.h" />
+    <ClInclude Include="src\thread_pool.h" />
     <ClInclude Include="src\vector.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
