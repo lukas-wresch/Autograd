@@ -620,7 +620,7 @@ NodePtr<T> Node<T>::BatchNorm()
 {
     auto out = std::make_shared<Node<T>>(this->value.BatchNorm());
 
-    out->op = Operator::NatchNorm;
+    out->op = Operator::BatchNorm;
     out->left = this->shared_from_this();
     return out;
 }
@@ -632,7 +632,7 @@ NodePtr<T> Node<T>::BatchNorm2D()
 {
     auto out = std::make_shared<Node<T>>(this->value.BatchNorm2D());
 
-    out->op = Operator::NatchNorm;
+    out->op = Operator::BatchNorm2D;
     out->left = this->shared_from_this();
     return out;
 }

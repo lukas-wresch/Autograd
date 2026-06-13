@@ -1550,7 +1550,8 @@ int main()
 
 
 
-	MNist mnist = MNist();
+	//MNist mnist = MNist();
+	Cifar mnist = Cifar();
 	
 	Trainer::DataSet data;
 
@@ -1564,7 +1565,7 @@ int main()
 
 	for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
 	{
-		data.valid_data.push_back(Tensor4D({ 1, 1, 28 * 28, 1 }, mnist.GetValidationImageData(i)));
+		data.valid_data.push_back(mnist.GetValidationImageTensor(i));
 		Tensor4D label({ 1,1,1,1 });
 		label.At(0, 0, 0, 0) = (float)mnist.GetValidationLabelData(i);
 		data.valid_labels.push_back(label);
@@ -1572,23 +1573,33 @@ int main()
 
 
 	auto tape = TapeRecorder<Tensor4D>();
-	SGD<Tensor4D> sgd(0.003f, 0.9f);
+	SGD<Tensor4D> sgd(0.0001f, 0.8f);
 	const int batch_size = 64;
 
 
-	auto input = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 28, 28 }), "input");
-	auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 1, 1 }),   "label");
+	auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 3, 32, 32 }), "input");
+	auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 1, 1 }), "label");
 
-	Conv2D conv1(1, 8, 3, 1, 1, Activation::ReLU, "conv1");
-	Conv2D conv2(8, 16, 3, 1, 1, Activation::ReLU, "conv2");
-	Layer4D L1(3136, 128, Activation::ReLU, InitType::Xavier, "L1");
-	Layer4D L2(128,   10, Activation::Identity, InitType::Xavier, "L2");
+	Conv2D conv1(3, 16, 3, 1, 1, Activation::ReLU);
+	Conv2D conv2(16, 16, 3, 1, 1, Activation::ReLU, true);
 
-	auto out_conv1 = conv1.Conv(input);
+	auto out_conv1 = conv1.Conv(x);
 	auto out_conv2 = conv2.Conv(out_conv1)->MaxPool2D(2, 2);
-	auto flattened = out_conv2->Flatten();
+
+	Conv2D conv3(16, 32, 3, 1, 1, Activation::ReLU);
+	Conv2D conv4(32, 32, 3, 1, 1, Activation::ReLU, true);
+
+	auto out_conv3 = conv3.Conv(out_conv2);
+	auto out_conv4 = conv4.Conv(out_conv3)->MaxPool2D(2, 2);
+	//auto out_conv4 = conv4.Conv(out_conv3);
+
+	auto flattened = out_conv4->Flatten();
 
 	flattened->SetLabel("flattened");
+
+	Layer4D L1(flattened->GetSize() / batch_size, 128, Activation::ReLU, InitType::Xavier);
+	Layer4D L2(128, 10, Activation::Identity, InitType::Xavier);
+
 
 	auto h1 = L1.Forward(flattened);
 	auto pred = L2.Forward(h1);
@@ -1601,9 +1612,15 @@ int main()
 	sgd.SetTrainableParams(tape);
 	std::cout << "Number of parameters: " << sgd.GetNumberOfParameters() << std::endl;
 
+	tape.PrintTape();
+
+
+
 	Trainer trainer(data, tape, sgd);
 
 	trainer.TrainingLoop();
+
+	tape.SaveToFile("cifar-10.tape");
 
 
 	return 0;

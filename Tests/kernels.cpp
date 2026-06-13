@@ -1279,6 +1279,149 @@ TEST(Kernels, Conv2D_Backward_Numerical)
 
 
 
+TEST(Kernels, BatchNorm_Backward_Numerical)
+{
+    constexpr float eps = 1e-3f;
+
+    //-----------------------------------
+    // Input
+    //-----------------------------------
+
+    Tensor4D input({ 3,1,1,1 },
+    {
+        1.0f,
+        2.0f,
+        4.0f
+    });
+
+    //-----------------------------------
+    // analytischer Gradient
+    //-----------------------------------
+
+    Tensor4D mean({ 1,1,1,1 });
+    Tensor4D std({ 1,1,1,1 });
+
+    Tensor4D out = input.BatchNorm(&mean, &std);
+
+    Tensor4D dOut(out.GetShape());
+    dOut.SetOne(); // Loss = Sum(output)
+
+    Tensor4D analytic = input.Clone();
+    Kernels::BatchNorm_Backward(analytic, input, dOut, mean, std);
+
+    //-----------------------------------
+    // numerischer Gradient
+    //-----------------------------------
+
+    for (size_t i = 0; i < input.GetSize(); i++)
+    {
+        Tensor4D inputPlus = input.Clone();
+        inputPlus[i] += eps;
+
+        Tensor4D meanPlus({ 1,1,1,1 });;
+        Tensor4D stdPlus({ 1,1,1,1 });;
+
+        Tensor4D outPlus = inputPlus.BatchNorm(&meanPlus, &stdPlus);
+
+        float lossPlus = outPlus.Sum().At(0, 0, 0, 0);
+
+        //-----------------------------------
+
+        Tensor4D inputMinus = input.Clone();
+        inputMinus[i] -= eps;
+
+        Tensor4D meanMinus({ 1,1,1,1 });;
+        Tensor4D stdMinus({ 1,1,1,1 });;
+
+        Tensor4D outMinus = inputMinus.BatchNorm(&meanMinus, &stdMinus);
+
+        float lossMinus = outMinus.Sum().At(0, 0, 0, 0);
+
+        //-----------------------------------
+
+        float numerical = (lossPlus - lossMinus) / (2.0f * eps);
+
+        float analyticGrad = analytic[i];
+
+        EXPECT_NEAR(analyticGrad, numerical, 1e-3f) << "Input index " << i;
+    }
+}
+
+
+
+TEST(Kernels, BatchNorm2D_Backward_Numerical)
+{
+    constexpr float eps = 1e-3f;
+
+    //-----------------------------------
+    // Input
+    //-----------------------------------
+
+    Tensor4D input({ 2,1,2,2 },
+        {
+            1.0f, 2.0f,
+            3.0f, 4.0f,
+
+            5.0f, 6.0f,
+            7.0f, 8.0f
+        });
+
+        //-----------------------------------
+        // analytischer Gradient
+        //-----------------------------------
+
+        Tensor4D mean({ 1,1,1,1 });
+        Tensor4D std({ 1,1,1,1 });
+
+        Tensor4D out = input.BatchNorm2D(&mean, &std);
+
+        Tensor4D dOut(out.GetShape());
+        dOut.SetOne(); // Loss = Sum(output)
+
+        Tensor4D analytic = input.Clone();
+
+        Kernels::BatchNorm2D_Backward(analytic, input, dOut, mean, std);
+
+        //-----------------------------------
+        // numerischer Gradient
+        //-----------------------------------
+
+        for (size_t i = 0; i < input.GetSize(); i++)
+        {
+            Tensor4D inputPlus = input.Clone();
+            inputPlus[i] += eps;
+
+            Tensor4D meanPlus({ 1,1,1,1 });
+            Tensor4D stdPlus({ 1,1,1,1 });
+
+            Tensor4D outPlus = inputPlus.BatchNorm2D(&meanPlus, &stdPlus);
+
+            float lossPlus = outPlus.Sum().At(0, 0, 0, 0);
+
+            //-----------------------------------
+
+            Tensor4D inputMinus = input.Clone();
+            inputMinus[i] -= eps;
+
+            Tensor4D meanMinus({ 1,1,1,1 });
+            Tensor4D stdMinus({ 1,1,1,1 });
+
+            Tensor4D outMinus = inputMinus.BatchNorm2D(&meanMinus, &stdMinus);
+
+            float lossMinus = outMinus.Sum().At(0, 0, 0, 0);
+
+            //-----------------------------------
+
+            float numerical = (lossPlus - lossMinus) / (2.0f * eps);
+
+            float analyticGrad = analytic[i];
+
+            EXPECT_NEAR(analyticGrad, numerical, 1e-3f) << "Input index " << i;
+    }
+}
+
+
+
 TEST(Kernels, MaxPool2D_Forward_2x2)
 {
     Tensor4D input(

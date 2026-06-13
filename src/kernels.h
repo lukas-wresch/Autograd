@@ -33,6 +33,9 @@ public:
 
     static Tensor4D MaxPool2D_Forward(const Tensor4D& Input, int KernelSize, int Stride, Tensor4D* ArgMax = nullptr);
     static void MaxPool2D_Backward(Tensor4D& dInput, const Tensor4D& Input, const Tensor4D& dOut, const Tensor4D& ArgMax, int KernelSize, int Stride);
+
+    static void BatchNorm_Backward(  Tensor4D& dInput, const Tensor4D& Input, const Tensor4D& gradOut, const Tensor4D& mean, const Tensor4D& std);
+    static void BatchNorm2D_Backward(Tensor4D& dInput, const Tensor4D& Input, const Tensor4D& gradOut, const Tensor4D& mean, const Tensor4D& std);
 };
 
 
@@ -1107,6 +1110,194 @@ inline void Kernels::MaxPool2D_Backward(Tensor4D& dInput, const Tensor4D& Input,
                     // safety check (optional)
                     if (ih < H && iw < W)
                         dInput.At(n, c, ih, iw) += grad;
+                }
+            }
+        }
+    }
+}
+
+
+
+inline void Kernels::BatchNorm_Backward(Tensor4D& dInput, const Tensor4D& Input, const Tensor4D& gradOut, const Tensor4D& mean, const Tensor4D& std)
+{
+    const float eps = 0.001f;
+
+    const size_t N = dInput.GetBatches();
+
+    std::vector<float> dxmu(N);
+
+    for (size_t d = 0; d < dInput.GetDepth(); d++)
+    {
+        for (size_t r = 0; r < dInput.GetRows(); r++)
+        {
+            for (size_t c = 0; c < dInput.GetColumns(); c++)
+            {
+                float mu = mean.At(0, d, r, c);
+                float sigma = std.At(0, d, r, c);
+
+                float invStd = 1.0f / (sigma + eps);
+
+                //----------------------------------------
+                // dStd
+                //----------------------------------------
+
+                float dStd = 0.0f;
+
+                for (size_t b = 0; b < N; b++)
+                {
+                    float xmu = Input.At(b, d, r, c) - mu;
+
+                    dStd += gradOut.At(b, d, r, c) * (-xmu) * invStd * invStd;
+                }
+
+                //----------------------------------------
+                // dVar
+                //----------------------------------------
+
+                float dVar = dStd * 0.5f / (sigma + eps);
+
+                //----------------------------------------
+                // dxmu
+                //----------------------------------------
+
+                for (size_t b = 0; b < N; b++)
+                {
+                    float xmu = Input.At(b, d, r, c) - mu;
+
+                    dxmu[b] = gradOut.At(b, d, r, c) * invStd;
+
+                    dxmu[b] += dVar * 2.0f * xmu / (float)N;
+                }
+
+                //----------------------------------------
+                // dMean
+                //----------------------------------------
+
+                float dMean = 0.0f;
+
+                for (size_t b = 0; b < N; b++)
+                    dMean -= dxmu[b];
+
+                //----------------------------------------
+                // dX
+                //----------------------------------------
+
+                for (size_t b = 0; b < N; b++)
+                {
+                    dInput.At(b, d, r, c) = dxmu[b] + dMean / (float)N;
+                }
+            }
+        }
+    }
+}
+
+
+
+inline void Kernels::BatchNorm2D_Backward(Tensor4D& dInput, const Tensor4D& Input, const Tensor4D& gradOut, const Tensor4D& mean, const Tensor4D& std)
+{
+    const float eps = 0.001f;
+
+    const size_t N =
+        dInput.GetBatches() *
+        dInput.GetRows() *
+        dInput.GetColumns();
+
+    std::vector<float> dxmu(N);
+
+    for (size_t d = 0; d < dInput.GetDepth(); d++)
+    {
+        float mu = mean.At(0, d, 0, 0);
+        float sigma = std.At(0, d, 0, 0);
+
+        float invStd = 1.0f / (sigma + eps);
+
+        //----------------------------------------
+        // dStd
+        //----------------------------------------
+
+        float dStd = 0.0f;
+
+        for (size_t b = 0; b < dInput.GetBatches(); b++)
+        {
+            for (size_t r = 0; r < dInput.GetRows(); r++)
+            {
+                for (size_t c = 0; c < dInput.GetColumns(); c++)
+                {
+                    float xmu =
+                        Input.At(b, d, r, c) - mu;
+
+                    dStd +=
+                        gradOut.At(b, d, r, c)
+                        * (-xmu)
+                        * invStd
+                        * invStd;
+                }
+            }
+        }
+
+        //----------------------------------------
+        // dVar
+        //----------------------------------------
+
+        float dVar =
+            dStd * 0.5f / (sigma + eps);
+
+        //----------------------------------------
+        // dxmu
+        //----------------------------------------
+
+        size_t idx = 0;
+
+        for (size_t b = 0; b < dInput.GetBatches(); b++)
+        {
+            for (size_t r = 0; r < dInput.GetRows(); r++)
+            {
+                for (size_t c = 0; c < dInput.GetColumns(); c++)
+                {
+                    float xmu =
+                        Input.At(b, d, r, c) - mu;
+
+                    dxmu[idx] =
+                        gradOut.At(b, d, r, c)
+                        * invStd;
+
+                    dxmu[idx] +=
+                        dVar
+                        * 2.0f
+                        * xmu
+                        / (float)N;
+
+                    idx++;
+                }
+            }
+        }
+
+        //----------------------------------------
+        // dMean
+        //----------------------------------------
+
+        float dMean = 0.0f;
+
+        for (float v : dxmu)
+            dMean -= v;
+
+        //----------------------------------------
+        // dX
+        //----------------------------------------
+
+        idx = 0;
+
+        for (size_t b = 0; b < dInput.GetBatches(); b++)
+        {
+            for (size_t r = 0; r < dInput.GetRows(); r++)
+            {
+                for (size_t c = 0; c < dInput.GetColumns(); c++)
+                {
+                    dInput.At(b, d, r, c) =
+                        dxmu[idx]
+                        + dMean / (float)N;
+
+                    idx++;
                 }
             }
         }

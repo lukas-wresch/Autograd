@@ -337,6 +337,20 @@ public:
 		std::swap(m_Strides[0], m_Strides[1]);
 	}
 
+	size_t GetBatches() const
+	{
+		if (m_Shape.size() != 4)
+			throw std::runtime_error("SetRow only valid for 4D tensors");
+		return m_Shape[0];
+	}
+
+	size_t GetDepth() const
+	{
+		if (m_Shape.size() != 3)
+			throw std::runtime_error("SetRow only valid for 3D tensors");
+		return m_Shape[0];
+	}
+
 	size_t GetRows() const
 	{
 		if (m_Shape.size() != 2)

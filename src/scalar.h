@@ -52,6 +52,8 @@ public:
 	size_t GetSize() const { return 1; }
 	size_t GetRows() const { return 1; }
 	size_t GetColumns() const { return 1; }
+	size_t GetDepth() const { return 1; }
+	size_t GetBatches() const { return 1; }
 	std::string Shape2String() const { return std::string("1"); }
 
 	Scalar ElementwiseAdd(const Scalar& rhs) const

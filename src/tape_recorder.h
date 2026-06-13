@@ -173,6 +173,11 @@ public:
         tape.push_back({ op, a, b, -1, {}, out });
 	}
 
+    void AddOpEntry(Operator op, int a, int b, int c, int out)
+    {
+        tape.push_back({ op, a, b, c, {}, out });
+    }
+
     void AddOpEntryConv2D(Operator op, int a, int b, int out, int stride, int padding)
     {
         TapeEntry new_entry({ op, a, b, -1, {}, out, stride, padding });
@@ -274,13 +279,11 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
         AddOpEntry(node->op, GetID(node->left), GetID(node->right), node_id);
         break;
 
-	// One Operand
+	// One operand
 	case Operator::Sum:
     case Operator::Tanh:
     case Operator::ReLU:
     case Operator::Softmax:
-        AddOpEntry(node->op, GetID(node->left), -1, node_id);
-        break;
 
     // Convolutions
     case Operator::Conv2D:
@@ -299,6 +302,22 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
     case Operator::Flatten:
         AddOpEntry(node->op, GetID(node->left), node_id, node->B, node->C, node->H, node->W);
         break;
+
+    // Batch norms
+    case Operator::BatchNorm:
+    case Operator::BatchNorm2D:
+    {
+        if constexpr (std::is_same_v<T, Tensor4D>)
+        {
+            const auto& value  = node->GetValue();
+            auto cache_id_mean = AddDataEntry(Tensor4D({ 1, value.GetDepth(), value.GetRows(), value.GetColumns() }));
+            auto cache_id_std  = AddDataEntry(Tensor4D({ 1, value.GetDepth(), value.GetRows(), value.GetColumns() }));
+            AddOpEntry(node->op, GetID(node->left), cache_id_mean, cache_id_std, node_id);
+        }
+        else
+            throw std::runtime_error("Unsupported Operation");
+        break;
+    }
 
 	//N operands
     case Operator::Pack:
@@ -463,9 +482,19 @@ void TapeRecorder<T>::Forward()
             break;
         case Operator::Flatten:
             if constexpr (std::is_same_v<T, Tensor4D>)
-            {
                 values[entry.out] = values[entry.a].Reshape({ entry.B, 1, entry.C * entry.H * entry.W, 1 });
-            }
+            else
+                throw std::runtime_error("Unsupported Operation");
+            break;
+        case Operator::BatchNorm:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+                values[entry.out] = values[entry.a].BatchNorm(&values[entry.b], &values[entry.c]);
+            else
+                throw std::runtime_error("Unsupported Operation");
+            break;
+        case Operator::BatchNorm2D:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+                values[entry.out] = values[entry.a].BatchNorm2D(&values[entry.b], &values[entry.c]);
             else
                 throw std::runtime_error("Unsupported Operation");
             break;
@@ -720,6 +749,22 @@ inline void TapeRecorder<T>::Backward()
             else
                 throw std::runtime_error("Unsupported Operation");
             break;
+        case Operator::BatchNorm:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                Kernels::BatchNorm_Backward(grads[entry.a], values[entry.a], outer_grad, values[entry.b], values[entry.c]);
+            }
+            else
+                throw std::runtime_error("Unsupported Operation");
+            break;
+        case Operator::BatchNorm2D:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                Kernels::BatchNorm2D_Backward(grads[entry.a], values[entry.a], outer_grad, values[entry.b], values[entry.c]);
+            }
+            else
+                throw std::runtime_error("Unsupported Operation");
+            break;
 
         default:
             throw std::runtime_error("Unsupported Operation");
@@ -841,6 +886,18 @@ inline void TapeRecorder<T>::PrintTape() const
             op_sign = "flatten";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("Flatten(%s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str());
+            break;
+        case Operator::BatchNorm:
+            op_text = "BatchNorm";
+            op_sign = "BatchNorm";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("BatchNorm(%s [%s]) -> %s [%s], %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str(), c_label.c_str(), values[entry.c].Shape2String().c_str());
+            break;
+        case Operator::BatchNorm2D:
+            op_text = "BatchNorm2D";
+            op_sign = "BatchNorm2D";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("BatchNorm2D(%s [%s]) -> %s [%s], %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str(), c_label.c_str(), values[entry.c].Shape2String().c_str());
             break;
         default:
             if (entry.a < 0)

@@ -122,6 +122,58 @@ std::vector<float> Cifar::GetTrainingImageData(size_t Index) const
 
 
 
+Tensor4D Cifar::GetTrainImageTensor(size_t Index)
+{
+    if (Index >= m_TrainNumImages)
+        throw std::runtime_error("Cifar: Index out of range");
+
+    Tensor4D t({ 1, 3, 32, 32 });
+
+    for (uint32_t c = 0; c < 3; c++)
+    {
+        for (uint32_t y = 0; y < 32; y++)
+        {
+            for (uint32_t x = 0; x < 32; x++)
+            {
+                unsigned char p = m_TrainImages[32 * 32 * c + y * 32 + x + Index * 32 * 32 * 3];
+
+                // normalize to [0,1]
+                t.At(0, c, y, x) = (float)p / 255.0f;
+            }
+        }
+    }
+
+    return t;
+}
+
+
+
+Tensor4D Cifar::GetValidationImageTensor(size_t Index)
+{
+    if (Index >= m_TrainNumImages)
+        throw std::runtime_error("Cifar: Index out of range");
+
+    Tensor4D t({ 1, 3, 32, 32 });
+
+    for (uint32_t c = 0; c < 3; c++)
+    {
+        for (uint32_t y = 0; y < 32; y++)
+        {
+            for (uint32_t x = 0; x < 32; x++)
+            {
+                unsigned char p = m_ValidationImages[32 * 32 * c + y * 32 + x + Index * 32 * 32 * 3];
+
+                // normalize to [0,1]
+                t.At(0, c, y, x) = (float)p / 255.0f;
+            }
+        }
+    }
+
+    return t;
+}
+
+
+
 std::vector<float> Cifar::GetValidationImageData(size_t Index) const
 {
     if (Index >= m_ValidNumImages)

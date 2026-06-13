@@ -169,6 +169,8 @@ public:
 
 	size_t GetRows() const { return m_Rows; }
 	size_t GetColumns() const { return m_Columns; }
+	size_t GetDepth() const { return 1; }
+	size_t GetBatches() const { return 1; }
 	std::string Shape2String() const
 	{
 		return std::to_string(m_Rows) + "x" + std::to_string(m_Columns);

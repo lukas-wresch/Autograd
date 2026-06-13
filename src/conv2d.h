@@ -6,7 +6,7 @@
 class Conv2D
 {
 public:
-	Conv2D(size_t in_channels, size_t out_channels, size_t kernel_size, int stride = 1, int padding = 0, Activation Activation = Activation::Identity, std::string Label = "")
+	Conv2D(size_t in_channels, size_t out_channels, size_t kernel_size, int stride = 1, int padding = 0, Activation Activation = Activation::Identity, bool BatchNormalization = false, std::string Label = "")
         : m_Stride(stride), m_Padding(padding), m_Activation(Activation)
     {
         m_Weights = Node<Tensor4D>::Create(Tensor4D({ out_channels, in_channels, kernel_size, kernel_size }));
@@ -26,6 +26,8 @@ public:
         m_Biases->SetAsTrainable();
 		m_Weights->SetLabel(Label + "W");
 		m_Biases->SetLabel(Label + "B");
+
+		m_BatchNormalization = BatchNormalization;
     }
 
     NodePtr<Tensor4D> Conv(const NodePtr<Tensor4D>& Input);
@@ -36,6 +38,7 @@ private:
 	NodePtr<Tensor4D> m_Biases;
 
     Activation m_Activation;
+	bool m_BatchNormalization;
 
     int m_Stride  = 1;
     int m_Padding = 0;
@@ -45,7 +48,12 @@ private:
 
 NodePtr<Tensor4D> Conv2D::Conv(const NodePtr<Tensor4D>& Input)
 {
-    auto conv_output = Input->Conv2D(m_Weights, m_Stride, m_Padding) + m_Biases;
+	auto conv_output = Input->Conv2D(m_Weights, m_Stride, m_Padding);
+
+	if (!m_BatchNormalization)
+		conv_output = conv_output + m_Biases;
+	else
+		conv_output = conv_output->BatchNorm2D();
 
 	switch (m_Activation)
 	{

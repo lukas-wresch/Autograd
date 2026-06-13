@@ -82,6 +82,8 @@ public:
 	size_t GetSize() const { return m_Length; }
 	size_t GetRows() const { return m_Length; }
 	size_t GetColumns() const { return 1; }
+	size_t GetDepth() const { return 1; }
+	size_t GetBatches() const { return 1; }
 	std::string Shape2String() const { return std::to_string(m_Length); }
 
 	const float* Data() const { return m_pValues; }

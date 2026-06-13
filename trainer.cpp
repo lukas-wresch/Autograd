@@ -99,6 +99,7 @@ void Trainer::TrainingLoop()
 		old_loss = batch_loss;
 
 		std::string desc = std::format("passes/s: {:.2f} Loss: {:.4f} ETA: {:.1f}m Acc: {:.2f}%", passes_per_second, batch_loss, eta, acc);
+		task.update(i);
 		task.description(desc);
 		//std::cout << desc << std::endl;
 

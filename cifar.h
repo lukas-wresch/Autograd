@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include "src/tensor4d.h"
 
 
 
@@ -26,6 +27,8 @@ public:
 
 	std::vector<float> GetTrainingImageData(size_t Index) const;
 	std::vector<float> GetValidationImageData(size_t Index) const;
+	Tensor4D GetTrainImageTensor(size_t Index);
+	Tensor4D GetValidationImageTensor(size_t Index);
 	int GetTrainingLabelData(size_t Index) const;
 	int GetValidationLabelData(size_t Index) const;
 
