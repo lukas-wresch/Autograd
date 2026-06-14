@@ -26,6 +26,7 @@ public:
 
     static void SGD_Update(Tensor& param, const Tensor& grad, Tensor& velocity, float lr, float momentum);
     static void SGD_Update(Tensor4D& param, const Tensor4D& grad, Tensor4D& velocity, float lr, float momentum);
+    static void SGD_Update(Tensor4D& param, const Tensor4D& grad, Tensor4D& velocity, float lr, float momentum, float l2_decay);
 
     static void Conv2D_Forward(Tensor4D& out, const Tensor4D& Input, const Tensor4D& Kernel, int Stride = 1, int Padding = 0);
     static void Conv2D_Forward(ThreadPool& Pool, Tensor4D& out, const Tensor4D& Input, const Tensor4D& Kernel, int Stride, int Padding);
@@ -648,6 +649,23 @@ inline void Kernels::SGD_Update(Tensor4D& param, const Tensor4D& grad, Tensor4D&
     for (size_t i = 0; i < n; i++)
     {
         v[i] = momentum * v[i] - lr * g[i];
+        p[i] += v[i];
+    }
+}
+
+
+
+inline void Kernels::SGD_Update(Tensor4D& param, const Tensor4D& grad, Tensor4D& velocity, float lr, float momentum, float l2_decay)
+{
+    float* p = param.Data();
+    const float* g = grad.Data();
+    float* v = velocity.Data();
+
+    const size_t n = param.GetSize();
+
+    for (size_t i = 0; i < n; i++)
+    {
+        v[i] = momentum * v[i] - lr * (g[i] + l2_decay * p[i]);
         p[i] += v[i];
     }
 }

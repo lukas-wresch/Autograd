@@ -10,36 +10,65 @@ class BatchNormLayer
 public:
 	BatchNormLayer(size_t Features, const std::string& Label = "")
     {
-        m_Weights = Node<Tensor4D>::Create(Tensor4D({ 1, 1, Features, 1 }));
+        m_Gamma = Node<Tensor4D>::Create(Tensor4D({ 1, 1, Features, 1 }));
+        m_Beta  = Node<Tensor4D>::Create(Tensor4D({ 1, 1, Features, 1 }));
 
-        m_Biases = Node<Tensor4D>::Create(Tensor4D({ 1, Features, 1, 1 }));
 
-        float gain = std::sqrt(6.0f / (Features + Features));
+        m_Gamma->GetValue().SetOne();
+        m_Beta->GetValue().SetZero();
 
-        for (size_t i = 0; i < m_Weights->GetValue().GetSize(); i++)
-            m_Weights->GetValue().Data()[i] = RandomNormal() * gain;
-        m_Biases->GetValue().SetZero();
-
-        m_Weights->SetAsTrainable();
-        m_Biases->SetAsTrainable();
-		m_Weights->SetLabel(Label + "Gain");
-		m_Biases->SetLabel(Label + "B");
+        m_Gamma->SetAsTrainable();
+        m_Beta->SetAsTrainable();
+        m_Gamma->SetLabel(Label + "Gain");
+        m_Beta->SetLabel(Label  + "B");
     }
 
-    NodePtr<Tensor4D> Conv(const NodePtr<Tensor4D>& Input);
+    NodePtr<Tensor4D> Forward(const NodePtr<Tensor4D>& Input);
 	
 
 private:
-	NodePtr<Tensor4D> m_Weights;
-	NodePtr<Tensor4D> m_Biases;
-
-    int m_Stride  = 1;
-    int m_Padding = 0;
+	NodePtr<Tensor4D> m_Gamma;
+	NodePtr<Tensor4D> m_Beta;
 };
 
 
 
 NodePtr<Tensor4D> BatchNormLayer::Forward(const NodePtr<Tensor4D>& Input)
 {
-	return m_Weights * Input->BatchNorm() + m_Biases;
+	return m_Gamma->ElementwiseMul(Input->BatchNorm()) + m_Beta;
+}
+
+
+
+class BatchNorm2DLayer
+{
+public:
+    BatchNorm2DLayer(size_t Depth, size_t Height, size_t Width, const std::string& Label = "")
+    {
+        m_Gamma = Node<Tensor4D>::Create(Tensor4D({ 1, Depth, 1, 1 }));
+        m_Beta  = Node<Tensor4D>::Create(Tensor4D({ 1, Depth, 1, 1 }));
+
+
+        m_Gamma->GetValue().SetOne();
+        m_Beta->GetValue().SetZero();
+
+        m_Gamma->SetAsTrainable();
+        m_Beta->SetAsTrainable();
+        m_Gamma->SetLabel(Label + "Gamma");
+        m_Beta->SetLabel(Label  + "Beta");
+    }
+
+    NodePtr<Tensor4D> Forward(const NodePtr<Tensor4D>& Input);
+
+
+private:
+    NodePtr<Tensor4D> m_Gamma;
+    NodePtr<Tensor4D> m_Beta;
+};
+
+
+
+NodePtr<Tensor4D> BatchNorm2DLayer::Forward(const NodePtr<Tensor4D>& Input)
+{
+    return m_Gamma->ElementwiseMul(Input->BatchNorm2D()) + m_Beta;
 }

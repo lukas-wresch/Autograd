@@ -188,6 +188,7 @@ public:
 
 		m_Weights->SetAsTrainable();
 		m_Biases->SetAsTrainable();
+		m_Weights->SetWeightDecay();
 		m_Weights->SetLabel(Label + "W");
 		m_Biases->SetLabel(Label  + "B");
 	}

@@ -1018,7 +1018,7 @@ TEST(Training, MNist)
 
 
 	auto tape = TapeRecorder<Matrix>();
-	SGD<Matrix> sgd(0.06f);
+	SGD<Matrix> sgd(0.01f);
 	const int batch_size = 8;
 
 	{
@@ -1139,7 +1139,7 @@ TEST(Training, MNist)
 				batch_loss += loss->GetValue()[0];
 			}
 
-			sgd.Step(1.0f / actual_batch_size);
+			sgd.Step();
 		}
 
 		epoch_loss /= xs.size();
@@ -1713,7 +1713,7 @@ TEST(Training, MNist_Fashion)
 
 
 	auto tape = TapeRecorder<Matrix>();
-	SGD<Matrix> sgd(0.06f);
+	SGD<Matrix> sgd(0.01f);
 	const int batch_size = 8;
 
 	{
@@ -1834,7 +1834,7 @@ TEST(Training, MNist_Fashion)
 				batch_loss += loss->GetValue()[0];
 			}
 
-			sgd.Step(1.0f / actual_batch_size);
+			sgd.Step();
 		}
 
 		epoch_loss /= xs.size();
@@ -1887,8 +1887,7 @@ TEST(Training, MNist_Fashion_SCE)
 
 
 	auto tape = TapeRecorder<Matrix>();
-	SGD<Matrix> sgd(0.03f, 0.7f);
-	const int batch_size = 8;
+	SGD<Matrix> sgd(0.004f, 0.7f);
 
 	{
 		auto x = Node<Matrix>::CreateWithSize(784, "input");
@@ -1916,6 +1915,7 @@ TEST(Training, MNist_Fashion_SCE)
 	auto loss = tape.SetValue("loss");
 
 	tape.PrintTape();
+	size_t batch_size = 1;
 
 
 	// Forward pass
@@ -1950,7 +1950,7 @@ TEST(Training, MNist_Fashion_SCE)
 		}
 
 		return std::tuple{ (float)correct * 100.0f / xs.size(), (float)val_correct * 100.0f / val_xs.size() };
-		};
+	};
 
 
 	//Training loop
@@ -1986,7 +1986,7 @@ TEST(Training, MNist_Fashion_SCE)
 				batch_loss += loss->GetValue()[0];
 			}
 
-			sgd.Step(1.0f / actual_batch_size);
+			sgd.Step();
 		}
 
 		epoch_loss /= xs.size();
@@ -3697,8 +3697,7 @@ TEST(TapeRecorder, SpiralClassification_MSE_Batching)
 	Layer2D<Vector> L2(32, 32, Activation::Tanh);
 	Layer2D<Vector> L3(32,  1, Activation::Tanh);
 
-	SGD<Vector> sgd(0.03f);
-	int batch_size = 16;
+	SGD<Vector> sgd(0.002f);
 
 	auto x_ = Node<Vector>::Create({ 0.0f, 0.0f }, "input");
 	auto label_ = Node<Vector>::Create({ 0.0f }, "label");
@@ -3721,6 +3720,8 @@ TEST(TapeRecorder, SpiralClassification_MSE_Batching)
 	auto loss   = tape.SetValue("loss");
 
 	tape.PrintTape();
+
+	size_t batch_size = 1;
 
 	//Training
 
@@ -3754,7 +3755,7 @@ TEST(TapeRecorder, SpiralClassification_MSE_Batching)
 				batch_loss += loss->GetValue()[0];
 			}
 
-			sgd.Step(1.0f / actual_batch_size);
+			sgd.Step();
 		}
 
 		epoch_loss /= xs.size();

@@ -1,5 +1,6 @@
 #pragma once
 #include "tensor4d.h"
+#include "batch_norm.h"
 
 
 
@@ -13,8 +14,8 @@ public:
 
         m_Biases = Node<Tensor4D>::Create(Tensor4D({ 1, out_channels, 1, 1 }));
 
-		float fan_in = static_cast<float>(in_channels * kernel_size * kernel_size);
-		float fan_out = static_cast<float>(out_channels * kernel_size * kernel_size);
+		float fan_in  = (float)( in_channels * kernel_size * kernel_size);
+		float fan_out = (float)(out_channels * kernel_size * kernel_size);
 
 		float gain = std::sqrt(6.0f / (fan_in + fan_out));
 
@@ -24,8 +25,9 @@ public:
 
         m_Weights->SetAsTrainable();
         m_Biases->SetAsTrainable();
+		m_Weights->SetWeightDecay();
 		m_Weights->SetLabel(Label + "W");
-		m_Biases->SetLabel(Label + "B");
+		m_Biases->SetLabel(Label  + "B");
 
 		m_BatchNormalization = BatchNormalization;
     }
@@ -53,7 +55,10 @@ NodePtr<Tensor4D> Conv2D::Conv(const NodePtr<Tensor4D>& Input)
 	if (!m_BatchNormalization)
 		conv_output = conv_output + m_Biases;
 	else
-		conv_output = conv_output->BatchNorm2D();
+	{
+		BatchNorm2DLayer norm(Input->GetValue().GetDepth(), Input->GetValue().GetRows(), Input->GetValue().GetColumns());
+		conv_output = norm.Forward(conv_output);
+	}
 
 	switch (m_Activation)
 	{

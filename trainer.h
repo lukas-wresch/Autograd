@@ -24,6 +24,8 @@ public:
 
     void TrainingLoop();
 
+    void Validate();
+
 private:
     DataSet m_Data;
     TapeRecorder<Tensor4D>& m_Tape;

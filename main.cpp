@@ -78,86 +78,6 @@ void ShuffleDataset(std::vector<Tensor4D>& xs, std::vector<float>& labels)
 
 
 
-void ProgressBar(const std::string& label, int current, int total, int barWidth = 50)
-{
-	float progress = (float)(current) / total;
-	int pos = (int)(barWidth * progress);
-
-	std::cout << "\r" << label << " [";
-
-	for (int i = 0; i < barWidth; i++)
-	{
-		if (i < pos)
-			std::cout << "=";
-		else if (i == pos)
-			std::cout << ">";
-		else
-			std::cout << " ";
-	}
-
-	std::cout << "] " << (int)(progress * 100.0) << "%";
-	std::cout.flush();
-}
-
-
-
-void ClearProgressBar()
-{
-	std::cout << "\r\033[K";  // Zeile löschen
-	std::cout.flush();
-}
-
-
-
-class ProgressBar
-{
-public:
-	explicit ProgressBar(const std::string& label, int total, int width = 50)
-		: label_(label), total_(total), width_(width) {
-	}
-
-	ProgressBar(const ProgressBar&) = delete;
-	ProgressBar& operator=(const ProgressBar&) = delete;
-
-	void update(int current)
-	{
-		if (current == current_)
-			return;
-
-		current_ = current;
-		float progress = (float)(current) / total_;
-		int pos = (int)(progress * width_);
-
-		std::cout << "\r\033[K" << label_ << " [";
-
-		for (int i = 0; i < width_; ++i) {
-			if (i < pos)
-				std::cout << '=';
-			else if (i == pos)
-				std::cout << '>';
-			else
-				std::cout << ' ';
-		}
-
-		std::cout << "] " << (int)(progress * 100.0) << "%";
-		std::cout.flush();
-	}
-
-	~ProgressBar()
-	{
-		if (current_ >= 0)
-		{
-			std::cout << "\r\033[K";
-			std::cout.flush();
-		}
-	}
-
-private:
-	int total_;
-	int width_;
-	int current_ = -1;
-	std::string label_;
-};
 
 
 
@@ -528,8 +448,6 @@ void MNist_Tensor4D()
 				//ProgressBar("Train Accuracy", i, train_size);
 		}
 
-		ClearProgressBar();
-
 
 		for (size_t i = 0; i < xs_val.size();)
 		{
@@ -555,11 +473,9 @@ void MNist_Tensor4D()
 
 			i += actual_batch_size;
 
-			if (i / actual_batch_size % 100 == 0)
-				ProgressBar("Validation Accuracy", (int)i, (int)xs_val.size());
+			//if (i / actual_batch_size % 100 == 0)
+				//ProgressBar("Validation Accuracy", (int)i, (int)xs_val.size());
 		}
-
-		ClearProgressBar();
 
 		return std::tuple{ (float)correct * 100.0f / train_size, (float)val_correct * 100.0f / xs_val.size() };
 	};
@@ -875,7 +791,7 @@ void MNist_Test()
 
 
 	auto tape = TapeRecorder<Matrix>();
-	SGD<Matrix> sgd(0.03f, 0.7f);
+	SGD<Matrix> sgd(0.005f, 0.7f);
 	const int batch_size = 8;
 
 	{
@@ -977,7 +893,7 @@ void MNist_Test()
 				batch_loss += loss->GetValue()[0];
 			}
 
-			sgd.Step(1.0f / actual_batch_size);
+			sgd.Step();
 		}
 
 		epoch_loss /= xs.size();
@@ -1032,8 +948,7 @@ void Cifar_Test()
 
 
 	auto tape = TapeRecorder<Matrix>();
-	SGD<Matrix> sgd(0.03f, 0.7f);
-	const int batch_size = 8;
+	SGD<Matrix> sgd(0.004f, 0.7f);
 
 	{
 		auto x = Node<Matrix>::CreateWithSize(32*32 * 3, "input");
@@ -1060,6 +975,7 @@ void Cifar_Test()
 	auto loss   = tape.SetValue("loss");
 
 	tape.PrintTape();
+	size_t batch_size = 1;
 
 
 	// Forward pass
@@ -1133,7 +1049,7 @@ void Cifar_Test()
 				batch_loss += loss->GetValue()[0];
 			}
 
-			sgd.Step(1.0f / actual_batch_size);
+			sgd.Step();
 		}
 
 		epoch_loss /= xs.size();
@@ -1417,7 +1333,7 @@ void Sine()
 
 
 
-int main()
+int main(int argc, char** argv)
 {
 	auto a = Node<Scalar>::Create(2.0f);
 	auto b = Node<Scalar>::Create(-3.0f);
@@ -1540,47 +1456,84 @@ int main()
 
 
 
-
-
-
-
-
-
-
-
-
-
-	//MNist mnist = MNist();
-	Cifar mnist = Cifar();
-	
 	Trainer::DataSet data;
 
-	for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
-	{
-		data.train_data.push_back(mnist.GetTrainImageTensor(i));
-		Tensor4D label({ 1,1,1,1 });
-		label.At(0, 0, 0, 0) = (float)mnist.GetTrainingLabelData(i);
-		data.train_labels.push_back(label);
-	}
+	std::string dataset = "cifar-10";
 
-	for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
+	if (dataset == "mnist")
 	{
-		data.valid_data.push_back(mnist.GetValidationImageTensor(i));
-		Tensor4D label({ 1,1,1,1 });
-		label.At(0, 0, 0, 0) = (float)mnist.GetValidationLabelData(i);
-		data.valid_labels.push_back(label);
+		MNist mnist = MNist();
+
+		for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
+		{
+			data.train_data.push_back(mnist.GetTrainImageTensor(i));
+			Tensor4D label({ 1,1,1,1 });
+			label.At(0, 0, 0, 0) = (float)mnist.GetTrainingLabelData(i);
+			data.train_labels.push_back(label);
+		}
+
+		for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
+		{
+			data.valid_data.push_back(mnist.GetValidationImageTensor(i));
+			Tensor4D label({ 1,1,1,1 });
+			label.At(0, 0, 0, 0) = (float)mnist.GetValidationLabelData(i);
+			data.valid_labels.push_back(label);
+		}
 	}
+	else if (dataset == "fashion-mnist")
+	{
+		MNist mnist = MNist("fashion-mnist");
+
+		for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
+		{
+			data.train_data.push_back(mnist.GetTrainImageTensor(i));
+			Tensor4D label({ 1,1,1,1 });
+			label.At(0, 0, 0, 0) = (float)mnist.GetTrainingLabelData(i);
+			data.train_labels.push_back(label);
+		}
+
+		for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
+		{
+			data.valid_data.push_back(mnist.GetValidationImageTensor(i));
+			Tensor4D label({ 1,1,1,1 });
+			label.At(0, 0, 0, 0) = (float)mnist.GetValidationLabelData(i);
+			data.valid_labels.push_back(label);
+		}
+	}
+	else if (dataset == "cifar-10")
+	{
+		Cifar mnist = Cifar();
+
+		for (size_t i = 0; i < mnist.GetTrainingNumberOfImages(); i++)
+		{
+			data.train_data.push_back(mnist.GetTrainImageTensor(i));
+			Tensor4D label({ 1,1,1,1 });
+			label.At(0, 0, 0, 0) = (float)mnist.GetTrainingLabelData(i);
+			data.train_labels.push_back(label);
+		}
+
+		for (size_t i = 0; i < mnist.GetValidationNumberOfImages(); i++)
+		{
+			data.valid_data.push_back(mnist.GetValidationImageTensor(i));
+			Tensor4D label({ 1,1,1,1 });
+			label.At(0, 0, 0, 0) = (float)mnist.GetValidationLabelData(i);
+			data.valid_labels.push_back(label);
+		}
+	}
+	
 
 
 	auto tape = TapeRecorder<Tensor4D>();
-	SGD<Tensor4D> sgd(0.0001f, 0.8f);
+	//tape.LoadFromFile(config.mode);
+
+	SGD<Tensor4D> sgd(0.001f, 0.8f, 0.1f);
 	const int batch_size = 64;
 
 
 	auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 3, 32, 32 }), "input");
 	auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 1, 1 }), "label");
 
-	Conv2D conv1(3, 16, 3, 1, 1, Activation::ReLU);
+	Conv2D conv1( 3, 16, 3, 1, 1, Activation::ReLU);
 	Conv2D conv2(16, 16, 3, 1, 1, Activation::ReLU, true);
 
 	auto out_conv1 = conv1.Conv(x);
@@ -1614,13 +1567,11 @@ int main()
 
 	tape.PrintTape();
 
-
-
 	Trainer trainer(data, tape, sgd);
 
-	trainer.TrainingLoop();
+	//trainer.TrainingLoop();
 
-	tape.SaveToFile("cifar-10.tape");
+	tape.SaveToFile("temp.tape");
 
 
 	return 0;

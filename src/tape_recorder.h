@@ -151,12 +151,17 @@ public:
         return requires_grad[Index];
     }
 
+    bool HasWeightDecay(size_t Index) const
+    {
+        return weight_decay[Index];
+    }
+
     size_t GetNumberOfValues() const
     {
         return values.size();
     }
 
-    int AddDataEntry(const T& v, bool Trainable = false)
+    int AddDataEntry(const T& v, bool Trainable = false, bool WeightDecay = false)
     {
         values.push_back(v);
 
@@ -164,6 +169,7 @@ public:
 
         trainable.push_back(Trainable);
         requires_grad.push_back(false);
+        weight_decay.push_back(WeightDecay);
 
         return (int)values.size() - 1;
     }
@@ -210,6 +216,7 @@ public:
     }
 
     void PrintTape() const;
+    void PrintArchitecture() const;
 
     void SaveToFile(const std::string& filename) const;
     bool LoadFromFile(const std::string& filename);
@@ -223,6 +230,7 @@ private:
     std::vector<T> grads;
     std::vector<bool> trainable;
     std::vector<bool> requires_grad;
+    std::vector<bool> weight_decay;
 
     ThreadPool thread_pool = ThreadPool(8);
 
@@ -254,7 +262,7 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
         Visit(i, node_to_id);
 
 
-    auto node_id = AddDataEntry(node->GetValue(), node->IsTrainable());
+    auto node_id = AddDataEntry(node->GetValue(), node->IsTrainable(), node->HasWeightDecay());
     if (!node->GetLabel().empty())
     {
         label_to_id.insert({ node->GetLabel(), node_id });
@@ -420,10 +428,10 @@ void TapeRecorder<T>::Forward()
                 Kernels::Multiply_Forward(values[entry.out], values[entry.a], values[entry.b]);
             else if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                values[entry.a].Print();
-                values[entry.b].Print();
+                //values[entry.a].Print();
+                //values[entry.b].Print();
                 values[entry.out] = values[entry.a] * values[entry.b];
-                values[entry.out].Print();
+                //values[entry.out].Print();
             }
             else
                 values[entry.out] = values[entry.a].ElementwiseMul(values[entry.b]);
@@ -941,13 +949,101 @@ inline void TapeRecorder<T>::PrintTape() const
 
         std::string trainable = "Trainable";
         std::string requires_gradient = "Requires_Gradient";
+        std::string weight_decay = "Weight_Decay";
 
         if (!IsTrainable(i))
             trainable = "";
         if (!RequiresGradient(i))
             requires_gradient = "";
+        if (!HasWeightDecay(i))
+            weight_decay = "";
 
-        printf("%.02d: %s %s: %s %s\n", (int)i, label.c_str(), values[i].Shape2String().c_str(), trainable.c_str(), requires_gradient.c_str());
+        printf("%.02d: %s %s: %s %s %s\n", (int)i, label.c_str(), values[i].Shape2String().c_str(), trainable.c_str(), requires_gradient.c_str(), weight_decay.c_str());
+    }
+
+    printf("\n");
+}
+
+
+
+template<typename T>
+inline void TapeRecorder<T>::PrintArchitecture() const
+{
+    int i = 0;
+
+    for (const auto& entry : tape)
+    {     
+        switch (entry.op)
+        {
+        case Operator::Add:
+        case Operator::Subtract:
+        case Operator::ElementwiseAdd:
+        case Operator::ElementwiseMul:
+        case Operator::Sum:
+            break;
+
+        case Operator::Multiply:
+            if (i > 0)
+                printf("-> ");
+            printf("Dense");
+            i++;
+            break;
+        case Operator::Tanh:
+            if (i > 0)
+                printf("-> ");
+            printf("Tanh");
+            i++;
+            break;
+        case Operator::ReLU:
+            if (i > 0)
+                printf("-> ");
+            printf("ReLU");
+            i++;
+            break;
+        case Operator::Softmax:
+            if (i > 0)
+                printf("-> ");
+            printf("Softmax");
+            i++;
+            break;
+        case Operator::CrossEntropy:
+            if (i > 0)
+                printf("-> ");
+            printf("CrossEntropy");
+            i++;
+            break;
+        case Operator::Softmax_CrossEntropy:
+            if (i > 0)
+                printf("-> ");
+            printf("Softmax_CrossEntropy");
+            i++;
+            break;
+        case Operator::Conv2D:
+            if (i > 0)
+                printf("-> ");
+            printf("Conv2D");
+            i++;
+            break;
+        case Operator::MaxPool2D:
+            if (i > 0)
+                printf("-> ");
+            printf("MaxPool2D");
+            i++;
+            break;
+        case Operator::Flatten:
+            if (i > 0)
+                printf("-> ");
+            printf("Flatten");
+            i++;
+            break;
+        case Operator::BatchNorm:
+        case Operator::BatchNorm2D:
+            if (i > 0)
+                printf("-> ");
+            printf("BatchNorm");
+            i++;
+            break;            
+        }
     }
 
     printf("\n");
@@ -981,6 +1077,8 @@ inline void TapeRecorder<T>::SaveToFile(const std::string& filename) const
         uint8_t t = trainable[i] ? 1 : 0;
         file.write((char*)(&t), sizeof(uint8_t));
         t = requires_grad[i] ? 1 : 0;
+        file.write((char*)(&t), sizeof(uint8_t));
+        t = weight_decay[i] ? 1 : 0;
         file.write((char*)(&t), sizeof(uint8_t));
 
         values[i].GetShape().Save(file);
@@ -1047,6 +1145,7 @@ inline bool TapeRecorder<T>::LoadFromFile(const std::string& filename)
 
     trainable.resize(value_count);
     requires_grad.resize(value_count);
+    weight_decay.resize(value_count);
 
     for (size_t i = 0; i < value_count; i++)
     {
@@ -1055,6 +1154,9 @@ inline bool TapeRecorder<T>::LoadFromFile(const std::string& filename)
         trainable[i] = tmp == 1;
         file.read((char*)&tmp, sizeof(uint8_t));
         requires_grad[i] = tmp == 1;
+        file.read((char*)&tmp, sizeof(uint8_t));
+        weight_decay[i] = tmp == 1;
+        
 
         Tensor4D::Shape shape(file);
 

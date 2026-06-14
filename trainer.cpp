@@ -91,8 +91,8 @@ void Trainer::TrainingLoop()
 
 		if (i > 0)
 		{
-			acc  = 0.9f * old_acc  + 0.1f * acc;
-			batch_loss = 0.9f * old_loss + 0.1f * batch_loss;
+			acc  = 0.8f * old_acc  + 0.2f * acc;
+			batch_loss = 0.8f * old_loss + 0.2f * batch_loss;
 		}
 
 		old_acc  = acc;
@@ -107,4 +107,82 @@ void Trainer::TrainingLoop()
 	}
 
 	epochs_done++;
+}
+
+
+
+void Trainer::Validate()
+{
+	int correct = 0;
+	int val_correct = 0;
+
+	ProgressManager mgr;
+
+	auto task_train = mgr.createBar("Train Accuracy", (int)m_Data.train_data.size());
+	auto task_valid = mgr.createBar("Validation Accuracy", (int)m_Data.valid_data.size());
+
+	auto input = m_Tape.SetValue("input");
+	auto label = m_Tape.SetValue("label");
+	auto output = m_Tape.SetValue("output");
+	auto loss = m_Tape.SetValue("loss");
+
+	size_t batch_size = input->GetBatches();
+
+	size_t train_i = 0;
+	size_t valid_i = 0;
+
+	while (train_i < m_Data.train_data.size() || valid_i < m_Data.valid_data.size())
+	{
+		size_t actual_batch_size = 0;
+
+		while (actual_batch_size < batch_size && train_i + actual_batch_size < m_Data.train_data.size())
+		{
+			input->ViewBatch(actual_batch_size).CopyFrom(m_Data.train_data[train_i + actual_batch_size]);
+			label->SetColumn(actual_batch_size, 0, 0, { m_Data.train_labels[train_i + actual_batch_size].At(0, 0, 0, 0) });
+			actual_batch_size++;
+		}
+
+		m_Tape.Forward();
+
+		for (size_t j = 0; j < actual_batch_size; j++)
+		{
+			//Convert one hot to class index
+			int pred_class = (int)output->ArgMax(j, 0);
+			int target_class = (int)m_Data.train_labels[train_i + j].At(0, 0, 0, 0);
+
+			if (pred_class == target_class) correct++;
+		}
+
+		train_i += actual_batch_size;
+
+		task_train.description(std::format("Acc: {:.2f}%", (float)correct * 100.0f / train_i));
+		task_train.update(train_i);
+	
+
+
+		actual_batch_size = 0;
+
+		while (actual_batch_size < batch_size && valid_i + actual_batch_size < m_Data.valid_data.size())
+		{
+			input->ViewBatch(actual_batch_size).CopyFrom(m_Data.valid_data[valid_i + actual_batch_size]);
+			label->SetColumn(actual_batch_size, 0, 0, { m_Data.valid_labels[valid_i + actual_batch_size].At(0, 0, 0, 0) });
+			actual_batch_size++;
+		}
+
+		m_Tape.Forward();
+
+		for (size_t j = 0; j < actual_batch_size; j++)
+		{
+			//Convert one hot to class index
+			int pred_class = (int)output->ArgMax(j, 0);
+			int target_class = (int)m_Data.valid_labels[valid_i + j].At(0, 0, 0, 0);
+
+			if (pred_class == target_class) val_correct++;
+		}
+
+		valid_i += actual_batch_size;
+
+		task_valid.description(std::format("Acc: {:.2f}%", (float)val_correct * 100.0f / valid_i));
+		task_valid.update(valid_i);
+	}
 }

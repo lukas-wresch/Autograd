@@ -3,6 +3,7 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
+  <Project Path="Autograd-CLI/Autograd-CLI.vcxproj" Id="a93c8c18-21ac-4e24-bf54-b5a4fd6b88ae" />
   <Project Path="Autograd.vcxproj" Id="37040579-a506-4604-b4e9-5dae63646a03" />
   <Project Path="Tests/Tests.vcxproj" Id="5c4f4a54-3c02-423d-8eb5-a0b913025411" />
 </Solution>

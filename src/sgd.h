@@ -10,7 +10,7 @@ template<typename T>
 class SGD
 {
 public:
-    SGD(float lr, float Momentum = 0.0f) : m_LR(lr), m_Momentum(Momentum) {}
+    SGD(float lr, float Momentum = 0.0f, float L2WeightDecay = 0.0f) : m_LR(lr), m_Momentum(Momentum), m_L2WeightDecay(L2WeightDecay){}
 
     template<typename T>
     void SetTrainableParams(const std::vector<NodePtr<T>>& params)
@@ -37,13 +37,14 @@ public:
             {
                 values.push_back(Tape.SetValue(i));
                 grads.push_back(Tape.SetGradient(i));
+                has_weight_decay.push_back(Tape.HasWeightDecay(i));
                 velocity.push_back(Tape.SetValue(i)->Clone());
                 velocity.back().SetZero();
             }
         }
     }
 
-    void Step(float Scale = 1.0f)
+    void Step()
     {
         if (params.empty())
         {
@@ -52,16 +53,18 @@ public:
             for (size_t i = 0; i < values.size(); i++)
             {
                 if constexpr (std::is_same_v<T, Tensor>)
-                    Kernels::SGD_Update(*values[i], *grads[i], velocity[i], m_LR * Scale, m_Momentum);
+                    Kernels::SGD_Update(*values[i], *grads[i], velocity[i], m_LR, m_Momentum);
                 else if constexpr (std::is_same_v<T, Tensor4D>)
-                    Kernels::SGD_Update(*values[i], *grads[i], velocity[i], m_LR * Scale, m_Momentum);
-                /* {
-                    velocity[i] = m_Momentum * velocity[i] - m_LR * Scale * (*grads[i]);
-                    *values[i] += velocity[i];
-                }*/
+                    if (has_weight_decay[i])
+                        Kernels::SGD_Update(*values[i], *grads[i], velocity[i], m_LR, m_Momentum, m_L2WeightDecay);
+                    else
+                        Kernels::SGD_Update(*values[i], *grads[i], velocity[i], m_LR, m_Momentum);
                 else
                 {
-                    velocity[i] = m_Momentum * velocity[i] - m_LR * Scale * (*grads[i]);
+                    if (has_weight_decay[i])
+                        velocity[i] = m_Momentum * velocity[i] - m_LR * ( *grads[i] + m_L2WeightDecay * (*values[i]) );
+                    else
+                        velocity[i] = m_Momentum * velocity[i] - m_LR * (*grads[i]);
                     *values[i] += velocity[i];
                 }
             }
@@ -74,13 +77,14 @@ public:
                 if constexpr (std::is_same_v<T, Tensor4D>)
                     throw std::runtime_error("Unsupported Operation");
                 else
-                    p->GetValue() -= m_LR * Scale * p->GetGradient();
+                    p->GetValue() -= m_LR * p->GetGradient();
         }
     }
 
 private:
     float m_LR = 0.0f;
     float m_Momentum = 0.0f;
+    float m_L2WeightDecay = 0.0f;
 
     std::vector<NodePtr<T>> params;
 
@@ -88,4 +92,5 @@ private:
 
     std::vector<T*> values;
     std::vector<T*> grads;
+    std::vector<bool> has_weight_decay;
 };

@@ -817,7 +817,7 @@ public:
 
 	Tensor4D BatchNorm(Tensor4D* Mean = nullptr, Tensor4D* Std = nullptr) const
 	{
-		const float eps = 0.001f;
+		const float eps = 0.00001f;
 		Tensor4D out({ GetBatches(), GetDepth(), GetRows(), GetColumns() });
 
 		for (size_t d = 0; d < GetDepth(); d++)
@@ -836,7 +836,7 @@ public:
 					for (size_t b = 0; b < GetBatches(); b++)
 						sum += (At(b, d, r, c) - mean) * (At(b, d, r, c) - mean);
 
-					float std = sqrtf(sum / (float)GetBatches());
+					float std = sqrtf(sum / (float)GetBatches() + eps);
 
 					if (Mean)
 						Mean->At(0, d, r, c) = mean;
@@ -844,7 +844,7 @@ public:
 						Std->At(0, d, r, c)  = std;
 
 					for (size_t b = 0; b < GetBatches(); b++)
-						out.At(b, d, r, c) = (At(b, d, r, c) - mean) / (std + eps);
+						out.At(b, d, r, c) = (At(b, d, r, c) - mean) / std;
 				}
 
 		return out;
@@ -852,7 +852,7 @@ public:
 
 	Tensor4D BatchNorm2D(Tensor4D* Mean = nullptr, Tensor4D* Std = nullptr) const
 	{
-		const float eps = 0.001f;
+		const float eps = 0.00001f;
 		Tensor4D out({ GetBatches(), GetDepth(), GetRows(), GetColumns() });
 
 		for (size_t d = 0; d < GetDepth(); d++)
@@ -873,7 +873,7 @@ public:
 					for (size_t c = 0; c < GetColumns(); c++)
 						sum += (At(b, d, r, c) - mean) * (At(b, d, r, c) - mean);
 
-			float std = sqrtf(sum / ( ((float)GetBatches() * GetRows() * GetColumns())  ));
+			float std = sqrtf(sum / ( ((float)GetBatches() * GetRows() * GetColumns()) ) + eps);
 
 			if (Mean)
 				Mean->At(0, d, 0, 0) = mean;
@@ -883,7 +883,7 @@ public:
 			for (size_t b = 0; b < GetBatches(); b++)
 				for (size_t r = 0; r < GetRows(); r++)
 					for (size_t c = 0; c < GetColumns(); c++)
-						out.At(b, d, r, c) = (At(b, d, r, c) - mean) / (std + eps);
+						out.At(b, d, r, c) = (At(b, d, r, c) - mean) / std;
 			
 		}
 

@@ -66,6 +66,8 @@ public:
 
     bool IsTrainable() const { return trainable; }
     void SetAsTrainable(bool Trainable = true) { trainable = Trainable; }
+    bool HasWeightDecay() const { return weight_decay; }
+    void SetWeightDecay(bool DecayEnabled = true) { weight_decay = DecayEnabled; }
 
     static NodePtr<T> Create(const T& Value, const std::string& Label = "") { return std::make_shared<Node<T>>(Value, Label); }
     static NodePtr<T> Create() { return std::make_shared<Node<T>>(); }
@@ -115,6 +117,7 @@ public:
     T grad{};
 
     bool trainable = false;
+    bool weight_decay = false;
 
     Operator op = Operator::Undefined;
 
