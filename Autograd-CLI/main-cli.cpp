@@ -203,7 +203,7 @@ int main(int argc, char** argv)
 
 
 	auto tape = TapeRecorder<Tensor4D>();
-	SGD<Tensor4D> sgd(0.001f, 0.5f, 0.01f);
+	SGD<Tensor4D> sgd(0.0001f, 0.5f, 0.01f);
 	const int batch_size = 64;
 
 	if (!tape.LoadFromFile(config.model))

@@ -1,7 +1,7 @@
 #include "gtest/gtest.h"
 #include "../src/tensor.h"
 #include "../src/node.h"
-#include "../src/tape_recorder.h"
+#include "../src/tape.h"
 
 
 

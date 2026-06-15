@@ -10,10 +10,11 @@ class Kernels
 {
 public:
 	static void Multiply_Forward( Tensor& out, const Tensor& left, const Tensor& right);
-	static void Multiply_Backward(Tensor& out, const Tensor& left, const Tensor& right);
+	
 
-    static void MatMul_Forward( Tensor& out, const Tensor& left, const Tensor& right);
-    static void MatMul_Backward(Tensor& out, const Tensor& left, const Tensor& right);
+    static void MatMul_Forward(Tensor& out, const Tensor& left, const Tensor& right);
+    static void MatMul_Forward(Tensor4D& out, const Tensor4D& left, const Tensor4D& right);
+    
     static inline void MatMul_Backward_A(Tensor& gradA, const Tensor& dOut, const Tensor& B);
     static inline void MatMul_Backward_B(Tensor& gradB, const Tensor& A, const Tensor& dOut);
     static inline void MatMul_Backward_A(Tensor4D& out, const Tensor4D& A, const Tensor4D& B);
@@ -209,74 +210,59 @@ inline void Kernels::MatMul_Forward(Tensor& out, const Tensor& A, const Tensor& 
 
 
 
-/*inline void Kernels::MatMul_Forward(Tensor& out, const Tensor& A, const Tensor& B)
+inline void Kernels::MatMul_Forward(Tensor4D& out, const Tensor4D& A, const Tensor4D& B)
 {
-    const auto& ashape = A.Shape();
-    const auto& bshape = B.Shape();
-    const auto& oshape = out.Shape();
+    if (A.GetBatches() != B.GetBatches() && A.GetBatches() != 1 && B.GetBatches() != 1)
+        throw std::runtime_error("MatMul_Forward() batch mismatch");
 
-    const size_t ndim = ashape.size();
+    if (A.GetDepth() != B.GetDepth() && A.GetDepth() != 1 && B.GetDepth() != 1)
+        throw std::runtime_error("MatMul_Forward() depth mismatch");
 
-    if (ndim < 2 || bshape.size() != ndim)
-        throw std::runtime_error("Kernels::MatMul_Forward() invalid dimensions");
-
-    size_t M = ashape[ndim - 2];
-    size_t K = ashape[ndim - 1];
-
-    size_t K2 = bshape[ndim - 2];
-    size_t N = bshape[ndim - 1];
-
-    if (K != K2)
-        throw std::runtime_error("Kernels::MatMul_Forward() K mismatch");
-
-    std::vector<size_t> expected = ashape;
-    expected[ndim - 1] = N;
-
-    if (oshape != expected)
-        throw std::runtime_error("Kernels::MatMul_Forward() output shape mismatch");
-
-    const auto& aStr = A.Strides();
-    const auto& bStr = B.Strides();
-    const auto& oStr = out.Strides();
-
-    const float* aData = A.Data();
-    const float* bData = B.Data();
-    float* oData = out.Data();
-
-    std::vector<size_t> idx(ndim);
-
-    size_t total = out.Size();
-
-    for (size_t linear = 0; linear < total; linear++)
+    // Scalar case
+    if (B.GetSize() == 1)
     {
-        DecodeIndex(linear, oshape, idx);
+        //Tensor4D out({ GetBatches(), GetDepth(), GetRows(), rhs.GetColumns() });
 
-        size_t outOffset = ComputeOffset(idx, oStr);
+        for (size_t b = 0; b < A.GetBatches(); b++)
+            for (size_t d = 0; d < A.GetDepth(); d++)
+                for (size_t i = 0; i < A.GetRows(); i++)
+                    for (size_t j = 0; j < B.GetColumns(); j++)
+                        out.At(b, d, i, j) *= B.Data()[0];
 
-        size_t i = idx[ndim - 2];
-        size_t j = idx[ndim - 1];
-
-        float sum = 0.0f;
-
-        for (size_t k = 0; k < K; k++)
-        {
-            auto aIdx = idx;
-            auto bIdx = idx;
-
-            aIdx[ndim - 1] = k;
-
-            bIdx[ndim - 2] = k;
-            bIdx[ndim - 1] = j;
-
-            size_t ao = ComputeOffset(aIdx, aStr);
-            size_t bo = ComputeOffset(bIdx, bStr);
-
-            sum += aData[ao] * bData[bo];
-        }
-
-        oData[outOffset] = sum;
+        return;
     }
-}*/
+
+    if (A.GetColumns() != B.GetRows())
+        throw std::runtime_error("MatMul_Forward() matrix dimension mismatch");
+
+    size_t outB = std::max(A.GetBatches(), B.GetBatches());
+    size_t outD = std::max(A.GetDepth(), B.GetDepth());
+
+    //Tensor4D out({ outB, outD, A.GetRows(), B.GetColumns() });
+
+    for (size_t b = 0; b < outB; b++)
+    {
+        size_t lhsB = (A.GetBatches() == 1) ? 0 : b;
+        size_t rhsB = (B.GetBatches() == 1) ? 0 : b;
+
+        for (size_t d = 0; d < outD; d++)
+        {
+            size_t lhsD = (A.GetDepth() == 1) ? 0 : d;
+            size_t rhsD = (B.GetDepth() == 1) ? 0 : d;
+
+            for (size_t i = 0; i < A.GetRows(); i++)
+                for (size_t j = 0; j < B.GetColumns(); j++)
+                {
+                    float sum = 0.0f;
+
+                    for (size_t k = 0; k < A.GetColumns(); k++)
+                        sum += A.At(lhsB, lhsD, i, k) * B.At(rhsB, rhsD, k, j);
+
+                    out.At(b, d, i, j) = sum;
+                }
+        }
+    }
+}
 
 
 

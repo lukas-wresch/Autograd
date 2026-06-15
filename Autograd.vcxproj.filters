@@ -53,7 +53,7 @@
     <ClInclude Include="mnist.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\tape_recorder.h">
+    <ClInclude Include="src\tape.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\matrix.h">

@@ -1458,7 +1458,7 @@ int main(int argc, char** argv)
 
 	Trainer::DataSet data;
 
-	std::string dataset = "cifar-10";
+	std::string dataset = "mnist";
 
 	if (dataset == "mnist")
 	{
@@ -1530,17 +1530,17 @@ int main(int argc, char** argv)
 	const int batch_size = 64;
 
 
-	auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 3, 32, 32 }), "input");
+	auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 28, 28 }), "input");
 	auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 1, 1 }), "label");
 
-	Conv2D conv1( 3, 16, 3, 1, 1, Activation::ReLU);
-	Conv2D conv2(16, 16, 3, 1, 1, Activation::ReLU, true);
+	Conv2D conv1( 1, 32, 3, 1, 1, Activation::ReLU);
+	Conv2D conv2(32, 32, 3, 1, 1, Activation::ReLU, true);
 
 	auto out_conv1 = conv1.Conv(x);
 	auto out_conv2 = conv2.Conv(out_conv1)->MaxPool2D(2, 2);
 
-	Conv2D conv3(16, 32, 3, 1, 1, Activation::ReLU);
-	Conv2D conv4(32, 32, 3, 1, 1, Activation::ReLU, true);
+	Conv2D conv3(32, 64, 3, 1, 1, Activation::ReLU);
+	Conv2D conv4(64, 64, 3, 1, 1, Activation::ReLU, true);
 
 	auto out_conv3 = conv3.Conv(out_conv2);
 	auto out_conv4 = conv4.Conv(out_conv3)->MaxPool2D(2, 2);
@@ -1570,6 +1570,7 @@ int main(int argc, char** argv)
 	Trainer trainer(data, tape, sgd);
 
 	//trainer.TrainingLoop();
+	trainer.Validate();
 
 	tape.SaveToFile("temp.tape");
 

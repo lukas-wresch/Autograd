@@ -14,9 +14,9 @@ struct TapeEntry
 {
     Operator op;
 
-    int a;   // input tensor index
-    int b;   // optional
-    int c;   // optional, used for cache
+    int a = -1;   // input tensor index
+    int b = -1;   // optional
+    int c = -1;   // optional, used for cache
     std::vector<int> inputs;
 
     int out; // output tensor index
@@ -29,10 +29,10 @@ struct TapeEntry
 	int kernel_size = 1;
 
     // Flatten
-    size_t B;
-    size_t C;
-    size_t H;
-    size_t W;
+    size_t B = 0;
+    size_t C = 0;
+    size_t H = 0;
+    size_t W = 0;
 
 
     void Save(std::ostream& os) const
@@ -91,6 +91,20 @@ struct TapeEntry
 
 
 
+struct Metadata
+{
+    bool trainable = false;
+    bool requires_grad = false;
+    bool has_weight_decay = false;//Is this parameter included in regularization?
+
+    bool is_cache = false;
+    bool calibrated = false;//For BatchNorm, true if calibration has been done
+
+    std::string label = "";
+};
+
+
+
 template<typename T>
 class TapeRecorder
 {
@@ -105,6 +119,9 @@ public:
     void ZeroGradients();
 
     void Backward();
+
+    void StartCalibration();
+    void EndCalibration();
 
     const T* GetValue(const std::string& Label) const
     {
@@ -143,17 +160,17 @@ public:
 
     bool IsTrainable(size_t Index) const
     {
-        return trainable[Index];
+        return metadata[Index].trainable;
     }
 
     bool RequiresGradient(size_t Index) const
     {
-        return requires_grad[Index];
+        return metadata[Index].requires_grad;
     }
 
     bool HasWeightDecay(size_t Index) const
     {
-        return weight_decay[Index];
+        return metadata[Index].has_weight_decay;
     }
 
     size_t GetNumberOfValues() const
@@ -164,12 +181,13 @@ public:
     int AddDataEntry(const T& v, bool Trainable = false, bool WeightDecay = false)
     {
         values.push_back(v);
-
         grads.push_back(v.Clone());
 
-        trainable.push_back(Trainable);
-        requires_grad.push_back(false);
-        weight_decay.push_back(WeightDecay);
+        Metadata new_metadata;
+        new_metadata.trainable     = Trainable;
+        new_metadata.requires_grad = false;
+        new_metadata.has_weight_decay  = false;
+        metadata.emplace_back(new_metadata);
 
         return (int)values.size() - 1;
     }
@@ -228,9 +246,12 @@ private:
 
     std::vector<T> values;
     std::vector<T> grads;
-    std::vector<bool> trainable;
-    std::vector<bool> requires_grad;
-    std::vector<bool> weight_decay;
+    std::vector<T> calibrations_mean;
+    std::vector<T> calibrations_var;
+    std::vector<Metadata> metadata;
+
+    bool m_CalibrationStarted = false;
+    size_t m_CalibrationBatchesSeen = 0;
 
     ThreadPool thread_pool = ThreadPool(8);
 
@@ -350,8 +371,8 @@ inline void TapeRecorder<T>::Compile(const NodePtr<T>& root)
 
     // Mark trainable tensors as requiring gradients
     for (size_t i = 0; i < grads.size() - 1; i++)
-        if (trainable[i])
-            requires_grad[i] = true;
+        if (metadata[i].trainable)
+            metadata[i].requires_grad = true;
 
     // Calculate all tensors that require gradients
 
@@ -363,11 +384,11 @@ inline void TapeRecorder<T>::Compile(const NodePtr<T>& root)
 
         for (size_t i = 0; i < tape.size(); i++)
         {
-            if (requires_grad[i])
+            if (metadata[tape[i].a].requires_grad)
             {
-                if (!requires_grad[tape[i].out])
+                if (!metadata[tape[i].out].requires_grad)
                 {
-                    requires_grad[tape[i].out] = true;
+                    metadata[tape[i].out].requires_grad = true;
                     any_change = true;
                 }
             }
@@ -380,6 +401,8 @@ inline void TapeRecorder<T>::Compile(const NodePtr<T>& root)
 template<typename T>
 void TapeRecorder<T>::Forward()
 {
+    int calibration_index = 0;
+
 	for (const auto& entry : tape)
 	{
         switch (entry.op)
@@ -405,7 +428,8 @@ void TapeRecorder<T>::Forward()
             {
                 //values[entry.a].Print();
                 //values[entry.b].Print();
-                values[entry.out] = values[entry.a] % values[entry.b];
+                //values[entry.out] = values[entry.a] % values[entry.b];
+                Kernels::MatMul_Forward(values[entry.out], values[entry.a], values[entry.b]);
                 //values[entry.out].Print();
             }
             else
@@ -473,8 +497,8 @@ void TapeRecorder<T>::Forward()
         case Operator::Conv2D:
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                //Kernels::Conv2D_Forward(thread_pool, values[entry.out], values[entry.a], values[entry.b], entry.stride, entry.padding);
-                Kernels::Conv2D_Forward(values[entry.out], values[entry.a], values[entry.b], entry.stride, entry.padding);
+                Kernels::Conv2D_Forward(thread_pool, values[entry.out], values[entry.a], values[entry.b], entry.stride, entry.padding);
+                //Kernels::Conv2D_Forward(values[entry.out], values[entry.a], values[entry.b], entry.stride, entry.padding);
                 //values[entry.a].Print();
                 //values[entry.b].Print();
                 //values[entry.out].Print();
@@ -496,13 +520,29 @@ void TapeRecorder<T>::Forward()
             break;
         case Operator::BatchNorm:
             if constexpr (std::is_same_v<T, Tensor4D>)
+            {
                 values[entry.out] = values[entry.a].BatchNorm(&values[entry.b], &values[entry.c]);
+                if (m_CalibrationStarted)
+                {
+                    calibrations_mean[calibration_index] += values[entry.b];
+                    calibrations_var [calibration_index] += values[entry.c] * values[entry.c];
+                    calibration_index++;
+                }
+            }
             else
                 throw std::runtime_error("Unsupported Operation");
             break;
         case Operator::BatchNorm2D:
             if constexpr (std::is_same_v<T, Tensor4D>)
+            {
                 values[entry.out] = values[entry.a].BatchNorm2D(&values[entry.b], &values[entry.c]);
+                if (m_CalibrationStarted)
+                {
+                    calibrations_mean[calibration_index] += values[entry.b];
+                    calibrations_var[calibration_index]  += values[entry.c] * values[entry.c];
+                    calibration_index++;
+                }
+            }
             else
                 throw std::runtime_error("Unsupported Operation");
             break;
@@ -511,6 +551,9 @@ void TapeRecorder<T>::Forward()
             throw std::runtime_error("Unsupported Operation");
         }
 	}
+
+    if (m_CalibrationStarted)
+        m_CalibrationBatchesSeen += values[0].GetBatches();
 }
 
 
@@ -532,7 +575,7 @@ inline void TapeRecorder<T>::Backward()
     //Zero all the gradients except the trainable parameter. For them gradients should accumulate
     for (size_t i = 0; i < grads.size() - 1; i++)
     {
-        if (!trainable[i])
+        if (!metadata[i].trainable)
             grads[i].SetZero();
     }
 
@@ -778,6 +821,46 @@ inline void TapeRecorder<T>::Backward()
             throw std::runtime_error("Unsupported Operation");
         }
     }
+}
+
+
+
+template<typename T>
+inline void TapeRecorder<T>::StartCalibration()
+{
+    calibrations_mean.clear();
+    calibrations_var.clear();
+
+    for (int i = 0; i < (int)tape.size(); i++)
+    {
+        const auto& entry = tape[i];
+
+        if (entry.op == Operator::BatchNorm)
+        {
+            auto shape = values[entry.a].GetShape();
+            calibrations_mean.push_back(Tensor4D({ 0, shape.GetDepth(), shape.GetRows(), shape.GetColumns() }));
+            calibrations_var .push_back(Tensor4D({ 0, shape.GetDepth(), shape.GetRows(), shape.GetColumns() }));
+        }
+
+        else if (entry.op == Operator::BatchNorm2D)
+        {
+            auto shape = values[entry.a].GetShape();
+            calibrations_mean.push_back(Tensor4D({ 1, shape.GetDepth(), 1, 1 }));
+            calibrations_var .push_back(Tensor4D({ 1, shape.GetDepth(), 1, 1 }));
+        }
+    }
+
+    m_CalibrationStarted = true;
+    m_CalibrationBatchesSeen = 0;
+}
+
+
+
+template<typename T>
+inline void TapeRecorder<T>::EndCalibration()
+{
+    throw std::runtime_error("Not implemented");
+    m_CalibrationStarted = false;
 }
 
 
@@ -1074,16 +1157,16 @@ inline void TapeRecorder<T>::SaveToFile(const std::string& filename) const
 
     for (size_t i = 0; i < values.size(); i++)
     {
-        uint8_t t = trainable[i] ? 1 : 0;
+        uint8_t t = metadata[i].trainable ? 1 : 0;
         file.write((char*)(&t), sizeof(uint8_t));
-        t = requires_grad[i] ? 1 : 0;
+        t = metadata[i].requires_grad ? 1 : 0;
         file.write((char*)(&t), sizeof(uint8_t));
-        t = weight_decay[i] ? 1 : 0;
+        t = metadata[i].has_weight_decay ? 1 : 0;
         file.write((char*)(&t), sizeof(uint8_t));
 
         values[i].GetShape().Save(file);
 
-        if (trainable[i])
+        if (metadata[i].trainable)
             values[i].Save(file);
     }
 
@@ -1142,25 +1225,22 @@ inline bool TapeRecorder<T>::LoadFromFile(const std::string& filename)
 
     values.resize(value_count);
     grads.resize(value_count);
-
-    trainable.resize(value_count);
-    requires_grad.resize(value_count);
-    weight_decay.resize(value_count);
+    metadata.resize(value_count);
 
     for (size_t i = 0; i < value_count; i++)
     {
         uint8_t tmp;
         file.read((char*)&tmp, sizeof(uint8_t));
-        trainable[i] = tmp == 1;
+        metadata[i].trainable = tmp == 1;
         file.read((char*)&tmp, sizeof(uint8_t));
-        requires_grad[i] = tmp == 1;
+        metadata[i].requires_grad = tmp == 1;
         file.read((char*)&tmp, sizeof(uint8_t));
-        weight_decay[i] = tmp == 1;
+        metadata[i].has_weight_decay = tmp == 1;
         
 
         Tensor4D::Shape shape(file);
 
-        if (trainable[i])
+        if (metadata[i].trainable)
             values[i] = Tensor4D(shape, file);
         else
             values[i] = Tensor4D(shape);

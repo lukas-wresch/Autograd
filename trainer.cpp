@@ -69,7 +69,6 @@ void Trainer::TrainingLoop()
 		m_Tape.Backward();
 
 		auto end_time = std::chrono::high_resolution_clock::now();
-
 		auto batch_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 
 		size_t correct = 0;
@@ -142,7 +141,10 @@ void Trainer::Validate()
 			actual_batch_size++;
 		}
 
+		auto start_time = std::chrono::high_resolution_clock::now();
 		m_Tape.Forward();
+		auto end_time = std::chrono::high_resolution_clock::now();
+		auto batch_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 
 		for (size_t j = 0; j < actual_batch_size; j++)
 		{
@@ -155,7 +157,9 @@ void Trainer::Validate()
 
 		train_i += actual_batch_size;
 
-		task_train.description(std::format("Acc: {:.2f}%", (float)correct * 100.0f / train_i));
+		float passes_per_second = (float)batch_size / batch_duration * 1000.0f;
+
+		task_train.description(std::format("passes/s: {:.2f} Acc: {:.2f}%", passes_per_second, (float)correct * 100.0f / train_i));
 		task_train.update(train_i);
 	
 
@@ -185,4 +189,6 @@ void Trainer::Validate()
 		task_valid.description(std::format("Acc: {:.2f}%", (float)val_correct * 100.0f / valid_i));
 		task_valid.update(valid_i);
 	}
+
+	std::cout << "\n\n";
 }

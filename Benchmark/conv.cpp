@@ -2,19 +2,11 @@
 #include <iostream>
 #define NOMINMAX
 #include <windows.h>
-#include "gtest/gtest.h"
 #include "../src/kernels.h"
 
 
 
-static void DebugPrint(const std::string& text)
-{
-    OutputDebugStringA(text.c_str());
-}
-
-
-
-static double RunConvBenchmark(size_t N, size_t C, size_t H, size_t W, int threads)
+double RunConvBenchmark(size_t N, size_t C, size_t H, size_t W, int threads)
 {
     Tensor4D input({ N, C, H, W });
     Tensor4D kernel({ 16, C, 3, 3 });   // 16 Output-Channels, 3x3 Kernel
@@ -44,12 +36,14 @@ static double RunConvBenchmark(size_t N, size_t C, size_t H, size_t W, int threa
 
 
 
-TEST(Benchmark, Conv2D_Threads_vs_Size)
+int main()
 {
-    std::vector<int> threadCounts = { 1, 2, 4, 8 };
+    std::vector<int> threadCounts = { 1, 2, 4, 8, 16, 32 };
+    std::vector<int> BatchCounts  = { 1, 4, 16, 64 };
 
     std::vector<size_t> sizes =
     {
+        8,
         16,
         32,
         64,
@@ -58,27 +52,28 @@ TEST(Benchmark, Conv2D_Threads_vs_Size)
         //512,
     };
 
-    DebugPrint("\n==============================\n");
-    DebugPrint(" Conv2D Benchmark (3x3 Kernel)\n");
-    DebugPrint("==============================\n");
+    printf("\n==============================\n");
+    printf(" Conv2D Benchmark (3x3 Kernel)\n");
+    printf("==============================\n");
 
     for (size_t size : sizes)
+        for (size_t b : BatchCounts)
     {
         std::stringstream ss;
-        ss << "\nInput: " << size << "x" << size << "\n";
+        ss << "\nInput: " << b << "x" << 16 << "x" << size << "x" << size << "\n";
 
-        DebugPrint(ss.str());
+        std::cout << ss.str();
 
         double baseline = 0.0;
 
         for (int threads : threadCounts)
         {
             double ms = RunConvBenchmark(
-                    size/4,      // N
-                    16,     // C
-                    size,
-                    size,
-                    threads);
+                b,      // N
+                16,     // C
+                size,
+                size,
+                threads);
 
             if (threads == 1)
                 baseline = ms;
@@ -94,7 +89,9 @@ TEST(Benchmark, Conv2D_Threads_vs_Size)
 
             line << "\n";
 
-            DebugPrint(line.str());
+            std::cout << line.str() << std::endl;
         }
     }
+
+    return 0;
 }

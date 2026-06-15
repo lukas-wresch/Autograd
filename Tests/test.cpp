@@ -4,7 +4,7 @@
 #include "../src/neuron.h"
 #include "../src/layer.h"
 #include "../src/sgd.h"
-#include "../src/tape_recorder.h"
+#include "../src/tape.h"
 #include "../src/conv2d.h"
 #include "../mnist.h"
 

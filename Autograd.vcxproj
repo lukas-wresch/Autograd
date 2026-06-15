@@ -150,7 +150,7 @@
     <ClInclude Include="src\node.h" />
     <ClInclude Include="src\scalar.h" />
     <ClInclude Include="src\sgd.h" />
-    <ClInclude Include="src\tape_recorder.h" />
+    <ClInclude Include="src\tape.h" />
     <ClInclude Include="src\tensor.h" />
     <ClInclude Include="src\tensor4d.h" />
     <ClInclude Include="src\thread_pool.h" />

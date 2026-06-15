@@ -815,7 +815,7 @@ public:
 		return Tensor4D({ 1 }, { loss / GetBatches() });
 	}
 
-	Tensor4D BatchNorm(Tensor4D* Mean = nullptr, Tensor4D* Std = nullptr) const
+	Tensor4D BatchNorm(Tensor4D* MeanOut = nullptr, Tensor4D* StdOut = nullptr) const
 	{
 		const float eps = 0.00001f;
 		Tensor4D out({ GetBatches(), GetDepth(), GetRows(), GetColumns() });
@@ -838,14 +838,28 @@ public:
 
 					float std = sqrtf(sum / (float)GetBatches() + eps);
 
-					if (Mean)
-						Mean->At(0, d, r, c) = mean;
-					if (Std)
-						Std->At(0, d, r, c)  = std;
+					if (MeanOut)
+						MeanOut->At(0, d, r, c) = mean;
+					if (StdOut)
+						StdOut->At(0, d, r, c)  = std;
 
 					for (size_t b = 0; b < GetBatches(); b++)
 						out.At(b, d, r, c) = (At(b, d, r, c) - mean) / std;
 				}
+
+		return out;
+	}
+
+	Tensor4D BatchNorm(const Tensor4D& MeanIn, const Tensor4D& StdIn) const
+	{
+		const float eps = 0.00001f;
+		Tensor4D out({ GetBatches(), GetDepth(), GetRows(), GetColumns() });
+
+		for (size_t b = 0; b < GetBatches(); b++)
+			for (size_t d = 0; d < GetDepth(); d++)
+				for (size_t r = 0; r < GetRows(); r++)
+					for (size_t c = 0; c < GetColumns(); c++)					
+						out.At(b, d, r, c) = (At(b, d, r, c) - MeanIn.At(0, d, r, c)) / StdIn.At(0, d, r, c);
 
 		return out;
 	}
