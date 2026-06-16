@@ -26,6 +26,8 @@ public:
 
     void Validate();
 
+    void Calibrate();
+
 private:
     DataSet m_Data;
     TapeRecorder<Tensor4D>& m_Tape;

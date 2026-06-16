@@ -251,6 +251,7 @@ private:
     std::vector<Metadata> metadata;
 
     bool m_CalibrationStarted = false;
+    bool m_IsCalibrated = false;
     size_t m_CalibrationBatchesSeen = 0;
 
     ThreadPool thread_pool = ThreadPool(8);
@@ -334,13 +335,25 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
 
     // Batch norms
     case Operator::BatchNorm:
+    {
+        if constexpr (std::is_same_v<T, Tensor4D>)
+        {
+            const auto& value = node->GetValue();
+            auto cache_id_mean = AddDataEntry(Tensor4D({ 1, value.GetDepth(), value.GetRows(), value.GetColumns() }));
+            auto cache_id_std = AddDataEntry(Tensor4D({ 1, value.GetDepth(), value.GetRows(), value.GetColumns() }));
+            AddOpEntry(node->op, GetID(node->left), cache_id_mean, cache_id_std, node_id);
+        }
+        else
+            throw std::runtime_error("Unsupported Operation");
+        break;
+    }
     case Operator::BatchNorm2D:
     {
         if constexpr (std::is_same_v<T, Tensor4D>)
         {
             const auto& value  = node->GetValue();
-            auto cache_id_mean = AddDataEntry(Tensor4D({ 1, value.GetDepth(), value.GetRows(), value.GetColumns() }));
-            auto cache_id_std  = AddDataEntry(Tensor4D({ 1, value.GetDepth(), value.GetRows(), value.GetColumns() }));
+            auto cache_id_mean = AddDataEntry(Tensor4D({ 1, value.GetDepth(), 1, 1 }));
+            auto cache_id_std  = AddDataEntry(Tensor4D({ 1, value.GetDepth(), 1, 1 }));
             AddOpEntry(node->op, GetID(node->left), cache_id_mean, cache_id_std, node_id);
         }
         else
@@ -384,7 +397,7 @@ inline void TapeRecorder<T>::Compile(const NodePtr<T>& root)
 
         for (size_t i = 0; i < tape.size(); i++)
         {
-            if (metadata[tape[i].a].requires_grad)
+            if ( (tape[i].a >= 0 && metadata[tape[i].a].requires_grad) || (tape[i].b >= 0 && metadata[tape[i].b].requires_grad) )
             {
                 if (!metadata[tape[i].out].requires_grad)
                 {
@@ -521,12 +534,17 @@ void TapeRecorder<T>::Forward()
         case Operator::BatchNorm:
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                values[entry.out] = values[entry.a].BatchNorm(&values[entry.b], &values[entry.c]);
-                if (m_CalibrationStarted)
+                if (m_IsCalibrated)
+                    values[entry.out] = values[entry.a].BatchNorm(values[entry.b], values[entry.c]);
+                else
                 {
-                    calibrations_mean[calibration_index] += values[entry.b];
-                    calibrations_var [calibration_index] += values[entry.c] * values[entry.c];
-                    calibration_index++;
+                    values[entry.out] = values[entry.a].BatchNorm(&values[entry.b], &values[entry.c]);
+                    if (m_CalibrationStarted)
+                    {
+                        calibrations_mean[calibration_index] += values[entry.b];
+                        calibrations_var[calibration_index] += values[entry.c] * values[entry.c];
+                        calibration_index++;
+                    }
                 }
             }
             else
@@ -535,12 +553,17 @@ void TapeRecorder<T>::Forward()
         case Operator::BatchNorm2D:
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                values[entry.out] = values[entry.a].BatchNorm2D(&values[entry.b], &values[entry.c]);
-                if (m_CalibrationStarted)
+                if (m_IsCalibrated)
+                    values[entry.out] = values[entry.a].BatchNorm2D(values[entry.b], values[entry.c]);
+                else
                 {
-                    calibrations_mean[calibration_index] += values[entry.b];
-                    calibrations_var[calibration_index]  += values[entry.c] * values[entry.c];
-                    calibration_index++;
+                    values[entry.out] = values[entry.a].BatchNorm2D(&values[entry.b], &values[entry.c]);
+                    if (m_CalibrationStarted)
+                    {
+                        calibrations_mean[calibration_index] += values[entry.b];
+                        calibrations_var[calibration_index] += values[entry.c] * values[entry.c];
+                        calibration_index++;
+                    }
                 }
             }
             else
@@ -553,7 +576,7 @@ void TapeRecorder<T>::Forward()
 	}
 
     if (m_CalibrationStarted)
-        m_CalibrationBatchesSeen += values[0].GetBatches();
+        m_CalibrationBatchesSeen++;
 }
 
 
@@ -795,7 +818,7 @@ inline void TapeRecorder<T>::Backward()
         case Operator::Flatten:
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                grads[entry.a] = grads[entry.out].Reshape({ entry.B, entry.C, entry.H, entry.W });
+                grads[entry.a] += grads[entry.out].Reshape({ entry.B, entry.C, entry.H, entry.W });
             }
             else
                 throw std::runtime_error("Unsupported Operation");
@@ -838,15 +861,15 @@ inline void TapeRecorder<T>::StartCalibration()
         if (entry.op == Operator::BatchNorm)
         {
             auto shape = values[entry.a].GetShape();
-            calibrations_mean.push_back(Tensor4D({ 0, shape.GetDepth(), shape.GetRows(), shape.GetColumns() }));
-            calibrations_var .push_back(Tensor4D({ 0, shape.GetDepth(), shape.GetRows(), shape.GetColumns() }));
+            calibrations_mean.push_back(Tensor4D({ 1, shape[1], shape[2], shape[3] }));
+            calibrations_var .push_back(Tensor4D({ 1, shape[1], shape[2], shape[3] }));
         }
 
         else if (entry.op == Operator::BatchNorm2D)
         {
             auto shape = values[entry.a].GetShape();
-            calibrations_mean.push_back(Tensor4D({ 1, shape.GetDepth(), 1, 1 }));
-            calibrations_var .push_back(Tensor4D({ 1, shape.GetDepth(), 1, 1 }));
+            calibrations_mean.push_back(Tensor4D({ 1, shape[1], 1, 1 }));
+            calibrations_var .push_back(Tensor4D({ 1, shape[1], 1, 1 }));
         }
     }
 
@@ -859,8 +882,41 @@ inline void TapeRecorder<T>::StartCalibration()
 template<typename T>
 inline void TapeRecorder<T>::EndCalibration()
 {
-    throw std::runtime_error("Not implemented");
+    if (m_CalibrationBatchesSeen == 0)
+        throw std::runtime_error("No calibration batches seen.");
+
+    float inv_batch_count = 1.0f / (float)m_CalibrationBatchesSeen;
+
+    for (auto& tensor : calibrations_mean)
+        tensor = inv_batch_count * tensor;
+
+    for (auto& tensor : calibrations_var)
+        tensor = inv_batch_count * tensor;
+
+    int j = 0;
+
+    for (int i = 0; i < (int)tape.size(); i++)
+    {
+        const auto& entry = tape[i];
+
+        if (entry.op == Operator::BatchNorm)
+        {
+            values[entry.b].CopyFrom(calibrations_mean[j]);
+            values[entry.c].CopyFrom(calibrations_var[j].Sqrt());
+            j++;
+        }
+
+        else if (entry.op == Operator::BatchNorm2D)
+        {
+            values[entry.b].CopyFrom(calibrations_mean[j]);
+            values[entry.c].CopyFrom(calibrations_var[j].Sqrt());
+            j++;
+        }
+    }
+    
+
     m_CalibrationStarted = false;
+    m_IsCalibrated = true;
 }
 
 

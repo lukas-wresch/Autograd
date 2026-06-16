@@ -34,6 +34,8 @@ enum class Operator
 
     BatchNorm,
     BatchNorm2D,
+
+    GlobalAveragePool2D,
 };
 
 

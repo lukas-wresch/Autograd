@@ -98,6 +98,8 @@ Config ParseArguments(int argc, char** argv)
 			cfg.mode = arg;
 		else if (arg == "validate")
 			cfg.mode = arg;
+		else if (arg == "calibrate")
+			cfg.mode = arg;
 		else if (arg == "stats")
 			cfg.mode = arg;
 
@@ -123,9 +125,9 @@ int main(int argc, char** argv)
 {
 	auto config = ParseArguments(argc, argv);
 
-	//config.mode = "validate";
-	//config.model = "cifar-10-wd.tape";
-	//config.dataset = "cifar-10";
+	//config.mode = "calibrate";
+	//config.model = "mnist-16.tape";
+	//config.dataset = "mnist";
 
 	
 	Trainer::DataSet data;
@@ -230,6 +232,13 @@ int main(int argc, char** argv)
 	{
 		Trainer trainer(data, tape, sgd);
 
+		trainer.Validate();
+	}
+	else if (config.mode == "calibrate")
+	{
+		Trainer trainer(data, tape, sgd);
+
+		trainer.Calibrate();
 		trainer.Validate();
 	}
 	else if (config.mode == "stats")

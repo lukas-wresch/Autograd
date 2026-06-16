@@ -120,10 +120,10 @@ void Trainer::Validate()
 	auto task_train = mgr.createBar("Train Accuracy", (int)m_Data.train_data.size());
 	auto task_valid = mgr.createBar("Validation Accuracy", (int)m_Data.valid_data.size());
 
-	auto input = m_Tape.SetValue("input");
-	auto label = m_Tape.SetValue("label");
+	auto input  = m_Tape.SetValue("input");
+	auto label  = m_Tape.SetValue("label");
 	auto output = m_Tape.SetValue("output");
-	auto loss = m_Tape.SetValue("loss");
+	auto loss   = m_Tape.SetValue("loss");
 
 	size_t batch_size = input->GetBatches();
 
@@ -189,6 +189,66 @@ void Trainer::Validate()
 		task_valid.description(std::format("Acc: {:.2f}%", (float)val_correct * 100.0f / valid_i));
 		task_valid.update(valid_i);
 	}
+
+	std::cout << "\n\n";
+}
+
+
+
+void Trainer::Calibrate()
+{
+	int correct = 0;
+	int val_correct = 0;
+
+	ProgressManager mgr;
+
+	auto task_train = mgr.createBar("Calibration", (int)m_Data.train_data.size());
+
+	auto input = m_Tape.SetValue("input");
+	auto label = m_Tape.SetValue("label");
+	auto output = m_Tape.SetValue("output");
+	auto loss = m_Tape.SetValue("loss");
+
+	size_t batch_size = input->GetBatches();
+
+	size_t train_i = 0;
+
+	m_Tape.StartCalibration();
+
+	while (train_i < m_Data.train_data.size())
+	{
+		size_t actual_batch_size = 0;
+
+		while (actual_batch_size < batch_size && train_i + actual_batch_size < m_Data.train_data.size())
+		{
+			input->ViewBatch(actual_batch_size).CopyFrom(m_Data.train_data[train_i + actual_batch_size]);
+			label->SetColumn(actual_batch_size, 0, 0, { m_Data.train_labels[train_i + actual_batch_size].At(0, 0, 0, 0) });
+			actual_batch_size++;
+		}
+
+		auto start_time = std::chrono::high_resolution_clock::now();
+		m_Tape.Forward();
+		auto end_time = std::chrono::high_resolution_clock::now();
+		auto batch_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+
+		for (size_t j = 0; j < actual_batch_size; j++)
+		{
+			//Convert one hot to class index
+			int pred_class = (int)output->ArgMax(j, 0);
+			int target_class = (int)m_Data.train_labels[train_i + j].At(0, 0, 0, 0);
+
+			if (pred_class == target_class) correct++;
+		}
+
+		train_i += actual_batch_size;
+
+		float passes_per_second = (float)batch_size / batch_duration * 1000.0f;
+
+		task_train.description(std::format("passes/s: {:.2f} Acc: {:.2f}%", passes_per_second, (float)correct * 100.0f / train_i));
+		task_train.update(train_i);
+	}
+
+	m_Tape.EndCalibration();
 
 	std::cout << "\n\n";
 }
