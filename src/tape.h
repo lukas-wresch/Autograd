@@ -192,6 +192,11 @@ public:
         return (int)values.size() - 1;
     }
 
+    void AddOpEntry(Operator op, int a, int out)
+    {
+        tape.push_back({ op, a, -1, -1, {}, out });
+    }
+
 	void AddOpEntry(Operator op, int a, int b, int out)
 	{
         tape.push_back({ op, a, b, -1, {}, out });
@@ -314,6 +319,9 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
     case Operator::Tanh:
     case Operator::ReLU:
     case Operator::Softmax:
+    case Operator::GlobalAveragePool2D:
+        AddOpEntry(node->op, GetID(node->left), node_id);
+        break;
 
     // Convolutions
     case Operator::Conv2D:
@@ -565,6 +573,14 @@ void TapeRecorder<T>::Forward()
                         calibration_index++;
                     }
                 }
+            }
+            else
+                throw std::runtime_error("Unsupported Operation");
+            break;
+        case Operator::GlobalAveragePool2D:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                values[entry.out] = values[entry.a].GlobalAveragePool2D();
             }
             else
                 throw std::runtime_error("Unsupported Operation");
@@ -839,6 +855,15 @@ inline void TapeRecorder<T>::Backward()
             else
                 throw std::runtime_error("Unsupported Operation");
             break;
+        case Operator::GlobalAveragePool2D:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+            {
+                float inv = 1.0f / ((float)values[entry.out].GetRows() * values[entry.out].GetColumns());
+                grads[entry.a] += inv * grads[entry.out];
+            }
+            else
+                throw std::runtime_error("Unsupported Operation");
+            break;
 
         default:
             throw std::runtime_error("Unsupported Operation");
@@ -953,73 +978,61 @@ inline void TapeRecorder<T>::PrintTape() const
         {
         case Operator::Add:
             op_text = "Add";
-            op_sign = "+";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("%s [%s] + %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::Subtract:
             op_text = "Subtract";
-            op_sign = "-";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("%s [%s] - %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::Multiply:
             op_text = "Multiply";
-            op_sign = "*";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("%s [%s] %% %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::ElementwiseAdd:
             op_text = "Elementwise-Add";
-            op_sign = "+";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("%s [%s] + %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::ElementwiseMul:
             op_text = "Elementwise-Multiply";
-            op_sign = "*";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("%s [%s] * %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::Tanh:
             op_text = "Tanh";
-            op_sign = "tanh";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("tanh(%s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str());
             break;
         case Operator::ReLU:
             op_text = "ReLU";
-            op_sign = "relu";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("ReLU(%s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str());
             break;
         case Operator::Sum:
             op_text = "Sum";
-            op_sign = "sum";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("Sum(%s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str());
             break;
         case Operator::Softmax:
             op_text = "Softmax";
-            op_sign = "softmax";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("softmax(%s [%s], %s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::CrossEntropy:
             op_text = "CrossEntropy";
-            op_sign = "crossentropy";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("CE(%s [%s], %s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::Softmax_CrossEntropy:
             op_text = "Softmax_CrossEntropy";
-            op_sign = "smce";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("SMCE(%s [%s], %s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::Conv2D:
             op_text = "Conv2D";
-            op_sign = "conv2d";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("Conv2D(%s [%s], %s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
@@ -1030,21 +1043,23 @@ inline void TapeRecorder<T>::PrintTape() const
             break;
         case Operator::Flatten:
             op_text = "Flatten";
-            op_sign = "flatten";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("Flatten(%s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str());
             break;
         case Operator::BatchNorm:
             op_text = "BatchNorm";
-            op_sign = "BatchNorm";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("BatchNorm(%s [%s]) -> %s [%s], %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str(), c_label.c_str(), values[entry.c].Shape2String().c_str());
             break;
         case Operator::BatchNorm2D:
             op_text = "BatchNorm2D";
-            op_sign = "BatchNorm2D";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("BatchNorm2D(%s [%s]) -> %s [%s], %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str(), c_label.c_str(), values[entry.c].Shape2String().c_str());
+            break;
+        case Operator::GlobalAveragePool2D:
+            op_text = "GlobalAveragePool2D";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("GlobalAveragePool2D(%s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str());
             break;
         default:
             if (entry.a < 0)

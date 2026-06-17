@@ -929,6 +929,25 @@ public:
 		return out;
 	}
 
+	Tensor4D GlobalAveragePool2D()
+	{
+		Tensor4D out({ GetBatches(), GetDepth(), 1, 1 });
+
+		for (size_t b = 0; b < GetBatches(); b++)
+			for (size_t d = 0; d < GetDepth(); d++)
+			{
+				float sum = 0.0f;
+
+				for (size_t r = 0; r < GetRows(); r++)
+					for (size_t c = 0; c < GetColumns(); c++)
+						sum += At(b, d, r, c);
+
+				out.At(b, d, 0, 0) = sum / (float)(GetRows() * GetColumns());
+			}
+
+		return out;
+	}
+
 	inline Tensor4D operator+( const Tensor4D& rhs) const;
 	inline void     operator+=(const Tensor4D& rhs);
 

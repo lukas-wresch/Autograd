@@ -56,7 +56,7 @@ NodePtr<Tensor4D> Conv2D::Conv(const NodePtr<Tensor4D>& Input)
 		conv_output = conv_output + m_Biases;
 	else
 	{
-		BatchNorm2DLayer norm(Input->GetValue().GetDepth(), Input->GetValue().GetRows(), Input->GetValue().GetColumns());
+		BatchNorm2DLayer norm(m_Weights->GetValue().GetBatches()); // out channels
 		conv_output = norm.Forward(conv_output);
 	}
 

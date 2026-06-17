@@ -43,7 +43,7 @@ NodePtr<Tensor4D> BatchNormLayer::Forward(const NodePtr<Tensor4D>& Input)
 class BatchNorm2DLayer
 {
 public:
-    BatchNorm2DLayer(size_t Depth, size_t Height, size_t Width, const std::string& Label = "")
+    BatchNorm2DLayer(size_t Depth, const std::string& Label = "")
     {
         m_Gamma = Node<Tensor4D>::Create(Tensor4D({ 1, Depth, 1, 1 }));
         m_Beta  = Node<Tensor4D>::Create(Tensor4D({ 1, Depth, 1, 1 }));

@@ -2,16 +2,8 @@
 #include <iostream>
 #include <random>
 #include <format>
-//#define WIN32_LEAN_AND_MEAN
-//#define NOMINMAX
-//#include <windows.h>
-//#include <mmsystem.h>
-//#pragma comment(lib, "winmm.lib")
-#include "../src/scalar.h"
 #include "../src/vector.h"
 #include "../src/node.h"
-#include "../src/neuron.h"
-#include "../src/layer.h"
 #include "../src/sgd.h"
 #include "../src/tensor4d.h"
 #include "../src/conv2d.h"
@@ -79,6 +71,11 @@ struct Config
 	std::string mode;//train, validate
 	std::string dataset;
 	std::string model;
+	int epochs = 1;
+
+	float lr = 0.0005f;
+	float momentum = 0.5f;
+	float weight_decay = 0.001f;
 };
 
 
@@ -107,6 +104,14 @@ Config ParseArguments(int argc, char** argv)
 			cfg.dataset = argv[++i];
 		else if (arg == "--model")
 			cfg.model = argv[++i];
+		else if (arg == "--epochs")
+			cfg.epochs = std::stoi(argv[++i]);
+		else if (arg == "--lr")
+			cfg.lr = std::stof(argv[++i]);
+		else if (arg == "--momentum")
+			cfg.momentum = std::stof(argv[++i]);
+		else if (arg == "--weight_decay")
+			cfg.weight_decay = std::stof(argv[++i]);
 	}
 
 	//if (cfg.mode != "train" && cfg.mode != "validate" && cfg.mode != "stats")
@@ -125,9 +130,9 @@ int main(int argc, char** argv)
 {
 	auto config = ParseArguments(argc, argv);
 
-	//config.mode = "calibrate";
-	//config.model = "mnist-16.tape";
-	//config.dataset = "mnist";
+	//config.mode = "train";
+	//config.model = "simple-res.tape";
+	//config.dataset = "cifar-10";
 
 	
 	Trainer::DataSet data;
@@ -205,7 +210,7 @@ int main(int argc, char** argv)
 
 
 	auto tape = TapeRecorder<Tensor4D>();
-	SGD<Tensor4D> sgd(0.0001f, 0.5f, 0.01f);
+	SGD<Tensor4D> sgd(config.lr, config.momentum, config.weight_decay);
 	const int batch_size = 64;
 
 	if (!tape.LoadFromFile(config.model))
@@ -224,9 +229,14 @@ int main(int argc, char** argv)
 	{
 		Trainer trainer(data, tape, sgd);
 
-		trainer.TrainingLoop();
+		for (int e = 0; e < config.epochs; e++)
+		{
+			trainer.TrainingLoop();
 
-		tape.SaveToFile(config.model);
+			tape.SaveToFile(config.model);
+
+			std::cout << "\n\nEpoch " << (e+1) << " complete. Model saved!\n"  << std::endl;
+		}
 	}
 	else if (config.mode == "validate")
 	{

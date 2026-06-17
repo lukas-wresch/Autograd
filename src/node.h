@@ -92,6 +92,7 @@ public:
     NodePtr<T> Flatten();
     NodePtr<T> BatchNorm();
     NodePtr<T> BatchNorm2D();
+    NodePtr<T> GlobalAveragePool2D();
 
     void Backwards();
 
@@ -638,6 +639,18 @@ NodePtr<T> Node<T>::BatchNorm2D()
     auto out = std::make_shared<Node<T>>(this->value.BatchNorm2D());
 
     out->op = Operator::BatchNorm2D;
+    out->left = this->shared_from_this();
+    return out;
+}
+
+
+
+template<typename T>
+NodePtr<T> Node<T>::GlobalAveragePool2D()
+{
+    auto out = std::make_shared<Node<T>>(this->value.GlobalAveragePool2D());
+
+    out->op = Operator::GlobalAveragePool2D;
     out->left = this->shared_from_this();
     return out;
 }

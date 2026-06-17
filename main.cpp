@@ -1458,7 +1458,7 @@ int main(int argc, char** argv)
 
 	Trainer::DataSet data;
 
-	std::string dataset = "mnist";
+	std::string dataset = "cifar-10";
 
 	if (dataset == "mnist")
 	{
@@ -1533,7 +1533,7 @@ int main(int argc, char** argv)
 	auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 3, 32, 32 }), "input");
 	auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 1, 1 }), "label");
 
-	Conv2D conv1(3, 8, 3, 1, 1, Activation::ReLU);
+	/*Conv2D conv1(3, 8, 3, 1, 1, Activation::ReLU);
 	Conv2D conv2(8, 8, 3, 1, 1, Activation::ReLU, true);
 
 	auto out_conv1 = conv1.Conv(x);
@@ -1555,7 +1555,312 @@ int main(int argc, char** argv)
 
 
 	auto h1 = L1.Forward(flattened);
-	auto pred = L2.Forward(h1);
+	auto pred = L2.Forward(h1);*/
+
+
+
+
+	/*Conv2D conv1(3, 32, 3, 1, 1, Activation::ReLU, true);
+	Conv2D conv2(32, 32, 3, 1, 1, Activation::ReLU, true);
+
+	auto y = conv1.Conv(x);
+	y = conv2.Conv(y);
+
+	y = y->MaxPool2D(2, 2);
+
+	// 32x32 -> 16x16
+
+	// -------------------------------------------------
+	// Block 2
+	// -------------------------------------------------
+
+	Conv2D conv3(32, 64, 3, 1, 1, Activation::ReLU, true);
+	Conv2D conv4(64, 64, 3, 1, 1, Activation::ReLU, true);
+
+	y = conv3.Conv(y);
+	y = conv4.Conv(y);
+
+	y = y->MaxPool2D(2, 2);
+
+	// 16x16 -> 8x8
+
+	// -------------------------------------------------
+	// Block 3
+	// -------------------------------------------------
+
+	Conv2D conv5(64, 128, 3, 1, 1, Activation::ReLU, true);
+	Conv2D conv6(128, 128, 3, 1, 1, Activation::ReLU, true);
+	Conv2D conv_skip(64, 128, 1, 1, 0, Activation::Identity);
+
+	auto skip = conv_skip.Conv(y); // 64 -> 128
+
+	y = conv5.Conv(y);
+	y = conv6.Conv(y);
+
+	y = y + skip;
+
+	// Shape:
+	// B x 128 x 8 x 8
+
+	// -------------------------------------------------
+	// GAP
+	// -------------------------------------------------
+
+	auto flattened = y->GlobalAveragePool2D()->Flatten();
+
+	// B x 128
+
+	// -------------------------------------------------
+	// Classifier
+	// -------------------------------------------------
+
+	Layer4D classifier(
+		128,
+		10,
+		Activation::Identity,
+		InitType::Xavier);
+
+	auto pred = classifier.Forward(flattened);*/
+
+
+
+	//trivial resnet
+
+	// ----------------------------------------------------
+// Stem
+// ----------------------------------------------------
+
+	/*Conv2D conv1(
+		1, 16,
+		3, 1, 1,
+		Activation::ReLU,
+		true,
+		"conv1");
+
+	auto y = conv1.Conv(x);
+
+	// ----------------------------------------------------
+	// Residual Block 1
+	// ----------------------------------------------------
+
+	Conv2D res1_conv1(
+		16, 16,
+		3, 1, 1,
+		Activation::ReLU,
+		true,
+		"res1_conv1");
+
+	Conv2D res1_conv2(
+		16, 16,
+		3, 1, 1,
+		Activation::Identity,
+		true,
+		"res1_conv2");
+
+	{
+		auto skip = y;
+
+		y = res1_conv1.Conv(y);
+		y = res1_conv2.Conv(y);
+
+		y = y + skip;
+		y = y->ReLU();
+	}
+
+	// ----------------------------------------------------
+	// Pool
+	// ----------------------------------------------------
+
+	y = y->MaxPool2D(2, 2);
+
+	// 28x28 -> 14x14
+
+	// ----------------------------------------------------
+	// Residual Block 2
+	// ----------------------------------------------------
+
+	Conv2D res2_conv1(
+		16, 16,
+		3, 1, 1,
+		Activation::ReLU,
+		true,
+		"res2_conv1");
+
+	Conv2D res2_conv2(
+		16, 16,
+		3, 1, 1,
+		Activation::Identity,
+		true,
+		"res2_conv2");
+
+	{
+		auto skip = y;
+
+		y = res2_conv1.Conv(y);
+		y = res2_conv2.Conv(y);
+
+		y = y + skip;
+		y = y->ReLU();
+	}
+
+	// ----------------------------------------------------
+	// Head
+	// ----------------------------------------------------
+
+	y = y->GlobalAveragePool2D();
+
+	auto flattened = y->Flatten();
+
+	Layer4D classifier(
+		16,
+		10,
+		Activation::Identity,
+		InitType::Xavier);
+
+
+	auto pred = classifier.Forward(flattened);*/
+
+
+
+	//mini resnet
+
+
+	Conv2D stem(
+	3, 32,
+	3, 1, 1,
+	Activation::ReLU,
+	true,
+	"stem");
+
+	auto y = stem.Conv(x);
+
+	Conv2D s1a(32, 32, 3, 1, 1, Activation::ReLU, true, "s1a");
+	Conv2D s1b(32, 32, 3, 1, 1, Activation::Identity, true, "s1b");
+
+	Conv2D s1c(32, 32, 3, 1, 1, Activation::ReLU, true, "s1c");
+	Conv2D s1d(32, 32, 3, 1, 1, Activation::Identity, true, "s1d");
+
+	{// Block 1
+		auto skip = y;
+
+		y = s1a.Conv(y);
+		y = s1b.Conv(y);
+
+		y = y + skip;
+		y = y->ReLU();
+	}
+
+	{// Block 2
+		auto skip = y;
+
+		y = s1c.Conv(y);
+		y = s1d.Conv(y);
+
+		y = y + skip;
+		y = y->ReLU();
+	}
+
+	// Stage 2 Kanalwechsel
+	y = y->MaxPool2D(2, 2);
+
+	Conv2D proj64(
+		32, 64,
+		3, 1, 1,
+		Activation::ReLU,
+		true,
+		"proj64");
+
+	y = proj64.Conv(y);
+
+	Conv2D s2a(64, 64, 3, 1, 1, Activation::ReLU, true, "s2a");
+	Conv2D s2b(64, 64, 3, 1, 1, Activation::Identity, true, "s2b");
+
+	Conv2D s2c(64, 64, 3, 1, 1, Activation::ReLU, true, "s2c");
+	Conv2D s2d(64, 64, 3, 1, 1, Activation::Identity, true, "s2d");
+
+	{// Block 1
+		auto skip = y;
+
+		y = s2a.Conv(y);
+		y = s2b.Conv(y);
+
+		y = y + skip;
+		y = y->ReLU();
+	}
+
+	{// Block 2
+		auto skip = y;
+
+		y = s2c.Conv(y);
+		y = s2d.Conv(y);
+
+		y = y + skip;
+		y = y->ReLU();
+	}
+
+	y = y->MaxPool2D(2, 2);
+
+	Conv2D proj128(
+		64, 128,
+		3, 1, 1,
+		Activation::ReLU,
+		true,
+		"proj128");
+
+	y = proj128.Conv(y);
+
+
+	Conv2D s3a(128, 128, 3, 1, 1, Activation::ReLU, true, "s3a");
+	Conv2D s3b(128, 128, 3, 1, 1, Activation::Identity, true, "s3b");
+
+	Conv2D s3c(128, 128, 3, 1, 1, Activation::ReLU, true, "s3c");
+	Conv2D s3d(128, 128, 3, 1, 1, Activation::Identity, true, "s3d");
+
+	{
+		auto skip = y;
+
+		y = s3a.Conv(y);
+		y = s3b.Conv(y);
+
+		y = y + skip;
+		y = y->ReLU();
+	}
+
+	{
+		auto skip = y;
+
+		y = s3c.Conv(y);
+		y = s3d.Conv(y);
+
+		y = y + skip;
+		y = y->ReLU();
+	}
+
+
+	y = y->GlobalAveragePool2D();
+
+	auto flattened = y->Flatten();
+
+
+	Layer4D fc1(
+		128,
+		256,
+		Activation::ReLU,
+		InitType::Xavier);
+
+	Layer4D fc2(
+		256,
+		10,
+		Activation::Identity,
+		InitType::Xavier);
+
+	auto h = fc1.Forward(flattened);
+	auto pred = fc2.Forward(h);
+
+	
+
+
+
 	pred->SetLabel("output");
 
 	auto loss = pred->Softmax_CrossEntropy(label);
@@ -1571,6 +1876,9 @@ int main(int argc, char** argv)
 
 	//trainer.TrainingLoop();
 	//trainer.Validate();
+
+	tape.Forward();
+	tape.Backward();
 
 	tape.SaveToFile("temp.tape");
 
