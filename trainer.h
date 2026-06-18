@@ -22,7 +22,7 @@ public:
     Trainer(const DataSet& Data, TapeRecorder<Tensor4D>& Tape, SGD<Tensor4D>& Sgd) : m_Data(Data), m_Tape(Tape), m_sgd(Sgd)
     {}
 
-    void TrainingLoop();
+    void TrainingLoop(bool* pStopSignal = nullptr);
 
     void Validate();
 

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <random>
 #include <format>
+#include <csignal>
 #include "../src/vector.h"
 #include "../src/node.h"
 #include "../src/sgd.h"
@@ -11,6 +12,20 @@
 #include "../cifar.h"
 #include "../progressmanager.h"
 #include "../trainer.h"
+
+
+
+bool g_stopRequested = false;
+
+
+void SignalHandler(int signal)
+{
+	if (signal == SIGINT)
+	{
+		g_stopRequested = true;
+		std::cout << "Signal received!" << std::endl;
+	}
+}
 
 
 
@@ -128,6 +143,8 @@ Config ParseArguments(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
+	std::signal(SIGINT, SignalHandler);
+
 	auto config = ParseArguments(argc, argv);
 
 	//config.mode = "train";
@@ -231,7 +248,7 @@ int main(int argc, char** argv)
 
 		for (int e = 0; e < config.epochs; e++)
 		{
-			trainer.TrainingLoop();
+			trainer.TrainingLoop(&g_stopRequested);
 
 			tape.SaveToFile(config.model);
 

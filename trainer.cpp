@@ -24,7 +24,7 @@ void ShuffleDataset(std::vector<Tensor4D>& xs, std::vector<Tensor4D>& labels)
 
 
 
-void Trainer::TrainingLoop()
+void Trainer::TrainingLoop(bool* pStopSignal)
 {
 	ProgressManager mgr;
 
@@ -103,6 +103,9 @@ void Trainer::TrainingLoop()
 		//std::cout << desc << std::endl;
 
 		m_sgd.Step();
+
+		if (pStopSignal && *pStopSignal)
+			return;
 	}
 
 	epochs_done++;

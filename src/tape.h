@@ -819,8 +819,8 @@ inline void TapeRecorder<T>::Backward()
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
                 //outer_grad.Print();
-                //TODO optimize
-                Kernels::Conv2D_Backward(grads[entry.a], grads[entry.b], values[entry.a], values[entry.b], outer_grad, entry.stride, entry.padding);
+                //Kernels::Conv2D_Backward(grads[entry.a], grads[entry.b], values[entry.a], values[entry.b], outer_grad, entry.stride, entry.padding);
+                Kernels::Conv2D_Backward(thread_pool, grads[entry.a], grads[entry.b], values[entry.a], values[entry.b], outer_grad, entry.stride, entry.padding);
             }
             else
                 throw std::runtime_error("Unsupported Operation");

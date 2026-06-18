@@ -9,8 +9,7 @@
 class Kernels
 {
 public:
-	static void Multiply_Forward( Tensor& out, const Tensor& left, const Tensor& right);
-	
+	static void Multiply_Forward( Tensor& out, const Tensor& left, const Tensor& right);	
 
     static void MatMul_Forward(Tensor& out, const Tensor& left, const Tensor& right);
     static void MatMul_Forward(Tensor4D& out, const Tensor4D& left, const Tensor4D& right);
@@ -32,6 +31,7 @@ public:
     static void Conv2D_Forward(Tensor4D& out, const Tensor4D& Input, const Tensor4D& Kernel, int Stride = 1, int Padding = 0);
     static void Conv2D_Forward(ThreadPool& Pool, Tensor4D& out, const Tensor4D& Input, const Tensor4D& Kernel, int Stride, int Padding);
     static void Conv2D_Backward(Tensor4D& dInput, Tensor4D& dKernel, const Tensor4D& Input, const Tensor4D& Kernel, const Tensor4D& dOut, int Stride, int Padding);
+    static void Conv2D_Backward(ThreadPool& Pool, Tensor4D& dInput, Tensor4D& dKernel, const Tensor4D& Input, const Tensor4D& Kernel, const Tensor4D& dOut, int Stride, int Padding);
 
     static Tensor4D MaxPool2D_Forward(const Tensor4D& Input, int KernelSize, int Stride, Tensor4D* ArgMax = nullptr);
     static void MaxPool2D_Backward(Tensor4D& dInput, const Tensor4D& Input, const Tensor4D& dOut, const Tensor4D& ArgMax, int KernelSize, int Stride);
@@ -1026,6 +1026,216 @@ inline void Kernels::Conv2D_Backward(Tensor4D& dInput, Tensor4D& dKernel, const 
             }
         }
     }
+}
+
+
+
+inline void Kernels::Conv2D_Backward(
+    ThreadPool& Pool,
+    Tensor4D& dInput,
+    Tensor4D& dKernel,
+    const Tensor4D& Input,
+    const Tensor4D& Kernel,
+    const Tensor4D& dOut,
+    int Stride,
+    int Padding)
+{
+    if (Input.GetShape()[0] != dOut.GetShape()[0])
+        throw std::runtime_error("Conv2D_Backward(): Batch size mismatch");
+
+    if (Input.GetShape()[1] != Kernel.GetShape()[1])
+        throw std::runtime_error("Conv2D_Backward(): Input channels != Kernel in_channels");
+
+    if (Kernel.GetShape()[0] != dOut.GetShape()[1])
+        throw std::runtime_error("Conv2D_Backward(): Kernel out_channels != dOut channels");
+
+    dInput.SetZero();
+    dKernel.SetZero();
+
+    const size_t N = Input.GetShape()[0];
+    const size_t Cin = Input.GetShape()[1];
+    const size_t H = Input.GetShape()[2];
+    const size_t W = Input.GetShape()[3];
+
+    const size_t Cout = Kernel.GetShape()[0];
+    const size_t K = Kernel.GetShape()[2];
+
+    const size_t Hout = dOut.GetShape()[2];
+    const size_t Wout = dOut.GetShape()[3];
+
+    const size_t expectedH =
+        (H + 2 * Padding - K) / Stride + 1;
+
+    const size_t expectedW =
+        (W + 2 * Padding - K) / Stride + 1;
+
+    if (Hout != expectedH || Wout != expectedW)
+        throw std::runtime_error("Conv2D_Backward(): dOut spatial shape mismatch");
+
+    //------------------------------------------------------------------
+    // dKernel
+    //------------------------------------------------------------------
+
+    std::mutex kernelReduceMutex;
+
+    size_t workers = std::max<size_t>(1, Pool.GetWorkerCount());
+    size_t chunk = (N + workers - 1) / workers;
+
+    for (size_t n0 = 0; n0 < N; n0 += chunk)
+    {
+        const size_t n1 = std::min(N, n0 + chunk);
+
+        Pool.Enqueue(
+            [&dKernel,
+            &kernelReduceMutex,
+            &Input,
+            &dOut,
+            n0,
+            n1,
+            Cout,
+            Cin,
+            H,
+            W,
+            K,
+            Hout,
+            Wout,
+            Stride,
+            Padding]()
+        {
+            Tensor4D localKernel(dKernel.GetShape());
+            localKernel.SetZero();
+
+            for (size_t n = n0; n < n1; n++)
+            {
+                for (size_t oc = 0; oc < Cout; oc++)
+                {
+                    for (size_t ic = 0; ic < Cin; ic++)
+                    {
+                        for (size_t kh = 0; kh < K; kh++)
+                        {
+                            for (size_t kw = 0; kw < K; kw++)
+                            {
+                                float grad = 0.0f;
+
+                                for (size_t oh = 0; oh < Hout; oh++)
+                                {
+                                    for (size_t ow = 0; ow < Wout; ow++)
+                                    {
+                                        int ih =
+                                            (int)(oh * Stride + kh - Padding);
+
+                                        int iw =
+                                            (int)(ow * Stride + kw - Padding);
+
+                                        if (ih >= 0 &&
+                                            ih < (int)H &&
+                                            iw >= 0 &&
+                                            iw < (int)W)
+                                        {
+                                            grad +=
+                                                Input.At(n, ic, ih, iw) *
+                                                dOut.At(n, oc, oh, ow);
+                                        }
+                                    }
+                                }
+
+                                localKernel.At(oc, ic, kh, kw) += grad;
+                            }
+                        }
+                    }
+                }
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(kernelReduceMutex);
+
+                for (size_t oc = 0; oc < Cout; oc++)
+                {
+                    for (size_t ic = 0; ic < Cin; ic++)
+                    {
+                        for (size_t kh = 0; kh < K; kh++)
+                        {
+                            for (size_t kw = 0; kw < K; kw++)
+                            {
+                                dKernel.At(oc, ic, kh, kw) +=
+                                    localKernel.At(oc, ic, kh, kw);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    Pool.Wait();
+
+    //------------------------------------------------------------------
+    // dInput
+    //------------------------------------------------------------------
+
+    for (size_t n0 = 0; n0 < N; n0 += chunk)
+    {
+        const size_t n1 = std::min(N, n0 + chunk);
+
+        Pool.Enqueue(
+            [&dInput,
+            &Kernel,
+            &dOut,
+            n0,
+            n1,
+            H,
+            W,
+            Cout,
+            Cin,
+            K,
+            Hout,
+            Wout,
+            Stride,
+            Padding]()
+        {
+            for (size_t n = n0; n < n1; n++)
+            {
+                for (size_t oc = 0; oc < Cout; oc++)
+                {
+                    for (size_t oh = 0; oh < Hout; oh++)
+                    {
+                        for (size_t ow = 0; ow < Wout; ow++)
+                        {
+                            const float grad =
+                                dOut.At(n, oc, oh, ow);
+
+                            for (size_t ic = 0; ic < Cin; ic++)
+                            {
+                                for (size_t kh = 0; kh < K; kh++)
+                                {
+                                    for (size_t kw = 0; kw < K; kw++)
+                                    {
+                                        int ih =
+                                            (int)(oh * Stride + kh - Padding);
+
+                                        int iw =
+                                            (int)(ow * Stride + kw - Padding);
+
+                                        if (ih >= 0 &&
+                                            ih < (int)H &&
+                                            iw >= 0 &&
+                                            iw < (int)W)
+                                        {
+                                            dInput.At(n, ic, ih, iw) +=
+                                                grad *
+                                                Kernel.At(oc, ic, kh, kw);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    Pool.Wait();
 }
 
 
