@@ -577,6 +577,14 @@ public:
 			At(batch, depth, row, c) = vec[c];
 	}
 
+	void SetRow(size_t batch, size_t depth, size_t row, const float* pvec)
+	{
+		size_t cols = GetColumns();
+
+		for (size_t c = 0; c < cols; c++)
+			At(batch, depth, row, c) = pvec[c];
+	}
+
 	void SetColumn(size_t batch, size_t depth, size_t col, const std::vector<float>& vec)
 	{
 		size_t rows = GetRows();
@@ -586,6 +594,14 @@ public:
 
 		for (size_t r = 0; r < rows; r++)
 			At(batch, depth, r, col) = vec[r];
+	}
+
+	void SetColumn(size_t batch, size_t depth, size_t col, const float* pvec)
+	{
+		size_t rows = GetRows();
+
+		for (size_t r = 0; r < rows; r++)
+			At(batch, depth, r, col) = pvec[r];
 	}
 
 
@@ -796,34 +812,104 @@ public:
 			throw std::runtime_error("Tensor4D Softmax_CrossEntropy depth must be 1");
 
 		// Target only contains the label (Sparse)
-		if (Target.GetRows() != 1)
-			throw std::runtime_error("Tensor4D CrossEntropy only support for sparse target");
+		if (Target.GetRows() == 1)
+		{
+			float loss = 0.0f;
+
+			for (size_t b = 0; b < GetBatches(); b++)
+			{
+				float max_val = -std::numeric_limits<float>::infinity();
+
+				for (size_t r = 0; r < GetRows(); r++)
+					max_val = std::max(max_val, At(b, 0, r, 0));
+
+				float sum = 0.0f;
+
+				for (size_t r = 0; r < GetRows(); r++)
+					sum += std::exp(At(b, 0, r, 0) - max_val);
+
+				float log_sum_exp = max_val + std::log(sum);
+
+				int label = (int)Target.At(b, 0, 0, 0);
+
+				if (label < 0 || label >= (int)GetRows())
+					throw std::runtime_error("Tensor4D Softmax_CrossEntropy invalid label index");
+
+				loss += log_sum_exp - At(b, 0, label, 0);
+			}
+
+			return Tensor4D({ 1 }, { loss / GetBatches() });
+		}
+
+		// One-hot encoding
+		if (GetRows() != Target.GetRows())
+			throw std::runtime_error("Tensor4D Softmax_CrossEntropy(): class count mismatch");
 
 		float loss = 0.0f;
 
-		for (size_t b = 0; b < GetBatches(); b++)
+		for (size_t b = 0; b < GetBatches(); ++b)
 		{
 			float max_val = -std::numeric_limits<float>::infinity();
 
 			for (size_t r = 0; r < GetRows(); r++)
 				max_val = std::max(max_val, At(b, 0, r, 0));
 
-			float sum = 0.0f;
+			float sum_exp = 0.0f;
 
 			for (size_t r = 0; r < GetRows(); r++)
-				sum += std::exp(At(b, 0, r, 0) - max_val);
+				sum_exp += std::exp(At(b, 0, r, 0) - max_val);
 
-			float log_sum_exp = max_val + std::log(sum);
+			float log_sum_exp = max_val + std::log(sum_exp);
 
-			int label = (int)Target.At(b, 0, 0, 0);
+			float target_dot_logits = 0.0f;
 
-			if (label < 0 || label >= (int)GetRows())
-				throw std::runtime_error("Tensor4D Softmax_CrossEntropy invalid label index");
+			for (size_t r = 0; r < GetRows(); r++)
+				target_dot_logits += Target.At(b, 0, r, 0) * At(b, 0, r, 0);
 
-			loss += log_sum_exp - At(b, 0, label, 0);
+			loss += log_sum_exp - target_dot_logits;
 		}
 
 		return Tensor4D({ 1 }, { loss / GetBatches() });
+	}
+
+	int Label2ClassIndex() const
+	{
+		if (GetRows() == 1)// Sparse
+			return (int)At(0, 0, 0, 0);
+		// One-hot
+		return (int)ArgMax(0, 0);
+	}
+
+	static Tensor4D Label2OneHotEncoding(const Tensor4D& Label, size_t NumClasses)
+	{
+		int label_ = (int)Label.At(0, 0, 0, 0);
+		return OneHotEncoding(label_, NumClasses);
+	}
+
+	static Tensor4D OneHotEncoding(const int Label, size_t NumClasses)
+	{
+		Tensor4D result({ 1, 1, NumClasses, 1 });
+		result.At(0, 0, Label, 0) = 1.0f;
+		return result;
+	}
+
+	Tensor4D ApplyLabelSmoothing(size_t num_classes, float epsilon)
+	{
+		if (epsilon <= 0.0f)
+			return *this;
+
+		//const size_t num_classes = label.GetSize();
+
+		const float off_value = epsilon / (float)(num_classes - 1);
+
+		const float on_value = 1.0f - epsilon;
+
+		Tensor4D result({ 1, 1, num_classes, 1 });
+
+		for (size_t i = 0; i < num_classes; i++)
+			result.At(0, 0, i, 0) = At(0, 0, i, 0) > 0.5f ? on_value : off_value;
+
+		return result;
 	}
 
 	Tensor4D BatchNorm(Tensor4D* MeanOut = nullptr, Tensor4D* StdOut = nullptr) const

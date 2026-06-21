@@ -54,8 +54,15 @@ void Trainer::TrainingLoop(bool* pStopSignal)
 		for (size_t j = i; j < end; j++)
 		{
 			input->ViewBatch(actual_batch_size).CopyFrom(m_Data.train_data[i + actual_batch_size]);
-			//label->SetColumn(actual_batch_size, 0, 0, m_Data.train_labels[i + actual_batch_size].Data()[0]);
-			label->At(actual_batch_size, 0, 0, 0) = m_Data.train_labels[i + actual_batch_size].Data()[0];
+
+			auto& label_ = m_Data.train_labels[i + actual_batch_size];
+
+			if (label_.GetSize() == 1)
+				label->At(actual_batch_size, 0, 0, 0) = label_.Data()[0];
+			else
+				label->SetColumn(actual_batch_size, 0, 0, label_.Data());
+
+			//label->Print();
 			actual_batch_size++;
 		}
 
@@ -76,7 +83,7 @@ void Trainer::TrainingLoop(bool* pStopSignal)
 		{
 			//Convert one hot to class index
 			int pred_class = (int)output->ArgMax(j, 0);
-			int target_class = (int)m_Data.train_labels[i + j].At(0, 0, 0, 0);
+			int target_class = m_Data.train_labels[i + j].Label2ClassIndex();
 
 			if (pred_class == target_class) correct++;
 		}
@@ -90,7 +97,7 @@ void Trainer::TrainingLoop(bool* pStopSignal)
 
 		if (i > 0)
 		{
-			acc  = 0.8f * old_acc  + 0.2f * acc;
+			acc  = 0.8f * old_acc + 0.2f * acc;
 			batch_loss = 0.8f * old_loss + 0.2f * batch_loss;
 		}
 
@@ -113,7 +120,7 @@ void Trainer::TrainingLoop(bool* pStopSignal)
 
 
 
-void Trainer::Validate()
+void Trainer::Validate(bool* pStopSignal)
 {
 	int correct = 0;
 	int val_correct = 0;
@@ -140,7 +147,15 @@ void Trainer::Validate()
 		while (actual_batch_size < batch_size && train_i + actual_batch_size < m_Data.train_data.size())
 		{
 			input->ViewBatch(actual_batch_size).CopyFrom(m_Data.train_data[train_i + actual_batch_size]);
-			label->SetColumn(actual_batch_size, 0, 0, { m_Data.train_labels[train_i + actual_batch_size].At(0, 0, 0, 0) });
+			//label->SetColumn(actual_batch_size, 0, 0, { m_Data.train_labels[train_i + actual_batch_size].At(0, 0, 0, 0) });
+
+			auto& label_ = m_Data.train_labels[train_i + actual_batch_size];
+
+			if (label_.GetSize() == 1)
+				label->At(actual_batch_size, 0, 0, 0) = label_.Data()[0];
+			else
+				label->SetColumn(actual_batch_size, 0, 0, label_.Data());
+
 			actual_batch_size++;
 		}
 
@@ -153,7 +168,7 @@ void Trainer::Validate()
 		{
 			//Convert one hot to class index
 			int pred_class = (int)output->ArgMax(j, 0);
-			int target_class = (int)m_Data.train_labels[train_i + j].At(0, 0, 0, 0);
+			int target_class = m_Data.train_labels[train_i + j].Label2ClassIndex();
 
 			if (pred_class == target_class) correct++;
 		}
@@ -172,7 +187,14 @@ void Trainer::Validate()
 		while (actual_batch_size < batch_size && valid_i + actual_batch_size < m_Data.valid_data.size())
 		{
 			input->ViewBatch(actual_batch_size).CopyFrom(m_Data.valid_data[valid_i + actual_batch_size]);
-			label->SetColumn(actual_batch_size, 0, 0, { m_Data.valid_labels[valid_i + actual_batch_size].At(0, 0, 0, 0) });
+			//label->SetColumn(actual_batch_size, 0, 0, { m_Data.valid_labels[valid_i + actual_batch_size].At(0, 0, 0, 0) });
+			auto& label_ = m_Data.valid_labels[valid_i + actual_batch_size];
+
+			if (label_.GetSize() == 1)
+				label->At(actual_batch_size, 0, 0, 0) = label_.Data()[0];
+			else
+				label->SetColumn(actual_batch_size, 0, 0, label_.Data());
+
 			actual_batch_size++;
 		}
 
@@ -182,7 +204,7 @@ void Trainer::Validate()
 		{
 			//Convert one hot to class index
 			int pred_class = (int)output->ArgMax(j, 0);
-			int target_class = (int)m_Data.valid_labels[valid_i + j].At(0, 0, 0, 0);
+			int target_class = m_Data.valid_labels[valid_i + j].Label2ClassIndex();
 
 			if (pred_class == target_class) val_correct++;
 		}
@@ -191,6 +213,9 @@ void Trainer::Validate()
 
 		task_valid.description(std::format("Acc: {:.2f}%", (float)val_correct * 100.0f / valid_i));
 		task_valid.update(valid_i);
+
+		if (pStopSignal && *pStopSignal)
+			return;
 	}
 
 	std::cout << "\n\n";
@@ -225,7 +250,14 @@ void Trainer::Calibrate()
 		while (actual_batch_size < batch_size && train_i + actual_batch_size < m_Data.train_data.size())
 		{
 			input->ViewBatch(actual_batch_size).CopyFrom(m_Data.train_data[train_i + actual_batch_size]);
-			label->SetColumn(actual_batch_size, 0, 0, { m_Data.train_labels[train_i + actual_batch_size].At(0, 0, 0, 0) });
+			//label->SetColumn(actual_batch_size, 0, 0, { m_Data.train_labels[train_i + actual_batch_size].At(0, 0, 0, 0) });
+			auto& label_ = m_Data.train_labels[train_i + actual_batch_size];
+
+			if (label_.GetSize() == 1)
+				label->At(actual_batch_size, 0, 0, 0) = label_.Data()[0];
+			else
+				label->SetColumn(actual_batch_size, 0, 0, label_.Data());
+
 			actual_batch_size++;
 		}
 
@@ -237,8 +269,8 @@ void Trainer::Calibrate()
 		for (size_t j = 0; j < actual_batch_size; j++)
 		{
 			//Convert one hot to class index
-			int pred_class = (int)output->ArgMax(j, 0);
-			int target_class = (int)m_Data.train_labels[train_i + j].At(0, 0, 0, 0);
+			int pred_class = (int)output->ArgMax(j, 0);			
+			int target_class = m_Data.train_labels[train_i + j].Label2ClassIndex();
 
 			if (pred_class == target_class) correct++;
 		}

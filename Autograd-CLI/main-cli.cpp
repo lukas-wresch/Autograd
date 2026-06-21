@@ -91,6 +91,7 @@ struct Config
 	float lr = 0.0005f;
 	float momentum = 0.5f;
 	float weight_decay = 0.001f;
+	float label_smoothing = 0.0f;
 };
 
 
@@ -127,6 +128,8 @@ Config ParseArguments(int argc, char** argv)
 			cfg.momentum = std::stof(argv[++i]);
 		else if (arg == "--weight_decay")
 			cfg.weight_decay = std::stof(argv[++i]);
+		else if (arg == "--label_smoothing")
+			cfg.label_smoothing = std::stof(argv[++i]);
 	}
 
 	//if (cfg.mode != "train" && cfg.mode != "validate" && cfg.mode != "stats")
@@ -147,9 +150,13 @@ int main(int argc, char** argv)
 
 	auto config = ParseArguments(argc, argv);
 
+#ifdef _DEBUG
 	//config.mode = "train";
-	//config.model = "simple-res.tape";
+	//config.model = "ls-01.tape";
 	//config.dataset = "cifar-10";
+	//config.dataset = "mnist";
+	//config.label_smoothing = 0.1f;
+#endif
 
 	
 	Trainer::DataSet data;
@@ -223,6 +230,30 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
+
+	if (config.label_smoothing > 0.0f && config.mode == "train")
+	{
+		std::cout << "Applying label smoothing " << config.label_smoothing << std::endl;
+
+		size_t num_classes = 0;
+		for (auto& label : data.train_labels)
+			if (label.At(0, 0, 0, 0) > num_classes)
+				num_classes = (size_t)label.At(0, 0, 0, 0) + 1;
+
+		std::cout << num_classes << " Classes" << std::endl;
+
+		for (auto& label : data.train_labels)
+		{
+			label = Tensor4D::OneHotEncoding((int)label.At(0, 0, 0, 0), num_classes);
+			label = label.ApplyLabelSmoothing(num_classes, config.label_smoothing);
+		}
+		for (auto& label : data.valid_labels)
+		{
+			label = Tensor4D::OneHotEncoding((int)label.At(0, 0, 0, 0), num_classes);
+			label = label.ApplyLabelSmoothing(num_classes, config.label_smoothing);
+		}
+	}
+
 	std::cout << "Loading model ..." << std::endl;
 
 
@@ -259,14 +290,14 @@ int main(int argc, char** argv)
 	{
 		Trainer trainer(data, tape, sgd);
 
-		trainer.Validate();
+		trainer.Validate(&g_stopRequested);
 	}
 	else if (config.mode == "calibrate")
 	{
 		Trainer trainer(data, tape, sgd);
 
 		trainer.Calibrate();
-		trainer.Validate();
+		trainer.Validate(&g_stopRequested);
 	}
 	else if (config.mode == "stats")
 	{

@@ -398,14 +398,31 @@ inline void Kernels::Softmax_CrossEntropy_Backward(const Tensor4D& logits, Tenso
                 grad_logits.At(b, d, i, 0) *= inv_sum;
 
             // ---- 4. backward: (p - y) * outer_grad ----
-            const int target = (int)targets.At(b, d, 0, 0);
-
-            float og = outer.At(0, 0, 0, 0);
-
-            for (size_t i = 0; i < logits.GetRows(); ++i)
+            if (targets.GetRows() == 1)
             {
-                float y = (i == (size_t)target) ? 1.0f : 0.0f;
-                grad_logits.At(b, d, i, 0) = (grad_logits.At(b, d, i, 0) - y) * og;
+                const int target = (int)targets.At(b, d, 0, 0);
+
+                float og = outer.At(0, 0, 0, 0);
+
+                for (size_t i = 0; i < logits.GetRows(); i++)
+                {
+                    float y = (i == (size_t)target) ? 1.0f : 0.0f;
+                    grad_logits.At(b, d, i, 0) = (grad_logits.At(b, d, i, 0) - y) * og;
+                }
+            }
+
+            else
+            {
+                if (targets.GetRows() != logits.GetRows())
+                    throw std::runtime_error("Softmax_CrossEntropy_Backward one-hot target size mismatch");
+
+                float og = outer.At(0, 0, 0, 0);
+
+                for (size_t i = 0; i < logits.GetRows(); i++)
+                {
+                    float y = targets.At(b, d, i, 0);
+                    grad_logits.At(b, d, i, 0) = (grad_logits.At(b, d, i, 0) - y) * og;
+                }
             }
         }
 }

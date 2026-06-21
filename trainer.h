@@ -24,7 +24,7 @@ public:
 
     void TrainingLoop(bool* pStopSignal = nullptr);
 
-    void Validate();
+    void Validate(bool* pStopSignal = nullptr);
 
     void Calibrate();
 

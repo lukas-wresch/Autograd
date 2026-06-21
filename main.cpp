@@ -1530,8 +1530,8 @@ int main(int argc, char** argv)
 	const int batch_size = 64;
 
 
-	auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 28, 28 }), "input");
-	auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 1, 1 }), "label");
+	auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 3, 32, 32 }), "input");
+	auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 10, 1 }), "label");
 
 	/*Conv2D conv1(3, 8, 3, 1, 1, Activation::ReLU);
 	Conv2D conv2(8, 8, 3, 1, 1, Activation::ReLU, true);
@@ -1626,11 +1626,11 @@ int main(int argc, char** argv)
 
 	//trivial resnet
 
-	// ----------------------------------------------------
+// ----------------------------------------------------
 // Stem
 // ----------------------------------------------------
 
-	Conv2D conv1(
+	/*Conv2D conv1(
 		1, 16,
 		3, 1, 1,
 		Activation::ReLU,
@@ -1718,14 +1718,14 @@ int main(int argc, char** argv)
 		InitType::Xavier);
 
 
-	auto pred = classifier.Forward(flattened);
+	auto pred = classifier.Forward(flattened);*/
 
 
 
 	//mini resnet
 
 
-	/*Conv2D stem(
+	Conv2D stem(
 	3, 32,
 	3, 1, 1,
 	Activation::ReLU,
@@ -1855,7 +1855,7 @@ int main(int argc, char** argv)
 		InitType::Xavier);
 
 	auto h = fc1.Forward(flattened);
-	auto pred = fc2.Forward(h);*/
+	auto pred = fc2.Forward(h);
 
 	
 
