@@ -23,6 +23,7 @@ public:
     {}
 
     void TrainingLoop(bool* pStopSignal = nullptr);
+    void TrainingLoop_Unsupervised(bool* pStopSignal = nullptr);
 
     void Validate(bool* pStopSignal = nullptr);
 

@@ -221,9 +221,9 @@ NodePtr<Tensor4D> Layer4D::Forward(const NodePtr<Tensor4D>& Input) const
 	case Activation::ReLU:
 		return pre_activation->ReLU();
 		break;
-		//case Activation::Sigmoid:
-			//z.SetValue(1.0f / (1.0f + std::exp(-z.GetValue())));
-			//break;
+	case Activation::Sigmoid:
+		return pre_activation->Sigmoid();
+		break;
 	case Activation::Tanh:
 		return pre_activation->Tanh();
 		break;

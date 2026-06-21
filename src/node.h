@@ -21,6 +21,7 @@ enum class Operator
     ElementwiseMul,
 	Pack, // List of nodes -> vector. [x0, x1, x2] -> [(x0, x1, x2)]
 
+    Sigmoid,
     Tanh,
     ReLU,
 
@@ -36,6 +37,8 @@ enum class Operator
     BatchNorm2D,
 
     GlobalAveragePool2D,
+
+    Upsample2D,
 };
 
 
@@ -82,6 +85,7 @@ public:
 	NodePtr<T> ElementwiseAdd(const NodePtr<T>& other);
     NodePtr<T> ElementwiseMul(const NodePtr<T>& other);
     void Pack(const std::vector<NodePtr<T>>& List);
+    NodePtr<T> Sigmoid();
     NodePtr<T> Tanh();
     NodePtr<T> ReLU();
     NodePtr<T> Softmax();
@@ -503,6 +507,19 @@ void Node<T>::Pack(const std::vector<NodePtr<T>>& List)
 	inputs = List;
 
     op = Operator::Pack;
+}
+
+
+
+template<typename T>
+NodePtr<T> Node<T>::Sigmoid()
+{
+    auto out = std::make_shared<Node<T>>(this->value.Sigmoid());
+
+    out->op = Operator::Sigmoid;
+    out->left = this->shared_from_this();
+    out->right = nullptr;
+    return out;
 }
 
 

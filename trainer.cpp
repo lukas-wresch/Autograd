@@ -120,6 +120,87 @@ void Trainer::TrainingLoop(bool* pStopSignal)
 
 
 
+void Trainer::TrainingLoop_Unsupervised(bool* pStopSignal)
+{
+	ProgressManager mgr;
+
+	ShuffleDataset(m_Data.train_data, m_Data.train_labels);
+
+	auto input = m_Tape.SetValue("input");
+	auto output = m_Tape.SetValue("output");
+	auto loss = m_Tape.SetValue("loss");
+
+	float epoch_loss = 0.0f;
+	size_t batch_size = input->GetBatches();
+	size_t train_size = m_Data.train_data.size();
+
+	auto task = mgr.createBar("Epoch " + std::to_string(epochs_done + 1), train_size);
+	float old_loss = 0.0f;
+	float old_acc = 0.0f;
+
+	for (size_t i = 0; i < train_size; i += batch_size)
+	{
+		size_t end = std::min(i + batch_size, train_size);
+
+		float batch_loss = 0.0f;
+
+		size_t actual_batch_size = 0;
+
+		for (size_t j = i; j < end; j++)
+		{
+			input->ViewBatch(actual_batch_size).CopyFrom(m_Data.train_data[i + actual_batch_size]);
+
+			//label->Print();
+			actual_batch_size++;
+		}
+
+		if (actual_batch_size != batch_size)
+			continue;
+
+		auto start_time = std::chrono::high_resolution_clock::now();
+		m_Tape.Forward();
+
+		m_Tape.ZeroGradients();
+		m_Tape.Backward();
+
+		auto end_time = std::chrono::high_resolution_clock::now();
+		auto batch_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+
+		epoch_loss += loss->At(0, 0, 0, 0) * actual_batch_size;
+		batch_loss += loss->At(0, 0, 0, 0);
+
+		float passes_per_second = (float)batch_size / batch_duration * 1000.0f;
+		float eta = ((float)(train_size - i) / passes_per_second) / 60.0f;
+
+		if (i > 0)
+		{
+			batch_loss = 0.8f * old_loss + 0.2f * batch_loss;
+		}
+
+		old_loss = batch_loss;
+
+		if (i % 100 == 0)
+		{
+			output->Print();
+			auto images = output->Reshape({ 1, 1, 28, 28 });
+			images.PrintAsImage();
+		}
+
+		std::string desc = std::format("passes/s: {:.2f} Loss: {:.4f} ETA: {:.1f}m", passes_per_second, batch_loss, eta);
+		task.update(i);
+		task.description(desc);
+
+		m_sgd.Step();
+
+		if (pStopSignal && *pStopSignal)
+			return;
+	}
+
+	epochs_done++;
+}
+
+
+
 void Trainer::Validate(bool* pStopSignal)
 {
 	int correct = 0;

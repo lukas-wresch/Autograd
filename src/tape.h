@@ -316,6 +316,7 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
 
 	// One operand
 	case Operator::Sum:
+    case Operator::Sigmoid:
     case Operator::Tanh:
     case Operator::ReLU:
     case Operator::Softmax:
@@ -484,13 +485,9 @@ void TapeRecorder<T>::Forward()
 
         case Operator::Pack:
             if constexpr (std::is_same_v<T, Tensor>)
-            {
                 throw std::runtime_error("Unsupported Operation");
-            }
             else if constexpr (std::is_same_v<T, Tensor4D>)
-            {
                 throw std::runtime_error("Unsupported Operation");
-            }
             else
             {
                 values[entry.out].SetLength(entry.inputs.size());//Neccessary???
@@ -499,6 +496,12 @@ void TapeRecorder<T>::Forward()
             }
             break;
 
+        case Operator::Sigmoid:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+                values[entry.out] = values[entry.a].Sigmoid();
+            else
+                throw std::runtime_error("Unsupported Operation");
+            break;
         case Operator::Tanh:
             values[entry.out] = values[entry.a].Tanh();
             break;
@@ -507,9 +510,7 @@ void TapeRecorder<T>::Forward()
             break;
         case Operator::Softmax_CrossEntropy:
             if constexpr (std::is_same_v<T, Tensor>)
-            {
                 values[entry.out] = values[entry.a].Softmax().CrossEntropy(values[entry.b]);
-            }
             else if constexpr (std::is_same_v<T, Tensor4D>)
                 values[entry.out] = values[entry.a].Softmax_CrossEntropy(values[entry.b]);
             else
@@ -728,6 +729,11 @@ inline void TapeRecorder<T>::Backward()
             }
             break;
 
+        case Operator::Sigmoid:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+                grads[entry.a] += values[entry.out] * (1.0f - values[entry.out]) * outer_grad;//sigmoid' = sigmoid (1 - sigmoid)
+            else
+                throw std::runtime_error("Unsupported Operation");
         case Operator::Tanh:
             if constexpr (std::is_same_v<T, Tensor>)
                 Kernels::Tanh_Backward(grads[entry.a], values[entry.out], outer_grad);

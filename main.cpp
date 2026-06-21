@@ -1458,7 +1458,7 @@ int main(int argc, char** argv)
 
 	Trainer::DataSet data;
 
-	std::string dataset = "cifar-10";
+	std::string dataset = "mnist";
 
 	if (dataset == "mnist")
 	{
@@ -1526,12 +1526,37 @@ int main(int argc, char** argv)
 	auto tape = TapeRecorder<Tensor4D>();
 	//tape.LoadFromFile(config.mode);
 
-	SGD<Tensor4D> sgd(0.001f, 0.8f, 0.1f);
-	const int batch_size = 64;
+	SGD<Tensor4D> sgd(0.00001f, 0.5f, 0.1f);
+	const int batch_size = 1;
 
 
-	auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 3, 32, 32 }), "input");
-	auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 10, 1 }), "label");
+	auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 28, 28 }), "input");
+	//auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 10, 1 }), "label");
+
+
+	Layer4D L1(28*28, 256, Activation::ReLU, InitType::Xavier);
+	Layer4D L2(256,    64, Activation::ReLU, InitType::Xavier);
+	Layer4D L3(64, 16, Activation::Identity, InitType::Xavier);
+
+	Layer4D L4(16,  64, Activation::ReLU, InitType::Xavier);
+	Layer4D L5(64, 256, Activation::ReLU, InitType::Xavier);
+	Layer4D L6(256, 28*28, Activation::Sigmoid, InitType::Xavier);
+
+	auto y = L1.Forward(x->Flatten());
+	y = L2.Forward(y);
+	y = L3.Forward(y);
+	y = L4.Forward(y);
+	y = L5.Forward(y);
+	y = L6.Forward(y);
+	y->SetLabel("output");
+
+	auto diff = y - x->Flatten();
+	auto loss = (diff->ElementwiseMul(diff))->Sum();
+
+
+
+
+
 
 	/*Conv2D conv1(3, 8, 3, 1, 1, Activation::ReLU);
 	Conv2D conv2(8, 8, 3, 1, 1, Activation::ReLU, true);
@@ -1725,7 +1750,7 @@ int main(int argc, char** argv)
 	//mini resnet
 
 
-	Conv2D stem(
+	/*Conv2D stem(
 	3, 32,
 	3, 1, 1,
 	Activation::ReLU,
@@ -1855,15 +1880,15 @@ int main(int argc, char** argv)
 		InitType::Xavier);
 
 	auto h = fc1.Forward(flattened);
-	auto pred = fc2.Forward(h);
+	auto pred = fc2.Forward(h);*/
 
 	
 
 
 
-	pred->SetLabel("output");
+	/*pred->SetLabel("output");
 
-	auto loss = pred->Softmax_CrossEntropy(label);
+	auto loss = pred->Softmax_CrossEntropy(label);*/
 	loss->SetLabel("loss");
 
 	tape.Compile(loss);
@@ -1874,8 +1899,8 @@ int main(int argc, char** argv)
 
 	Trainer trainer(data, tape, sgd);
 
-	//trainer.TrainingLoop();
-	//trainer.Validate();
+	trainer.TrainingLoop_Unsupervised();
+	trainer.Validate();
 
 	tape.Forward();
 	tape.Backward();

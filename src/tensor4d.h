@@ -699,6 +699,17 @@ public:
 		return out;
 	}
 
+	Tensor4D Sigmoid() const
+	{
+		if (!IsContiguous())
+			throw std::out_of_range("Not supported for non-contiguous tensors");
+
+		Tensor4D out(GetShape());
+		for (size_t i = 0; i < GetSize(); i++)
+			out.Data()[i] = 1.0f / (1.0f + std::exp(-Data()[i]));;
+		return out;
+	}
+
 	Tensor4D Tanh() const
 	{
 		if (!IsContiguous())
