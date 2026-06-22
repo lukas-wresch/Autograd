@@ -156,6 +156,7 @@
     <ClInclude Include="src\thread_pool.h" />
     <ClInclude Include="src\vector.h" />
     <ClInclude Include="trainer.h" />
+    <ClInclude Include="window.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

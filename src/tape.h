@@ -29,10 +29,14 @@ struct TapeEntry
 	int kernel_size = 1;
 
     // Flatten
-    size_t B = 0;
-    size_t C = 0;
-    size_t H = 0;
-    size_t W = 0;
+    size_t inB  = 0;
+    size_t inC  = 0;
+    size_t inH  = 0;
+    size_t inW  = 0;
+    size_t outB = 0;
+    size_t outC = 0;
+    size_t outH = 0;
+    size_t outW = 0;
 
 
     void Save(std::ostream& os) const
@@ -48,10 +52,10 @@ struct TapeEntry
         os.write((char*)&padding, sizeof(padding));
         os.write((char*)&kernel_size, sizeof(kernel_size));
 
-        os.write((char*)&B, sizeof(B));
-        os.write((char*)&C, sizeof(C));
-        os.write((char*)&H, sizeof(H));
-        os.write((char*)&W, sizeof(W));
+        os.write((char*)&inB, sizeof(inB));
+        os.write((char*)&inC, sizeof(inC));
+        os.write((char*)&inH, sizeof(inH));
+        os.write((char*)&inW, sizeof(inW));
 
         size_t n = inputs.size();
         os.write((char*)&n, sizeof(n));
@@ -74,10 +78,10 @@ struct TapeEntry
         is.read((char*)&padding, sizeof(padding));
         is.read((char*)&kernel_size, sizeof(kernel_size));
 
-        is.read((char*)&B, sizeof(B));
-        is.read((char*)&C, sizeof(C));
-        is.read((char*)&H, sizeof(H));
-        is.read((char*)&W, sizeof(W));
+        is.read((char*)&inB, sizeof(inB));
+        is.read((char*)&inC, sizeof(inC));
+        is.read((char*)&inH, sizeof(inH));
+        is.read((char*)&inW, sizeof(inW));
 
         size_t n;
         is.read((char*)&n, sizeof(n));
@@ -226,10 +230,24 @@ public:
     void AddOpEntry(Operator op, int a, int out, size_t B, size_t C, size_t H, size_t W)
     {
         TapeEntry new_entry({ op, a, -1, -1, {}, out, 1, 0 });
-        new_entry.B = B;
-        new_entry.C = C;
-        new_entry.H = H;
-        new_entry.W = W;
+        new_entry.inB = B;
+        new_entry.inC = C;
+        new_entry.inH = H;
+        new_entry.inW = W;
+        tape.push_back(new_entry);
+    }
+
+    void AddOpEntry(Operator op, int a, int out, size_t inB, size_t inC, size_t inH, size_t inW, size_t outB, size_t outC, size_t outH, size_t outW)
+    {
+        TapeEntry new_entry({ op, a, -1, -1, {}, out, 1, 0 });
+        new_entry.inB  = inB;
+        new_entry.inC  = inC;
+        new_entry.inH  = inH;
+        new_entry.inW  = inW;
+        new_entry.outB = outB;
+        new_entry.outC = outC;
+        new_entry.outH = outH;
+        new_entry.outW = outW;
         tape.push_back(new_entry);
     }
 
@@ -309,6 +327,7 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
     case Operator::Multiply:
     case Operator::ElementwiseAdd:
     case Operator::ElementwiseMul:
+    case Operator::MeanSquaredError:
     case Operator::CrossEntropy:
     case Operator::Softmax_CrossEntropy:
         AddOpEntry(node->op, GetID(node->left), GetID(node->right), node_id);
@@ -339,7 +358,10 @@ void TapeRecorder<T>::Visit(const NodePtr<T>& node, std::unordered_map<NodePtr<T
 
     // Flatten
     case Operator::Flatten:
-        AddOpEntry(node->op, GetID(node->left), node_id, node->B, node->C, node->H, node->W);
+        AddOpEntry(node->op, GetID(node->left), node_id, node->inB, node->inC, node->inH, node->inW);
+        break;
+    case Operator::Reshape:
+        AddOpEntry(node->op, GetID(node->left), node_id, node->inB, node->inC, node->inH, node->inW, node->outB, node->outC, node->outH, node->outW);
         break;
 
     // Batch norms
@@ -508,6 +530,11 @@ void TapeRecorder<T>::Forward()
         case Operator::ReLU:
             values[entry.out] = values[entry.a].ReLU();
             break;
+        case Operator::MeanSquaredError:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+                values[entry.out] = values[entry.a].MeanSquaredError(values[entry.b]);
+            else
+                throw std::runtime_error("Unsupported Operation");
         case Operator::Softmax_CrossEntropy:
             if constexpr (std::is_same_v<T, Tensor>)
                 values[entry.out] = values[entry.a].Softmax().CrossEntropy(values[entry.b]);
@@ -536,7 +563,13 @@ void TapeRecorder<T>::Forward()
             break;
         case Operator::Flatten:
             if constexpr (std::is_same_v<T, Tensor4D>)
-                values[entry.out] = values[entry.a].Reshape({ entry.B, 1, entry.C * entry.H * entry.W, 1 });
+                values[entry.out] = values[entry.a].Reshape({ entry.inB, 1, entry.inC * entry.inH * entry.inW, 1 });
+            else
+                throw std::runtime_error("Unsupported Operation");
+            break;
+        case Operator::Reshape:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+                values[entry.out] = values[entry.a].Reshape({ entry.outB, entry.outC, entry.outH, entry.outW });
             else
                 throw std::runtime_error("Unsupported Operation");
             break;
@@ -751,6 +784,11 @@ inline void TapeRecorder<T>::Backward()
                 grads[entry.a] += values[entry.out].Heaviside().ElementwiseMul(outer_grad);//ReLU' = 1 if x > 0 else 0
             break;
 
+        case Operator::MeanSquaredError:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+                grads[entry.a] += values[entry.out].MeanSquaredErrorBackward(values[entry.b]);
+            else
+                throw std::runtime_error("Unsupported Operation");
         case Operator::Softmax_CrossEntropy:
         {
             if constexpr (std::is_same_v<T, Tensor>)
@@ -839,9 +877,13 @@ inline void TapeRecorder<T>::Backward()
             break;
         case Operator::Flatten:
             if constexpr (std::is_same_v<T, Tensor4D>)
-            {
-                grads[entry.a] += grads[entry.out].Reshape({ entry.B, entry.C, entry.H, entry.W });
-            }
+                grads[entry.a] += grads[entry.out].Reshape({ entry.inB, entry.inC, entry.inH, entry.inW });
+            else
+                throw std::runtime_error("Unsupported Operation");
+            break;
+        case Operator::Reshape:
+            if constexpr (std::is_same_v<T, Tensor4D>)
+                grads[entry.a] += grads[entry.out].Reshape({ entry.inB, entry.inC, entry.inH, entry.inW });
             else
                 throw std::runtime_error("Unsupported Operation");
             break;

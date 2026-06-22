@@ -25,6 +25,7 @@ enum class Operator
     Tanh,
     ReLU,
 
+    MeanSquaredError,
     Softmax,
     CrossEntropy,
     Softmax_CrossEntropy,
@@ -32,6 +33,7 @@ enum class Operator
     Conv2D,
     MaxPool2D,
     Flatten,
+    Reshape,
 
     BatchNorm,
     BatchNorm2D,
@@ -89,11 +91,13 @@ public:
     NodePtr<T> Tanh();
     NodePtr<T> ReLU();
     NodePtr<T> Softmax();
+    NodePtr<T> MeanSquaredError(NodePtr<T> Target);
     NodePtr<T> CrossEntropy(NodePtr<T> Target);
     NodePtr<T> Softmax_CrossEntropy(NodePtr<T> Target);
     NodePtr<T> Conv2D(NodePtr<T> Kernel, int Stride = 1, int Padding = 0);
     NodePtr<T> MaxPool2D(int KernelSize, int Stride);
     NodePtr<T> Flatten();
+    NodePtr<T> Reshape(size_t B, size_t D, size_t H, size_t W);
     NodePtr<T> BatchNorm();
     NodePtr<T> BatchNorm2D();
     NodePtr<T> GlobalAveragePool2D();
@@ -134,10 +138,14 @@ public:
     int kernel_size = 1;
 
     // Flatten
-    size_t B = 0;
-    size_t C = 0;
-    size_t H = 0;
-    size_t W = 0;
+    size_t inB = 0;
+    size_t inC = 0;
+    size_t inH = 0;
+    size_t inW = 0;
+    size_t outB = 0;
+    size_t outC = 0;
+    size_t outH = 0;
+    size_t outW = 0;
 
     NodePtr<T> left  = nullptr;
     NodePtr<T> right = nullptr;
@@ -564,6 +572,19 @@ NodePtr<T> Node<T>::Softmax()
 
 
 template<typename T>
+NodePtr<T> Node<T>::MeanSquaredError(NodePtr<T> Target)
+{
+    auto out = std::make_shared<Node<T>>(this->value.MeanSquaredError(Target->GetValue()));
+
+    out->op = Operator::MeanSquaredError;
+    out->left = this->shared_from_this();
+    out->right = Target;
+    return out;
+}
+
+
+
+template<typename T>
 NodePtr<T> Node<T>::Softmax_CrossEntropy(NodePtr<T> Target)
 {
     auto out = std::make_shared<Node<T>>(this->value.Softmax().CrossEntropy(Target->GetValue()));
@@ -629,10 +650,35 @@ NodePtr<T> Node<T>::Flatten()
 
     out->op = Operator::Flatten;
     out->left = this->shared_from_this();
-    out->B = this->value.GetBatches();
-	out->C = C;
-	out->H = H;
-    out->W = W;
+    out->inB = this->value.GetBatches();
+	out->inC = C;
+	out->inH = H;
+    out->inW = W;
+    return out;
+}
+
+
+
+template<typename T>
+NodePtr<T> Node<T>::Reshape(size_t B, size_t C, size_t H, size_t W)
+{
+    size_t inB = value.GetShape()[0];
+    size_t inC = value.GetShape()[1];
+    size_t inH = value.GetShape()[2];
+    size_t inW = value.GetShape()[3];
+
+    auto out = std::make_shared<Node<T>>(this->value.Reshape({ B, C, H, W }));
+
+    out->op = Operator::Reshape;
+    out->left = this->shared_from_this();
+    out->inB  = inB;
+    out->inC  = inC;
+    out->inH  = inH;
+    out->inW  = inW;
+    out->outB = B;
+    out->outC = C;
+    out->outH = H;
+    out->outW = W;
     return out;
 }
 

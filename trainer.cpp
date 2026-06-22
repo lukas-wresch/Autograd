@@ -4,6 +4,7 @@
 #include <chrono>
 #include "trainer.h"
 #include "progressmanager.h"
+#include "window.h"
 
 
 
@@ -124,11 +125,20 @@ void Trainer::TrainingLoop_Unsupervised(bool* pStopSignal)
 {
 	ProgressManager mgr;
 
+	Window window(L"Output Viewer", 800, 600);
+
 	ShuffleDataset(m_Data.train_data, m_Data.train_labels);
 
 	auto input = m_Tape.SetValue("input");
 	auto output = m_Tape.SetValue("output");
 	auto loss = m_Tape.SetValue("loss");
+
+	window.AddWidget(std::make_unique<ImageWidget>(
+		*output,
+		20, 20, 16,
+		L"Test Tensor"));
+
+	window.Start();
 
 	float epoch_loss = 0.0f;
 	size_t batch_size = input->GetBatches();
@@ -179,11 +189,12 @@ void Trainer::TrainingLoop_Unsupervised(bool* pStopSignal)
 
 		old_loss = batch_loss;
 
-		if (i % 100 == 0)
+		if (i % 5 == 0)
 		{
+			window.RequestRedraw();
+			//output->Print();
+			//auto images = output->Reshape({ 1, 1, 28, 28 });
 			output->Print();
-			auto images = output->Reshape({ 1, 1, 28, 28 });
-			images.PrintAsImage();
 		}
 
 		std::string desc = std::format("passes/s: {:.2f} Loss: {:.4f} ETA: {:.1f}m", passes_per_second, batch_loss, eta);

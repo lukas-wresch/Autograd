@@ -706,7 +706,24 @@ public:
 
 		Tensor4D out(GetShape());
 		for (size_t i = 0; i < GetSize(); i++)
-			out.Data()[i] = 1.0f / (1.0f + std::exp(-Data()[i]));;
+		{
+			float v = Data()[i];
+			float z;
+
+			if (v >= 0.0f)
+			{
+				z = std::exp(-v);
+				z = 1.0f / (1.0f + z);
+			}
+			else
+			{
+				z = std::exp(v);
+				z = z / (1.0f + z);
+			}
+
+			out.Data()[i] = z;
+		}
+
 		return out;
 	}
 
@@ -744,7 +761,71 @@ public:
 		return out;
 	}
 
-	//inline Tensor4D ElementwiseMul(const Tensor4D& rhs) const;
+	Tensor4D MeanSquaredError(const Tensor4D& Target) const
+	{
+		if (GetBatches() != Target.GetBatches())
+			throw std::runtime_error("Tensor4D MSE: batch size mismatch");
+
+		if (GetDepth() != Target.GetDepth())
+			throw std::runtime_error("Tensor4D MSE: depth mismatch");
+
+		if (GetRows() != Target.GetRows())
+			throw std::runtime_error("Tensor4D MSE: row mismatch");
+
+		if (GetColumns() != Target.GetColumns())
+			throw std::runtime_error("Tensor4D MSE: column mismatch");
+
+		float loss = 0.0f;
+		size_t count = 0;
+
+		for (size_t b = 0; b < GetBatches(); b++)
+		{
+			for (size_t d = 0; d < GetDepth(); d++)
+			{
+				for (size_t r = 0; r < GetRows(); r++)
+				{
+					for (size_t c = 0; c < GetColumns(); c++)
+					{
+						float diff = At(b, d, r, c) - Target.At(b, d, r, c);
+
+						loss += diff * diff;
+						count++;
+					}
+				}
+			}
+		}
+
+		loss /= (float)(count);
+
+		return Tensor4D({ 1 }, { loss });
+	}
+
+	Tensor4D MeanSquaredErrorBackward(const Tensor4D& Target) const
+	{
+		if (GetShape() != Target.GetShape())
+			throw std::runtime_error("MSE Backward: shape mismatch");
+
+		Tensor4D grad(GetShape());
+
+		float N = (float)(GetBatches() * GetDepth() * GetRows() * GetColumns());
+
+		for (size_t b = 0; b < GetBatches(); b++)
+		{
+			for (size_t d = 0; d < GetDepth(); d++)
+			{
+				for (size_t r = 0; r < GetRows(); r++)
+				{
+					for (size_t c = 0; c < GetColumns(); c++)
+					{
+						float diff = At(b, d, r, c) - Target.At(b, d, r, c);
+						grad.At(b, d, r, c) = (2.0f * diff) / N;
+					}
+				}
+			}
+		}
+
+		return grad;
+	}
 
 	Tensor4D Softmax() const
 	{

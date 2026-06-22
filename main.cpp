@@ -14,11 +14,14 @@
 #include "src/layer.h"
 #include "src/sgd.h"
 #include "src/tensor4d.h"
+#include "src/tensor.h"
 #include "src/conv2d.h"
+
 #include "mnist.h"
 #include "cifar.h"
 #include "progressmanager.h"
 #include "trainer.h"
+#include "window.h"
 
 
 
@@ -1523,10 +1526,30 @@ int main(int argc, char** argv)
 	
 
 
+
+	Tensor4D tensor({ 1,1,28,28 });
+
+	/*Window window(L"Tensor Viewer", 800, 600);
+
+	if (!window.Create())
+		return -1;
+
+	window.AddWidget(std::make_unique<ImageWidget>(
+		data.valid_data[0],
+		20, 20, 16,
+		L"Test Tensor"));
+
+	window.Show();
+
+	return window.Run();*/
+
+
+
+
 	auto tape = TapeRecorder<Tensor4D>();
 	//tape.LoadFromFile(config.mode);
 
-	SGD<Tensor4D> sgd(0.00001f, 0.5f, 0.1f);
+	SGD<Tensor4D> sgd(0.0001f, 0.5f, 0.1f);
 	const int batch_size = 1;
 
 
@@ -1548,10 +1571,13 @@ int main(int argc, char** argv)
 	y = L4.Forward(y);
 	y = L5.Forward(y);
 	y = L6.Forward(y);
+	y = y->Reshape(batch_size, 1, 28, 28);
 	y->SetLabel("output");
 
-	auto diff = y - x->Flatten();
-	auto loss = (diff->ElementwiseMul(diff))->Sum();
+	auto loss = y->MeanSquaredError(x);
+
+	//auto diff = y - x;
+	//auto loss = (diff->ElementwiseMul(diff))->Sum();
 
 
 
