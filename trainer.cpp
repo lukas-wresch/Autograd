@@ -133,10 +133,8 @@ void Trainer::TrainingLoop_Unsupervised(bool* pStopSignal)
 	auto output = m_Tape.SetValue("output");
 	auto loss = m_Tape.SetValue("loss");
 
-	window.AddWidget(std::make_unique<ImageWidget>(
-		*output,
-		20, 20, 16,
-		L"Test Tensor"));
+	auto image_widget = std::make_shared<ImageWidget>(20, 20, 16, L"Test Tensor");
+	window.AddWidget(image_widget);
 
 	window.Start();
 
@@ -191,10 +189,12 @@ void Trainer::TrainingLoop_Unsupervised(bool* pStopSignal)
 
 		if (i % 5 == 0)
 		{
+			image_widget->UpdateTensor(*output);
 			window.RequestRedraw();
 			//output->Print();
 			//auto images = output->Reshape({ 1, 1, 28, 28 });
-			output->Print();
+			//output->PrintAsImage();
+			//std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60 FPS
 		}
 
 		std::string desc = std::format("passes/s: {:.2f} Loss: {:.4f} ETA: {:.1f}m", passes_per_second, batch_loss, eta);
@@ -226,6 +226,9 @@ void Trainer::Validate(bool* pStopSignal)
 	auto label  = m_Tape.SetValue("label");
 	auto output = m_Tape.SetValue("output");
 	auto loss   = m_Tape.SetValue("loss");
+
+	if (!label)
+		return;
 
 	size_t batch_size = input->GetBatches();
 

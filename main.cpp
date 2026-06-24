@@ -1549,21 +1549,21 @@ int main(int argc, char** argv)
 	auto tape = TapeRecorder<Tensor4D>();
 	//tape.LoadFromFile(config.mode);
 
-	SGD<Tensor4D> sgd(0.0001f, 0.5f, 0.1f);
-	const int batch_size = 1;
+	SGD<Tensor4D> sgd(0.2f, 0.9f, 0.001f);
+	const int batch_size = 16;
 
 
 	auto x = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 28, 28 }), "input");
 	//auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 10, 1 }), "label");
 
 
-	Layer4D L1(28*28, 256, Activation::ReLU, InitType::Xavier);
+	Layer4D L1(28*28, 256, Activation::ReLU, InitType::UniformSmall);
 	Layer4D L2(256,    64, Activation::ReLU, InitType::Xavier);
 	Layer4D L3(64, 16, Activation::Identity, InitType::Xavier);
 
 	Layer4D L4(16,  64, Activation::ReLU, InitType::Xavier);
 	Layer4D L5(64, 256, Activation::ReLU, InitType::Xavier);
-	Layer4D L6(256, 28*28, Activation::Sigmoid, InitType::Xavier);
+	Layer4D L6(256, 28*28, Activation::Sigmoid, InitType::UniformSmall);
 
 	auto y = L1.Forward(x->Flatten());
 	y = L2.Forward(y);
@@ -1571,6 +1571,7 @@ int main(int argc, char** argv)
 	y = L4.Forward(y);
 	y = L5.Forward(y);
 	y = L6.Forward(y);
+	
 	y = y->Reshape(batch_size, 1, 28, 28);
 	y->SetLabel("output");
 
@@ -1925,7 +1926,9 @@ int main(int argc, char** argv)
 
 	Trainer trainer(data, tape, sgd);
 
-	trainer.TrainingLoop_Unsupervised();
+	for (int e = 0; e < 5; e++)
+		trainer.TrainingLoop_Unsupervised();
+
 	trainer.Validate();
 
 	tape.Forward();

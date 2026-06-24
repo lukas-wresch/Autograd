@@ -535,6 +535,7 @@ void TapeRecorder<T>::Forward()
                 values[entry.out] = values[entry.a].MeanSquaredError(values[entry.b]);
             else
                 throw std::runtime_error("Unsupported Operation");
+            break;
         case Operator::Softmax_CrossEntropy:
             if constexpr (std::is_same_v<T, Tensor>)
                 values[entry.out] = values[entry.a].Softmax().CrossEntropy(values[entry.b]);
@@ -767,6 +768,7 @@ inline void TapeRecorder<T>::Backward()
                 grads[entry.a] += values[entry.out] * (1.0f - values[entry.out]) * outer_grad;//sigmoid' = sigmoid (1 - sigmoid)
             else
                 throw std::runtime_error("Unsupported Operation");
+            break;
         case Operator::Tanh:
             if constexpr (std::is_same_v<T, Tensor>)
                 Kernels::Tanh_Backward(grads[entry.a], values[entry.out], outer_grad);
@@ -786,9 +788,10 @@ inline void TapeRecorder<T>::Backward()
 
         case Operator::MeanSquaredError:
             if constexpr (std::is_same_v<T, Tensor4D>)
-                grads[entry.a] += values[entry.out].MeanSquaredErrorBackward(values[entry.b]);
+                grads[entry.a] += values[entry.a].MeanSquaredErrorBackward(values[entry.b]) * outer_grad;
             else
                 throw std::runtime_error("Unsupported Operation");
+            break;
         case Operator::Softmax_CrossEntropy:
         {
             if constexpr (std::is_same_v<T, Tensor>)
@@ -906,7 +909,7 @@ inline void TapeRecorder<T>::Backward()
         case Operator::GlobalAveragePool2D:
             if constexpr (std::is_same_v<T, Tensor4D>)
             {
-                float inv = 1.0f / ((float)values[entry.out].GetRows() * values[entry.out].GetColumns());
+                float inv = 1.0f / ((float)values[entry.a].GetRows() * values[entry.a].GetColumns());
                 grads[entry.a] += inv * grads[entry.out];
             }
             else

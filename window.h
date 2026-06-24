@@ -24,8 +24,16 @@ public:
     {
     }
 
+    ImageWidget(int x, int y, int scale, const std::wstring& label = L"")
+        : m_X(x), m_Y(y), m_Scale(scale), m_Label(label)
+    {
+        m_Tensor = Tensor4D({ 1, 1, 1, 1 });
+    }
+
     void Draw(HDC hdc) override
     {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+
         const int width  = (int)(m_Tensor.GetColumns());
         const int height = (int)(m_Tensor.GetRows());
 
@@ -40,7 +48,7 @@ public:
         {
             for (int px = 0; px < width; px++)
             {
-                BYTE r, g, b = 0;
+                BYTE r = 0, g = 0, b = 0;
 
                 if (m_Tensor.GetDepth() == 1)
                 {
@@ -86,9 +94,13 @@ public:
         }
 
         if (!m_Label.empty())
-        {
-            TextOutW(hdc, m_X, m_Y + height * m_Scale + 10, m_Label.c_str(), static_cast<int>(m_Label.size()));
-        }
+            TextOutW(hdc, m_X, m_Y + height * m_Scale + 10, m_Label.c_str(), (int)(m_Label.size()));
+    }
+
+    void UpdateTensor(Tensor4D Data)
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_Tensor = Data.Clone();
     }
 
 private:
@@ -97,6 +109,8 @@ private:
     int m_Y;
     int m_Scale;
     std::wstring m_Label;
+
+    mutable std::mutex m_Mutex;
 };
 
 
@@ -200,7 +214,7 @@ public:
         return (int)(msg.wParam);
     }
 
-    void AddWidget(std::unique_ptr<Widget> widget)
+    void AddWidget(std::shared_ptr<Widget> widget)
     {
         m_Widgets.push_back(std::move(widget));
     }
@@ -255,7 +269,7 @@ private:
     int m_Width;
     int m_Height;
 
-    std::vector<std::unique_ptr<Widget>> m_Widgets;
+    std::vector<std::shared_ptr<Widget>> m_Widgets;
 
     std::thread m_Thread;
     std::atomic<bool> m_Running = false;
