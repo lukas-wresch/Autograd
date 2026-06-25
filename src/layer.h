@@ -189,8 +189,17 @@ public:
 		m_Weights->SetAsTrainable();
 		m_Biases->SetAsTrainable();
 		m_Weights->SetWeightDecay();
-		m_Weights->SetLabel(Label + "W");
-		m_Biases->SetLabel(Label  + "B");
+
+		if (Label.empty())
+		{
+			m_Weights->SetLabel("W");
+			m_Biases->SetLabel("B");
+		}
+		else
+		{
+			m_Weights->SetLabel(Label + ".W");
+			m_Biases->SetLabel(Label  + ".B");
+		}
 	}
 
 	NodePtr<Tensor4D> Forward(const NodePtr<Tensor4D>& Input) const;

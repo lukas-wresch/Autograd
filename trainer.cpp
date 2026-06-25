@@ -191,6 +191,25 @@ void Trainer::TrainingLoop_Unsupervised(bool* pStopSignal)
 		{
 			image_widget->UpdateTensor(*output);
 			window.RequestRedraw();
+
+			/*m_Tape.SetValue("L1.W")->PrintStats();
+			m_Tape.SetValue("L2.W")->PrintStats();
+			m_Tape.SetValue("L3.W")->PrintStats();
+			m_Tape.SetValue("L4.W")->PrintStats();
+			m_Tape.SetValue("L5.W")->PrintStats();
+			m_Tape.SetValue("L6.W")->PrintStats();*/
+
+			m_Tape.SetValue("L1.out")->PrintStats();
+			m_Tape.SetValue("L2.out")->PrintStats();
+			m_Tape.SetValue("L3.out")->PrintStats();
+			m_Tape.SetValue("L4.out")->PrintStats();
+			m_Tape.SetValue("L5.out")->PrintStats();
+			m_Tape.SetValue("L6.out")->PrintStats();
+
+			//m_Tape.SetValue("L6.B")->PrintStats();
+			//m_Tape.GetValue(29)->PrintStats();
+			//m_Tape.GetValue(30)->PrintStats();
+			printf("\n- - -\n");
 			//output->Print();
 			//auto images = output->Reshape({ 1, 1, 28, 28 });
 			//output->PrintAsImage();

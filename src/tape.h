@@ -127,6 +127,11 @@ public:
     void StartCalibration();
     void EndCalibration();
 
+    const T* GetValue(size_t Index) const
+    {
+        return &values[Index];
+    }
+
     const T* GetValue(const std::string& Label) const
     {
         auto it = label_to_id.find(Label);
@@ -1052,6 +1057,11 @@ inline void TapeRecorder<T>::PrintTape() const
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("%s [%s] * %s [%s]\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
+        case Operator::Sigmoid:
+            op_text = "Sigmoid";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("Sigmoid(%s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str());
+            break;
         case Operator::Tanh:
             op_text = "Tanh";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
@@ -1070,7 +1080,7 @@ inline void TapeRecorder<T>::PrintTape() const
         case Operator::Softmax:
             op_text = "Softmax";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
-            printf("softmax(%s [%s], %s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
+            printf("Softmax(%s [%s], %s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str(), b_label.c_str(), values[entry.b].Shape2String().c_str());
             break;
         case Operator::CrossEntropy:
             op_text = "CrossEntropy";
@@ -1096,6 +1106,11 @@ inline void TapeRecorder<T>::PrintTape() const
             op_text = "Flatten";
             printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
             printf("Flatten(%s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str());
+            break;
+        case Operator::Reshape:
+            op_text = "Reshape";
+            printf("%.02d: %s: %s [%s] = ", ++i, op_text.c_str(), out_label.c_str(), values[entry.out].Shape2String().c_str());
+            printf("Reshape(%s [%s])\n", a_label.c_str(), values[entry.a].Shape2String().c_str());
             break;
         case Operator::BatchNorm:
             op_text = "BatchNorm";
@@ -1191,6 +1206,12 @@ inline void TapeRecorder<T>::PrintArchitecture() const
             if (i > 0)
                 printf("-> ");
             printf("Dense");
+            i++;
+            break;
+        case Operator::Sigmoid:
+            if (i > 0)
+                printf("-> ");
+            printf("Sigmoid");
             i++;
             break;
         case Operator::Tanh:

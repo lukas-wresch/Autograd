@@ -1549,7 +1549,7 @@ int main(int argc, char** argv)
 	auto tape = TapeRecorder<Tensor4D>();
 	//tape.LoadFromFile(config.mode);
 
-	SGD<Tensor4D> sgd(0.2f, 0.9f, 0.001f);
+	SGD<Tensor4D> sgd(0.05f, 0.8f, 0.002f);
 	const int batch_size = 16;
 
 
@@ -1557,20 +1557,26 @@ int main(int argc, char** argv)
 	//auto label = Node<Tensor4D>::Create(Tensor4D({ batch_size, 1, 10, 1 }), "label");
 
 
-	Layer4D L1(28*28, 256, Activation::ReLU, InitType::UniformSmall);
-	Layer4D L2(256,    64, Activation::ReLU, InitType::Xavier);
-	Layer4D L3(64, 16, Activation::Identity, InitType::Xavier);
+	Layer4D L1(28*28, 256, Activation::ReLU, InitType::UniformSmall, "L1");
+	Layer4D L2(256,    64, Activation::ReLU, InitType::Xavier, "L2");
+	Layer4D L3(64, 32, Activation::Identity, InitType::Xavier, "L3");
 
-	Layer4D L4(16,  64, Activation::ReLU, InitType::Xavier);
-	Layer4D L5(64, 256, Activation::ReLU, InitType::Xavier);
-	Layer4D L6(256, 28*28, Activation::Sigmoid, InitType::UniformSmall);
+	Layer4D L4(32,  64, Activation::ReLU, InitType::Xavier, "L4");
+	Layer4D L5(64, 256, Activation::ReLU, InitType::Xavier, "L5");
+	Layer4D L6(256, 28*28, Activation::Sigmoid, InitType::UniformSmall, "L6");
 
 	auto y = L1.Forward(x->Flatten());
+	y->SetLabel("L1.out");
 	y = L2.Forward(y);
+	y->SetLabel("L2.out");
 	y = L3.Forward(y);
+	y->SetLabel("L3.out");
 	y = L4.Forward(y);
+	y->SetLabel("L4.out");
 	y = L5.Forward(y);
+	y->SetLabel("L5.out");
 	y = L6.Forward(y);
+	y->SetLabel("L6.out");
 	
 	y = y->Reshape(batch_size, 1, 28, 28);
 	y->SetLabel("output");

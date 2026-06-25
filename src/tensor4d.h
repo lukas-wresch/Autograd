@@ -548,6 +548,18 @@ public:
 		std::cout << "]\n\n";
 	}
 
+	void PrintStats() const
+	{
+		std::cout << "Tensor (" << Shape2String() << ")\n";
+
+		float mean = Mean();
+		float var  = Var();
+		float max  = Max();
+		float min  = Min();
+
+		printf("Mean: %.2f, Var: %.2f, Max: %.2f, Min: %.2f\n\n", mean, var, max, min);
+	}
+
 	void PrintAsImage() const
 	{
 		for (size_t r = 0; r < GetRows(); r++)
